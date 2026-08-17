@@ -1,0 +1,97 @@
+name: ci
+# Validation pipeline for every PR: formatting, policy lint, manifest
+# validation, module/stack validation, unit + scale tests, offline plan, and —
+# when the repo secrets are available — a credentialed plan whose monitor
+# definitions are validated against the live Datadog API.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  TF_VERSION: 1.9.8
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install tooling
+        run: pip install -r tools/requirements.txt
+      - name: Terraform fmt
+        run: terraform fmt -recursive -check
+      - name: Policy lint (archetypes, exceptions, vocabularies, cardinality)
+        run: cd tools && python validate_policy.py
+      - name: Self-service manifest validation
+        run: cd tools && python validate_manifests.py
+      - name: Module + stack validate
+        run: |
+          for d in modules/* stacks/*; do
+            echo "== $d"
+            (cd "$d" && terraform init -backend=false -input=false >/dev/null && terraform validate)
+          done
+      - name: Unit, governance & scale tests (incl. 1.2M-resource estate)
+        run: python -m pytest tests/ -q
+      - name: Offline plan (no credentials; graph + preconditions + cardinality gates)
+        run: |
+          cd stacks/coverage
+          terraform init -input=false >/dev/null
+          DD_API_KEY=offline DD_APP_KEY=offline terraform plan -input=false \
+            -var datadog_validate=false -var adopt_existing_slos=false -out=plan.out
+          cd ../foundation
+          terraform init -input=false >/dev/null
+          DD_API_KEY=offline DD_APP_KEY=offline terraform plan -input=false \
+            -var datadog_validate=false -var manage_rbac=false
+      - name: Determinism — second plan must equal the first
+        run: |
+          cd stacks/coverage
+          terraform show -json plan.out | jq -S '.resource_changes | map({address, actions: .change.actions})' > p1.json
+          DD_API_KEY=offline DD_APP_KEY=offline terraform plan -input=false \
+            -var datadog_validate=false -var adopt_existing_slos=false -out=plan2.out
+          terraform show -json plan2.out | jq -S '.resource_changes | map({address, actions: .change.actions})' > p2.json
+          diff p1.json p2.json
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: tfsec (IaC security scan)
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          soft_fail: false
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  credentialed-plan:
+    # Runs only where the org's CI service-account secrets exist (not on
+    # forks). Full plan with live provider validation: every monitor is
+    # checked against /api/v1/monitor/validate before merge.
+    if: github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-latest
+    environment: datadog-plan
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      - name: Plan with live validation
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        run: |
+          if [ -z "$DD_API_KEY" ]; then echo "no secrets in this context — skipping"; exit 0; fi
+          cd stacks/coverage && terraform init -input=false >/dev/null
+          terraform plan -input=false

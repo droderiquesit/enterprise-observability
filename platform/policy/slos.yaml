@@ -1,0 +1,152 @@
+# Platform SLO catalog. `datadog_id` present ⇒ the SLO already exists in the
+# org (survivor of the previous platform, keyed by its `slo_id` tag) and is
+# ADOPTED: burn-rate monitors attach to it; Terraform does not recreate it
+# until it is imported (migration plan step M3). `datadog_id` absent ⇒ the SLO
+# is created by the `slo_with_burn` module.
+#
+# Monitor-type SLOs whose member monitors were deleted are re-pointed at the
+# rebuilt archetype monitors via `member_archetypes` (migration step M4).
+version: 1
+slos:
+  slo-app-availability:
+    name: Application availability
+    type: metric
+    domain: application
+    service: application-platform
+    team: sre
+    target: 99.9
+    timeframe: 30d
+    query:
+      numerator: "sum:trace.http.request.hits{env:prod} by {service}.as_count() - sum:trace.http.request.errors{env:prod} by {service}.as_count()"
+      denominator: "sum:trace.http.request.hits{env:prod} by {service}.as_count()"
+    burn_alerts: [fast, slow, warn]
+
+  slo-app-latency:
+    name: Application latency objective
+    datadog_id: e8f6dde773ef530983a3536cbf04a9b6
+    type: time_slice
+    domain: application
+    service: application-platform
+    team: application-development
+    target: 99.0
+    timeframe: 30d
+    burn_alerts: [fast, slow]
+
+  slo-cloud-azure-platform:
+    name: Azure platform reliability
+    datadog_id: ba053cdd64795cb894515700de432d2a
+    type: monitor
+    domain: cloud
+    service: azure-landing-zone
+    team: cloud-engineering
+    target: 99.9
+    timeframe: 30d
+    member_archetypes: [k8s-workload-unavailable, cloud-api-throttling]   # replaces deleted 311841687, 311841681
+    burn_alerts: [fast, slow]
+
+  slo-cloud-async-freshness:
+    name: Async processing backlog containment
+    datadog_id: b5e33ab767305142881e17aaedffe3e8
+    type: time_slice
+    domain: cloud
+    service: messaging-platform
+    team: cloud-engineering
+    target: 99.0
+    timeframe: 30d
+    burn_alerts: [fast, slow]
+
+  slo-infra-database-availability:
+    name: Database platform availability
+    datadog_id: 55422a0e08a25c11bf996e7dfd31f4de
+    type: monitor
+    domain: data
+    service: database-platform
+    team: infrastructure-engineering
+    target: 99.9
+    timeframe: 30d
+    member_archetypes: [db-connection-saturation, db-replication-lag]      # replaces 6 deleted monitors
+    burn_alerts: [fast, slow]
+
+  slo-infra-identity-availability:
+    name: Identity platform availability
+    datadog_id: 7c890cc570435b83a75436bf2d5af11f
+    type: monitor
+    domain: infrastructure
+    service: identity-platform
+    team: infrastructure-engineering
+    target: 99.95
+    timeframe: 30d
+    member_archetypes: [host-unavailable]                                  # replaces deleted 311841304
+    burn_alerts: [fast]
+
+  slo-infra-storage-availability:
+    name: Storage platform availability
+    datadog_id: 9ecdb905acf755deb34b31a042eb7bd6
+    type: monitor
+    domain: infrastructure
+    service: storage-platform
+    team: infrastructure-engineering
+    target: 99.95
+    timeframe: 30d
+    member_archetypes: [storage-latency-anomaly]                           # replaces deleted 311841340
+    burn_alerts: [fast]
+
+  slo-infra-backup-success:
+    name: Backup success rate
+    datadog_id: d7ab6cf043f05e8a99569b3a4955fde4
+    type: metric
+    domain: infrastructure
+    service: backup-platform
+    team: infrastructure-engineering
+    target: 99.0
+    timeframe: 30d
+    burn_alerts: [warn]
+    telemetry_dependency: "acme.backup.job.* custom metrics (currently silent — coverage gap DG-1)"
+
+  slo-infra-certificate-renewal:
+    name: Certificate renewal timeliness
+    datadog_id: b153cef3cf2452aaa2bc3376030452ec
+    type: metric
+    domain: infrastructure
+    service: identity-platform
+    team: infrastructure-engineering
+    target: 99.5
+    timeframe: 90d
+    burn_alerts: [warn]
+    telemetry_dependency: "acme.identity.certs_* custom metrics (currently silent — coverage gap DG-2)"
+
+  slo-data-pipeline-freshness:
+    name: Data pipeline freshness
+    type: metric
+    domain: data
+    service: data-pipelines
+    team: data-engineering
+    target: 99.0
+    timeframe: 30d
+    query:
+      numerator: "sum:acme.data.pipeline.runs_fresh{env:prod}.as_count()"
+      denominator: "sum:acme.data.pipeline.runs_total{env:prod}.as_count()"
+    burn_alerts: [slow, warn]
+
+  slo-sec-log-freshness:
+    name: Security log freshness
+    datadog_id: bd9f9dc113b951d3a51663debf9ccfc0
+    type: time_slice
+    domain: security
+    service: security-telemetry
+    team: security
+    target: 99.9
+    timeframe: 30d
+    burn_alerts: [fast, slow]
+
+  slo-sec-notification-delivery:
+    name: Security notification delivery
+    datadog_id: e07de62a5d5c5aa8b7dec6ef99921114
+    type: metric
+    domain: security
+    service: security-response
+    team: security
+    target: 99.5
+    timeframe: 30d
+    burn_alerts: [fast]
+    telemetry_dependency: "acme.security.notifications_* custom metrics (currently silent — coverage gap DG-3)"

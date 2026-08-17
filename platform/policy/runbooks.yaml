@@ -1,0 +1,38 @@
+# Runbook notebook registry. These notebooks EXIST in the org (survivors of
+# the previous platform, verified 2026-08-17) and are adopted by ID. New
+# runbooks are published from templates in platform/runbooks/ by
+# tools/publish_runbooks.py (ADR-006: no Terraform resource for notebooks).
+version: 1
+notebooks:
+  "Runbook: Host Unavailable":                { id: 15214633 }
+  "Runbook: Cpu Anomaly":                     { id: 15214627 }
+  "Runbook: Memory Pressure":                 { id: 15214644 }
+  "Runbook: Disk Capacity Forecast":          { id: 15214632 }
+  "Runbook: Storage Latency Anomaly":         { id: 15214673 }
+  "Runbook: Network Packet Loss":             { id: 15214645 }
+  "Runbook: Backup Failure":                  { id: 15214622 }
+  "Runbook: Certificate Expiration":          { id: 15214623 }
+  "Runbook: Vmware Cluster Degradation":      { id: 15214675 }
+  "Runbook: K8S Workload Unavailable":        { id: 15214635 }
+  "Runbook: K8S Node Pressure":               { id: 15214634 }
+  "Runbook: Cloud Api Throttling":            { id: 15214624 }
+  "Runbook: Queue Backlog":                   { id: 15214665 }
+  "Runbook: Cloud Cost Anomaly":              { id: 15214625 }
+  "Runbook: Provider Integration Stopped Delivering Telemetry": { id: 15214661 }
+  "Runbook: Application Error Rate Anomaly":  { id: 15214612 }
+  "Runbook: Application Latency Degradation": { id: 15214613 }
+  "Runbook: Application Traffic Anomaly":     { id: 15214619 }
+  "Runbook: Application Endpoint Unavailable": { id: 15214611 }
+  "Runbook: Application Dependency Degradation": { id: 15208648 }
+  "Runbook: Deployment Regression":           { id: 15208649 }
+  "Runbook: Application Stopped Logging":     { id: 15214618 }
+  "Runbook: Db Replication Lag":              { id: 15214630 }
+  "Runbook: Db Connection Saturation":        { id: 15214629 }
+  "Runbook: Control-M Batch Automation Failure": { id: 15214626 }
+  "Runbook: Log Volume Anomaly (runaway logger)": { id: 15214642 }
+  "Runbook: Security Log Source Missing":     { id: 15214672 }
+  "Runbook: Log Source Silence":              { id: 15214641 }
+  "Runbook: Authentication Anomaly":          { id: 15214621 }
+  "Runbook: Critical Vulnerability Overdue":  { id: 15214628 }
+  "Runbook: Okta Identity Provider Outage":   { id: 15214653 }
+notebook_base_url: "https://app.datadoghq.com/notebook"

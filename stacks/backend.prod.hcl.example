@@ -1,0 +1,6 @@
+# Remote state backend config (copy to backend.prod.hcl in CI; never commit
+# real values). Example for azurerm blob backend:
+#   storage_account_name = "acmeobsstate"
+#   container_name       = "tfstate"
+#   key                  = "observability/<stack>.tfstate"
+#   use_azuread_auth     = true

@@ -1,0 +1,67 @@
+{
+  "title": "Enterprise Overview — SLO Health & Platform Risk",
+  "description": "Managed by Terraform (stacks/foundation). SLO health, error-budget risk, active incidents, coverage and ownership gaps.",
+  "layout_type": "ordered",
+  "reflow_type": "auto",
+  "tags": ["managed_by:terraform", "team:observability-platform"],
+  "widgets": [
+    {
+      "definition": {
+        "title": "SLO health (all platform SLOs)",
+        "type": "slo_list",
+        "requests": [
+          {
+            "request_type": "slo_list",
+            "query": { "query_string": "tags:(managed_by:terraform)", "limit": 100, "sort": [{ "column": "status.sli", "order": "asc" }] }
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "title": "Error-budget risk — monitors in alert by severity",
+        "type": "manage_status",
+        "summary_type": "monitors",
+        "display_format": "countsAndList",
+        "color_preference": "background",
+        "hide_zero_counts": true,
+        "query": "tag:(managed_by:terraform AND pages:true)",
+        "sort": "priority,asc",
+        "count": 50,
+        "start": 0
+      }
+    },
+    {
+      "definition": {
+        "title": "Coverage & governance gaps (from coverage report)",
+        "type": "query_value",
+        "precision": 0,
+        "requests": [
+          { "queries": [ { "data_source": "metrics", "name": "gaps", "query": "sum:acme.observability.coverage.gaps{report:latest}", "aggregator": "last" } ], "response_format": "scalar" }
+        ],
+        "custom_links": []
+      }
+    },
+    {
+      "definition": {
+        "title": "Unowned resources (must be zero)",
+        "type": "query_value",
+        "precision": 0,
+        "requests": [
+          { "queries": [ { "data_source": "metrics", "name": "unowned", "query": "sum:acme.observability.coverage.unowned{report:latest}", "aggregator": "last" } ], "response_format": "scalar" }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "title": "How to read this dashboard",
+        "type": "note",
+        "content": "**Coverage metrics** are published by tools/coverage_report.py (scheduled in CI). Gaps > 0 page the observability-platform team via the platform-governance archetype. Per-service drill-down: use the native Service Catalog — no custom per-service dashboards exist by design.",
+        "background_color": "gray",
+        "font_size": "14",
+        "text_align": "left",
+        "show_tick": false
+      }
+    }
+  ]
+}

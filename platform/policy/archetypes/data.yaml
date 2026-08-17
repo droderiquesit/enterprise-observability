@@ -1,0 +1,120 @@
+# Data engineering coverage pack.
+version: 1
+domain: data
+archetypes:
+  db-replication-lag:
+    title: Db Replication Lag
+    class: availability
+    detection: threshold
+    monitor_type: query alert
+    query: "avg(last_10m):max:postgresql.replication_delay{env:__ENV__} by {db_instance} > 300"
+    thresholds: { critical: 300, warning: 120, critical_recovery: 120, warning_recovery: 60 }
+    group_by: [db_instance]
+    severity_class: page
+    slo_id: slo-infra-database-availability
+    runbook: "Runbook: Db Replication Lag"
+    workflow: auto-enrich-replication
+    failure_domain: databases
+
+  db-connection-saturation:
+    title: Db Connection Saturation
+    class: saturation
+    detection: forecast
+    monitor_type: query alert
+    query: "max(next_1h):forecast(avg:postgresql.percent_usage_connections{env:__ENV__} by {db_instance}, 'linear', 1, interval='10m') >= 0.9"
+    thresholds: { critical: 0.9 }
+    group_by: [db_instance]
+    severity_class: page
+    slo_id: slo-infra-database-availability
+    runbook: "Runbook: Db Connection Saturation"
+    workflow: auto-enrich-saturation
+    failure_domain: databases
+
+  pipeline-freshness:
+    title: Data Pipeline Freshness Breach
+    class: availability
+    detection: threshold
+    monitor_type: query alert
+    query: "min(last_30m):max:acme.data.pipeline.freshness_minutes{env:__ENV__} by {pipeline} > 90"
+    thresholds: { critical: 90, warning: 60 }
+    group_by: [pipeline]
+    severity_class: page
+    slo_id: slo-data-pipeline-freshness
+    runbook: "Runbook: Control-M Batch Automation Failure"
+    workflow: auto-job-rerun
+    failure_domain: data-pipelines
+    notify_no_data: true
+    no_data_timeframe: 120
+    rationale_fixed_threshold: "Downstream consumers contractually require data no older than 90 minutes."
+
+  pipeline-job-failure:
+    title: Data Job Failure
+    class: errors
+    detection: threshold
+    monitor_type: query alert
+    query: "sum(last_30m):sum:acme.data.job.failed{env:__ENV__} by {pipeline}.as_count() > 0"
+    thresholds: { critical: 0 }
+    group_by: [pipeline]
+    severity_class: page
+    slo_id: slo-data-pipeline-freshness
+    runbook: "Runbook: Control-M Batch Automation Failure"
+    workflow: auto-job-rerun
+    failure_domain: data-pipelines
+
+  pipeline-duration-anomaly:
+    title: Data Job Duration Anomaly
+    class: saturation
+    detection: anomaly
+    monitor_type: query alert
+    query: "avg(last_2h):anomalies(avg:acme.data.job.duration_seconds{env:__ENV__} by {pipeline}, 'agile', 3) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [pipeline]
+    severity_class: ticket
+    slo_id: slo-data-pipeline-freshness
+    runbook: "Runbook: Control-M Batch Automation Failure"
+    workflow: auto-enrich-saturation
+    failure_domain: data-pipelines
+
+  pipeline-throughput-outlier:
+    title: Data Pipeline Throughput Outlier
+    class: outlier
+    detection: outlier
+    monitor_type: query alert
+    query: "avg(last_1h):outliers(sum:acme.data.pipeline.rows_processed{env:__ENV__} by {pipeline}.as_count(), 'DBSCAN', 3) > 0"
+    thresholds: { critical: 0 }
+    group_by: [pipeline]
+    severity_class: ticket
+    slo_id: slo-data-pipeline-freshness
+    runbook: "Runbook: Log Volume Anomaly (runaway logger)"
+    workflow: auto-enrich-traffic
+    failure_domain: data-pipelines
+    tiers: [tier1, tier2]
+
+  data-quality-failure:
+    title: Data Quality Check Failure
+    class: errors
+    detection: threshold
+    monitor_type: query alert
+    query: "sum(last_1h):sum:acme.data.quality.failed_checks{env:__ENV__} by {dataset}.as_count() > 0"
+    thresholds: { critical: 0 }
+    group_by: [dataset]
+    severity_class: ticket
+    slo_id: slo-data-pipeline-freshness
+    runbook: "Runbook: Control-M Batch Automation Failure"
+    workflow: auto-compliance-ticket
+    failure_domain: data-warehouse
+
+  warehouse-queue-anomaly:
+    title: Warehouse Query Queue Anomaly
+    class: saturation
+    detection: anomaly
+    monitor_type: query alert
+    query: "avg(last_1h):anomalies(avg:snowflake.query.queued_overload{env:__ENV__} by {warehouse}, 'agile', 3) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [warehouse]
+    severity_class: ticket
+    slo_id: slo-data-pipeline-freshness
+    runbook: "Runbook: Db Connection Saturation"
+    workflow: auto-enrich-saturation
+    failure_domain: data-warehouse
+    envs: [prod]

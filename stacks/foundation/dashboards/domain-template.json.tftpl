@@ -1,0 +1,46 @@
+{
+  "title": "Domain — ${domain}",
+  "description": "Generated from the standard domain template (stacks/foundation). One per domain; no per-service dashboards.",
+  "layout_type": "ordered",
+  "reflow_type": "auto",
+  "tags": ["managed_by:terraform", "domain:${domain}"],
+  "template_variables": [
+    { "name": "env", "prefix": "env", "available_values": ["prod", "staging"], "default": "prod" }
+  ],
+  "widgets": [
+    {
+      "definition": {
+        "title": "${domain} monitors",
+        "type": "manage_status",
+        "summary_type": "groups",
+        "display_format": "countsAndList",
+        "color_preference": "background",
+        "hide_zero_counts": true,
+        "query": "tag:(managed_by:terraform AND domain:${domain}) tag:($env.value)",
+        "sort": "status,asc",
+        "count": 50,
+        "start": 0
+      }
+    },
+    {
+      "definition": {
+        "title": "${domain} SLOs",
+        "type": "slo_list",
+        "requests": [
+          {
+            "request_type": "slo_list",
+            "query": { "query_string": "tags:(domain:${domain})", "limit": 50, "sort": [{ "column": "status.sli", "order": "asc" }] }
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "title": "${domain} alert events",
+        "type": "event_stream",
+        "query": "source:alert tags:domain:${domain}",
+        "event_size": "s"
+      }
+    }
+  ]
+}

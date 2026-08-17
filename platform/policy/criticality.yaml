@@ -1,0 +1,29 @@
+# Criticality policy layer: tier → severity/priority/objective mapping.
+version: 1
+tiers:
+  tier1:
+    description: Customer-facing or revenue-critical; immediate 24x7 response.
+    default_profile: critical
+    severity_map: { page_fast: sev1, page: sev2, ticket: sev3 }
+    priority_map: { sev1: 1, sev2: 2, sev3: 3 }
+    slo_objectives: { availability: 99.95, latency: 99.5, freshness: 99.5 }
+    support_model: 24x7
+  tier2:
+    description: Business-important; 24x7 for sustained impact.
+    default_profile: standard
+    severity_map: { page_fast: sev2, page: sev2, ticket: sev3 }
+    priority_map: { sev2: 2, sev3: 3 }
+    slo_objectives: { availability: 99.9, latency: 99.0, freshness: 99.0 }
+    support_model: 24x7
+  tier3:
+    description: Internal; business-hours response.
+    default_profile: standard
+    severity_map: { page_fast: sev3, page: sev3, ticket: sev3 }
+    priority_map: { sev3: 3 }
+    slo_objectives: { availability: 99.5, latency: 98.0, freshness: 98.0 }
+    support_model: business_hours
+  tier4:
+    description: Best-effort / experimental. Observe only by policy.
+    default_profile: observe_only
+    observe_only_reason: "tier4 best-effort workload (policy)"
+    support_model: none

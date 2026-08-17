@@ -1,0 +1,20 @@
+# Environment policy layer.
+version: 1
+environments:
+  prod:
+    default_profile: standard
+    paging_allowed: true
+    business_hours_only: false
+  staging:
+    default_profile: standard
+    paging_allowed: false          # staging never pages; sev floor is ticket
+    severity_floor: sev3
+    business_hours_only: true
+  dev:
+    default_profile: observe_only
+    observe_only_reason: "non-production development environment (policy)"
+    paging_allowed: false
+  sandbox:
+    default_profile: observe_only
+    observe_only_reason: "sandbox environment (policy)"
+    paging_allowed: false

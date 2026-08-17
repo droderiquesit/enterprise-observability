@@ -1,0 +1,14 @@
+[
+  {"name": "Security log freshness", "service_tags": ["security-telemetry"], "tags": ["slo_id:slo-sec-log-freshness", "managed_by:terraform", "team:security"], "overall_status": [{"state": "ok"}]},
+  {"name": "Async processing backlog containment", "service_tags": ["messaging-platform"], "tags": ["slo_id:slo-cloud-async-freshness", "managed_by:terraform", "team:cloud-engineering"], "overall_status": [{"state": "ok"}]},
+  {"name": "Application latency objective", "service_tags": ["application-platform"], "tags": ["slo_id:slo-app-latency", "managed_by:terraform", "team:application-development"], "overall_status": [{"state": "ok"}]},
+  {"name": "Azure platform reliability", "service_tags": ["azure-landing-zone"], "tags": ["slo_id:slo-cloud-azure-platform", "managed_by:terraform", "team:cloud-engineering"], "overall_status": [{"state": "no_data", "error": "no valid monitors found"}]},
+  {"name": "Security notification delivery", "service_tags": ["security-response"], "tags": ["slo_id:slo-sec-notification-delivery", "managed_by:terraform", "team:security"], "overall_status": [{"state": "no_data", "error": "overall denominator (total events) is 0"}]},
+  {"name": "Database platform availability", "service_tags": ["database-platform"], "tags": ["slo_id:slo-infra-database-availability", "managed_by:terraform", "team:infrastructure-engineering"], "overall_status": [{"state": "no_data", "error": "no valid monitors found"}]},
+  {"name": "Backup success rate", "service_tags": ["backup-platform"], "tags": ["slo_id:slo-infra-backup-success", "managed_by:terraform", "team:infrastructure-engineering"], "overall_status": [{"state": "no_data", "error": "overall denominator (total events) is 0"}]},
+  {"name": "Identity platform availability", "service_tags": ["identity-platform"], "tags": ["slo_id:slo-infra-identity-availability", "managed_by:terraform", "team:infrastructure-engineering"], "overall_status": [{"state": "no_data", "error": "monitor not found"}]},
+  {"name": "Storage platform availability", "service_tags": ["storage-platform"], "tags": ["slo_id:slo-infra-storage-availability", "managed_by:terraform", "team:infrastructure-engineering"], "overall_status": [{"state": "no_data", "error": "monitor not found"}]},
+  {"name": "Certificate renewal timeliness", "service_tags": ["identity-platform"], "tags": ["slo_id:slo-infra-certificate-renewal", "managed_by:terraform", "team:infrastructure-engineering"], "overall_status": [{"state": "no_data", "error": "overall denominator (total events) is 0"}]},
+  {"name": "Application availability", "service_tags": ["application-platform"], "tags": ["slo_id:slo-app-availability", "managed_by:terraform", "team:sre"], "overall_status": [{"state": "ok"}]},
+  {"name": "Data pipeline freshness", "service_tags": ["data-pipelines"], "tags": ["slo_id:slo-data-pipeline-freshness", "managed_by:terraform", "team:data-engineering"], "overall_status": [{"state": "ok"}]}
+]

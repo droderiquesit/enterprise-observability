@@ -1,0 +1,108 @@
+# SRE / application coverage pack. Grouped by {service} — one monitor covers
+# every APM service in the environment; new services are covered on first
+# trace with zero configuration. SLO burn-rate monitors (the PRIMARY paging
+# signal) are generated from slos.yaml by the slo_with_burn module, not here.
+version: 1
+domain: application
+archetypes:
+  app-error-rate-anomaly:
+    title: Application Error Rate Anomaly
+    class: errors
+    detection: anomaly
+    monitor_type: query alert
+    query: "avg(last_15m):anomalies(sum:trace.http.request.errors{env:__ENV__} by {service}.as_rate(), 'agile', 3) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [service]
+    severity_class: page
+    slo_id: slo-app-availability
+    runbook: "Runbook: Application Error Rate Anomaly"
+    workflow: auto-enrich-errors
+    failure_domain: application-platform
+
+  app-latency-degradation:
+    title: Application Latency Degradation
+    class: latency
+    detection: rate_of_change
+    monitor_type: query alert
+    query: "pct_change(avg(last_15m),last_1h):avg:trace.http.request.duration{env:__ENV__} by {service} > 100"
+    thresholds: { critical: 100, warning: 50 }
+    group_by: [service]
+    severity_class: page
+    slo_id: slo-app-latency
+    runbook: "Runbook: Application Latency Degradation"
+    workflow: auto-enrich-latency
+    failure_domain: application-platform
+
+  app-traffic-anomaly:
+    title: Application Traffic Anomaly
+    class: traffic
+    detection: anomaly
+    monitor_type: query alert
+    query: "avg(last_30m):anomalies(sum:trace.http.request.hits{env:__ENV__} by {service}.as_rate(), 'agile', 3, direction='below') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [service]
+    severity_class: page
+    slo_id: slo-app-availability
+    runbook: "Runbook: Application Traffic Anomaly"
+    workflow: auto-enrich-traffic
+    failure_domain: application-platform
+    tiers: [tier1]
+
+  app-endpoint-unavailable:
+    title: Application Endpoint Unavailable
+    class: availability
+    detection: threshold
+    monitor_type: query alert
+    query: "sum(last_10m):sum:synthetics.test_runs{env:__ENV__,status:failed} by {check_id}.as_count() >= 3"
+    thresholds: { critical: 3, warning: 1 }
+    group_by: [check_id]
+    severity_class: page_fast
+    slo_id: slo-app-availability
+    runbook: "Runbook: Application Endpoint Unavailable"
+    workflow: auto-major-incident
+    failure_domain: application-platform
+
+  app-dependency-degradation:
+    title: Application Dependency Degradation
+    class: dependency
+    detection: anomaly
+    monitor_type: query alert
+    query: "avg(last_15m):anomalies(sum:trace.http.client.request.errors{env:__ENV__} by {service,peer_service}.as_rate(), 'agile', 3) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [service, peer_service]
+    severity_class: page
+    slo_id: slo-app-availability
+    runbook: "Runbook: Application Dependency Degradation"
+    workflow: auto-enrich-dependency
+    failure_domain: application-platform
+    tiers: [tier1, tier2]
+
+  deployment-regression:
+    title: Deployment Regression
+    class: rate_of_change
+    detection: rate_of_change
+    monitor_type: query alert
+    query: "pct_change(avg(last_10m),last_30m):sum:trace.http.request.errors{env:__ENV__} by {service}.as_rate() > 300"
+    thresholds: { critical: 300 }
+    group_by: [service]
+    severity_class: page
+    slo_id: slo-app-availability
+    runbook: "Runbook: Deployment Regression"
+    workflow: auto-enrich-change
+    failure_domain: application-platform
+
+  app-telemetry-loss:
+    title: Application Stopped Logging
+    class: telemetry_health
+    detection: threshold
+    monitor_type: query alert
+    query: "sum(last_30m):sum:trace.http.request.hits{env:__ENV__} by {service}.as_count() < 1"
+    thresholds: { critical: 1 }
+    group_by: [service]
+    severity_class: ticket
+    slo_id: slo-app-availability
+    runbook: "Runbook: Application Stopped Logging"
+    workflow: auto-enrich-availability
+    failure_domain: application-platform
+    notify_no_data: true
+    no_data_timeframe: 60

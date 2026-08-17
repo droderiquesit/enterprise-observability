@@ -1,0 +1,30 @@
+# Approved exceptions — the ONLY sanctioned deviation mechanism.
+# Every entry requires owner, justification, approver, and expiry. CI fails on
+# entries past expiry; the coverage report lists all active and expired
+# exceptions. An exception never removes governance tags — it relaxes exactly
+# the named control.
+version: 1
+exceptions:
+  - id: EXC-2026-001
+    scope: { service: "efront_bts_int", env: prod }
+    control: monitoring_profile
+    value: observe_only
+    justification: >
+      Vendor-managed integration test instance; vendor holds the operational
+      SLA. Telemetry retained for audit; paging would be non-actionable.
+    owner: application-development
+    approved_by: sre
+    approved_on: 2026-08-15
+    expires: 2027-02-15
+
+  - id: EXC-2026-002
+    scope: { archetype: cloud-cost-anomaly, env: prod }
+    control: severity
+    value: informational
+    justification: >
+      FinOps requests a 90-day observation window before cost anomalies create
+      work items; thresholds are being calibrated.
+    owner: cloud-engineering
+    approved_by: observability-platform
+    approved_on: 2026-08-10
+    expires: 2026-11-10

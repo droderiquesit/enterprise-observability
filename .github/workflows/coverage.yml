@@ -1,0 +1,36 @@
+name: coverage-report
+# Scheduled governance run: rebuild the inventory, re-assign profiles, and
+# publish the coverage & compliance report. Red = a governance gap exists
+# (unowned resource, click-ops monitor, missing runbook, expired exception…).
+on:
+  schedule:
+    - cron: "0 7 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    environment: datadog-plan
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r tools/requirements.txt
+      - name: Build inventory → assign profiles → coverage report
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        run: |
+          cd tools
+          python build_inventory.py --live
+          python profile_engine.py
+          python coverage_report.py --live
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report-${{ github.run_id }}
+          path: generated/coverage_report.*

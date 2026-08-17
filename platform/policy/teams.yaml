@@ -1,0 +1,60 @@
+# Team ownership layer. Teams map to Datadog Teams, on-call schedules,
+# escalation policies, and notification destinations. No individual people are
+# ever referenced in monitors — routing is tag-based (routing.yaml).
+version: 1
+teams:
+  sre:
+    handle: sre
+    name: Site Reliability Engineering
+    email: sre@acme.example
+    domains_owned: [application]
+    escalation_to: platform-leadership
+    teams_channel: teams-sre-alerts
+  infrastructure-engineering:
+    handle: infrastructure-engineering
+    name: Infrastructure Engineering
+    email: infra@acme.example
+    domains_owned: [infrastructure]
+    escalation_to: sre
+    teams_channel: teams-infra-alerts
+  cloud-engineering:
+    handle: cloud-engineering
+    name: Cloud Engineering
+    email: cloud@acme.example
+    domains_owned: [cloud]
+    escalation_to: sre
+    teams_channel: teams-cloud-alerts
+  data-engineering:
+    handle: data-engineering
+    name: Data Engineering
+    email: data@acme.example
+    domains_owned: [data]
+    escalation_to: sre
+    teams_channel: teams-data-alerts
+  security:
+    handle: security
+    name: Security Engineering
+    email: security@acme.example
+    domains_owned: [security]
+    escalation_to: security-leadership
+    teams_channel: teams-security-alerts
+  application-development:
+    handle: application-development
+    name: Application Development
+    email: appdev@acme.example
+    domains_owned: []
+    escalation_to: sre
+    teams_channel: teams-appdev-alerts
+  observability-platform:
+    handle: observability-platform
+    name: Observability Platform (owns this repo)
+    email: o11y@acme.example
+    domains_owned: []
+    escalation_to: sre
+    teams_channel: teams-o11y-alerts
+
+# Fallback owner for discovered resources with no resolvable owner. Resources
+# under this owner are a first-class coverage-report violation until claimed.
+unowned_pool:
+  team: observability-platform
+  max_age_days: 14

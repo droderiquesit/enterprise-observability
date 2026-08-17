@@ -1,0 +1,61 @@
+# Monitoring profiles. A profile decides WHICH archetype classes apply and how
+# strictly. Profiles inherit `base` and add only what they require.
+version: 1
+
+base:
+  alerting: true
+  require_slo: true
+  require_runbook: true
+  require_workflow: true
+  require_routing: true
+  archetype_classes: [availability, saturation, telemetry_health]
+
+profiles:
+  observe_only:
+    description: >
+      Telemetry collected, dashboards and events only. NO alerting monitors.
+      Assignment is policy-driven (sandbox env, tier4, or approved exception)
+      and every observe_only resource appears in the coverage report with the
+      reason it is not alerted on.
+    alerting: false
+    archetype_classes: []
+    requires_reason: true
+
+  standard:
+    description: Default for tier2/tier3 production and staging workloads.
+    archetype_classes: [availability, latency, errors, saturation, telemetry_health, capacity_forecast]
+
+  critical:
+    description: >
+      Tier1 / customer-facing. Adds burn-rate paging, outlier and
+      rate-of-change detection, dependency correlation, and stricter no-data.
+    archetype_classes: [availability, latency, errors, traffic, saturation,
+                        telemetry_health, capacity_forecast, burn_rate,
+                        outlier, rate_of_change, dependency]
+    overrides:
+      notify_no_data: true
+      renotify_interval: 30
+
+  regulated:
+    description: >
+      Everything in `critical` plus compliance-driven absolutes: backup age,
+      certificate expiry, audit-log continuity, retention. Exceptions require
+      compliance approval and downtimes require change tickets.
+    inherits: critical
+    archetype_classes_add: [compliance_absolute, audit_continuity]
+    overrides:
+      require_change_ticket_for_downtime: true
+    tags_add:
+      compliance_scope: sox
+
+  security_sensitive:
+    description: >
+      Security telemetry sources and controls. Adds integration-health,
+      control-failure, auth-anomaly and telemetry-gap archetypes. Routed to the
+      security team regardless of resource ownership.
+    inherits: critical
+    archetype_classes_add: [security_control, security_telemetry_gap, auth_anomaly]
+    overrides:
+      route_to_team: security
+    tags_add:
+      data_classification: restricted

@@ -1,0 +1,23 @@
+# Domain overlay layer.
+version: 1
+domains:
+  infrastructure:
+    owner_team: infrastructure-engineering
+    platform_tag: infrastructure
+    failure_domains: [compute, storage, network, backup-platform, identity, virtualization]
+  cloud:
+    owner_team: cloud-engineering
+    platform_tag: azure
+    failure_domains: [azure-landing-zone, kubernetes, messaging-platform, cloud-finops]
+  application:
+    owner_team: sre
+    platform_tag: application
+    failure_domains: [application-platform, web-frontends, integration-services]
+  data:
+    owner_team: data-engineering
+    platform_tag: data
+    failure_domains: [databases, data-pipelines, data-warehouse]
+  security:
+    owner_team: security
+    platform_tag: security
+    failure_domains: [security-telemetry, security-response, identity-security]

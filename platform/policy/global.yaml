@@ -1,0 +1,78 @@
+# Global standards — root of the configuration hierarchy.
+# Precedence (lowest → highest):
+#   global → domain → archetype → profile → environment → criticality → team → approved exception
+version: 1
+
+org:
+  name: acme
+  managed_by: terraform
+  repo: droderiquesit/enterprise-observability
+
+# The mandatory tag set. Validation fails when any required tag is missing or
+# its value is not in the controlled vocabulary (see tagging-standard.md).
+required_tags:
+  - env
+  - service
+  - team
+  - owner
+  - domain
+  - platform
+  - resource_type
+  - criticality
+  - region
+  - monitoring_profile
+  - managed_by
+
+optional_tags:
+  - account
+  - subscription
+  - project
+  - cluster
+  - data_classification
+  - compliance_scope
+  - support_model
+  - cost_center
+
+tag_vocabulary:
+  env: [prod, staging, dev, sandbox]
+  criticality: [tier1, tier2, tier3, tier4]
+  monitoring_profile: [observe_only, standard, critical, regulated, security_sensitive]
+  domain: [infrastructure, cloud, application, data, security]
+  managed_by: [terraform]
+  region: [eastus2, centralus, westeurope, onprem-dc1, onprem-dc2, global]
+
+# Monitor contract defaults — every alerting monitor inherits these unless a
+# higher layer overrides them. See ADR-003.
+monitor_defaults:
+  evaluation_delay: 300          # seconds; cloud metrics lag
+  new_group_delay: 300           # seconds; suppress eval on newly-seen groups
+  renotify_interval: 60          # minutes, alert state only
+  renotify_statuses: [alert]
+  notify_no_data: false          # telemetry-loss archetypes override to true
+  no_data_timeframe: 30          # minutes, when notify_no_data
+  require_full_window: false
+  notify_audit: false
+  include_tags: true
+  timeout_h: 0
+  recovery_notification: true    # message template always includes recovery section
+
+# Cardinality guardrails (ADR-004). CI fails any archetype instance whose
+# declared group-by set or observed group count exceeds these.
+cardinality:
+  max_group_by_keys: 3
+  max_groups_per_monitor: 1000
+  forbidden_group_keys: [host_ip, container_id, pod_name, request_id, trace_id, path, url]
+
+naming:
+  # Stable, parseable monitor names. No per-resource names — the group carries
+  # resource identity via template variables.
+  monitor: "[{domain}][{env}][{severity}] {archetype_title}"
+  slo: "{slo_title}"
+  notebook: "Runbook: {archetype_title}"
+  workflow: "{automation_ref}"
+
+burn_rate_defaults:
+  # Multi-window burn-rate pairs (Google SRE workbook standard).
+  fast: { long_window: "1h",  short_window: "5m",  factor: 14.4, severity: page }
+  slow: { long_window: "6h",  short_window: "30m", factor: 6.0,  severity: page }
+  warn: { long_window: "24h", short_window: "2h",  factor: 3.0,  severity: ticket }

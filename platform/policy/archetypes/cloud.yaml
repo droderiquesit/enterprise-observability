@@ -1,0 +1,105 @@
+# Cloud coverage pack (Azure + Kubernetes estate).
+version: 1
+domain: cloud
+archetypes:
+  k8s-workload-unavailable:
+    title: K8S Workload Unavailable
+    class: availability
+    detection: threshold
+    monitor_type: query alert
+    query: "avg(last_10m):sum:kubernetes_state.deployment.replicas_available{env:__ENV__} by {kube_cluster_name,kube_namespace,kube_deployment} / sum:kubernetes_state.deployment.replicas_desired{env:__ENV__} by {kube_cluster_name,kube_namespace,kube_deployment} < 0.5"
+    thresholds: { critical: 0.5, warning: 0.75, critical_recovery: 0.75, warning_recovery: 0.9 }
+    group_by: [kube_cluster_name, kube_namespace, kube_deployment]
+    severity_class: page
+    slo_id: slo-cloud-azure-platform
+    runbook: "Runbook: K8S Workload Unavailable"
+    workflow: auto-enrich-availability
+    failure_domain: kubernetes
+
+  k8s-node-pressure:
+    title: K8S Node Pressure
+    class: saturation
+    detection: threshold
+    monitor_type: query alert
+    query: "max(last_10m):sum:kubernetes_state.node.by_condition{env:__ENV__,condition:memorypressure,status:true} by {kube_cluster_name} > 0"
+    thresholds: { critical: 0 }
+    group_by: [kube_cluster_name]
+    severity_class: page
+    slo_id: slo-cloud-azure-platform
+    runbook: "Runbook: K8S Node Pressure"
+    workflow: auto-enrich-saturation
+    failure_domain: kubernetes
+
+  cloud-api-throttling:
+    title: Cloud Api Throttling
+    class: availability
+    detection: rate_of_change
+    monitor_type: query alert
+    query: "pct_change(avg(last_15m),last_1h):sum:azure.network_publicipaddresses.under_ddos_attack{env:__ENV__} by {subscription_name}.as_count() > 100"
+    thresholds: { critical: 100 }
+    group_by: [subscription_name]
+    severity_class: page
+    slo_id: slo-cloud-azure-platform
+    runbook: "Runbook: Cloud Api Throttling"
+    workflow: auto-enrich-change
+    failure_domain: azure-landing-zone
+
+  queue-backlog-forecast:
+    title: Queue Backlog
+    class: capacity_forecast
+    detection: forecast
+    monitor_type: query alert
+    query: "max(next_4h):forecast(avg:azure.servicebus_namespaces.messages{env:__ENV__} by {namespace}, 'linear', 1, interval='30m') >= 900"
+    thresholds: { critical: 900 }
+    group_by: [namespace]
+    severity_class: page
+    slo_id: slo-cloud-async-freshness
+    runbook: "Runbook: Queue Backlog"
+    workflow: auto-enrich-queue
+    failure_domain: messaging-platform
+
+  cloud-quota-forecast:
+    title: Cloud Quota Risk
+    class: capacity_forecast
+    detection: forecast
+    monitor_type: query alert
+    query: "max(next_1w):forecast(max:acme.cloud.quota_used_pct{env:__ENV__} by {subscription,quota_name}, 'linear', 1, interval='120m') >= 90"
+    thresholds: { critical: 90 }
+    group_by: [subscription, quota_name]
+    severity_class: ticket
+    slo_id: slo-cloud-azure-platform
+    runbook: "Runbook: Cloud Api Throttling"
+    workflow: auto-capacity-ticket
+    failure_domain: azure-landing-zone
+
+  cloud-cost-anomaly:
+    title: Cloud Cost Anomaly
+    class: telemetry_health
+    detection: anomaly
+    monitor_type: query alert
+    query: "avg(last_1d):anomalies(sum:acme.finops.daily_cost{env:__ENV__} by {subscription}, 'agile', 4) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [subscription]
+    severity_class: ticket
+    slo_id: slo-cloud-azure-platform
+    runbook: "Runbook: Cloud Cost Anomaly"
+    workflow: auto-finops-review
+    failure_domain: cloud-finops
+    envs: [prod]
+
+  cloud-integration-telemetry-loss:
+    title: Provider Integration Stopped Delivering Telemetry
+    class: telemetry_health
+    detection: threshold
+    monitor_type: query alert
+    query: "sum(last_2h):sum:azure.vm.count{env:__ENV__}.as_count() < 1"
+    thresholds: { critical: 1 }
+    group_by: []
+    severity_class: page
+    slo_id: slo-cloud-azure-platform
+    runbook: "Runbook: Provider Integration Stopped Delivering Telemetry"
+    workflow: auto-enrich-availability
+    failure_domain: azure-landing-zone
+    notify_no_data: true
+    no_data_timeframe: 120
+    envs: [prod]

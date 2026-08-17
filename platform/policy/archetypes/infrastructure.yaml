@@ -1,0 +1,144 @@
+# Infrastructure coverage pack. One grouped multi-alert monitor per archetype
+# per environment — never one monitor per host. Query placeholders: __ENV__.
+# Fleets larger than the cardinality budget shard by `region` (shard_by).
+version: 1
+domain: infrastructure
+archetypes:
+  host-unavailable:
+    title: Host unavailable
+    class: availability
+    detection: threshold
+    monitor_type: service check
+    query: '"datadog.agent.up".over("env:__ENV__").by("host").last(4).count_by_status()'
+    thresholds: { critical: 3, warning: 2, ok: 2 }
+    group_by: [host]
+    shard_by: region
+    severity_class: page
+    slo_id: slo-infra-identity-availability
+    runbook: "Runbook: Host Unavailable"
+    workflow: auto-enrich-availability
+    failure_domain: compute
+    notify_no_data: true
+    no_data_timeframe: 10
+
+  host-cpu-anomaly:
+    title: Cpu Anomaly
+    class: saturation
+    detection: anomaly
+    monitor_type: query alert
+    query: "avg(last_4h):anomalies(avg:system.cpu.user{env:__ENV__} by {host}, 'agile', 3) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [host]
+    shard_by: region
+    severity_class: ticket
+    slo_id: slo-infra-identity-availability
+    runbook: "Runbook: Cpu Anomaly"
+    workflow: auto-enrich-saturation
+    failure_domain: compute
+
+  memory-pressure:
+    title: Memory Pressure
+    class: saturation
+    detection: threshold
+    monitor_type: query alert
+    query: "avg(last_15m):avg:system.mem.pct_usable{env:__ENV__} by {host} < 0.05"
+    thresholds: { critical: 0.05, warning: 0.1, critical_recovery: 0.08, warning_recovery: 0.15 }
+    group_by: [host]
+    shard_by: region
+    severity_class: page
+    slo_id: slo-infra-identity-availability
+    runbook: "Runbook: Memory Pressure"
+    workflow: auto-enrich-saturation
+    failure_domain: compute
+
+  disk-capacity-forecast:
+    title: Disk Capacity Forecast
+    class: capacity_forecast
+    detection: forecast
+    monitor_type: query alert
+    query: "max(next_1w):forecast(avg:system.disk.in_use{env:__ENV__} by {host,device}, 'linear', 1, interval='60m') >= 0.9"
+    thresholds: { critical: 0.9 }
+    group_by: [host, device]
+    shard_by: region
+    severity_class: ticket
+    slo_id: slo-infra-storage-availability
+    runbook: "Runbook: Disk Capacity Forecast"
+    workflow: auto-capacity-ticket
+    failure_domain: storage
+
+  storage-latency-anomaly:
+    title: Storage Latency Anomaly
+    class: availability
+    detection: anomaly
+    monitor_type: query alert
+    query: "avg(last_30m):anomalies(avg:system.io.await{env:__ENV__} by {host}, 'agile', 3) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [host]
+    shard_by: region
+    severity_class: page
+    slo_id: slo-infra-storage-availability
+    runbook: "Runbook: Storage Latency Anomaly"
+    workflow: auto-enrich-saturation
+    failure_domain: storage
+
+  network-packet-loss:
+    title: Network Packet Loss
+    class: availability
+    detection: rate_of_change
+    monitor_type: query alert
+    query: "pct_change(avg(last_10m),last_30m):sum:system.net.packets_in.error{env:__ENV__} by {host}.as_rate() > 200"
+    thresholds: { critical: 200, warning: 100 }
+    group_by: [host]
+    shard_by: region
+    severity_class: page
+    slo_id: slo-infra-identity-availability
+    runbook: "Runbook: Network Packet Loss"
+    workflow: auto-enrich-availability
+    failure_domain: network
+
+  backup-age-absolute:
+    title: Backup Failure
+    class: compliance_absolute
+    detection: threshold
+    monitor_type: query alert
+    query: "min(last_2h):max:acme.backup.last_success_age_hours{env:__ENV__} by {backup_scope} > 26"
+    thresholds: { critical: 26, warning: 24 }
+    group_by: [backup_scope]
+    severity_class: page
+    slo_id: slo-infra-backup-success
+    runbook: "Runbook: Backup Failure"
+    workflow: auto-backup-rerun
+    failure_domain: backup-platform
+    notify_no_data: true
+    no_data_timeframe: 180
+    rationale_fixed_threshold: "RPO of 24h is a contractual absolute; 26h = RPO + backup window."
+
+  certificate-expiry:
+    title: Certificate Expiration
+    class: compliance_absolute
+    detection: threshold
+    monitor_type: query alert
+    query: "min(last_2h):min:http.ssl.days_left{env:__ENV__} by {instance} < 14"
+    thresholds: { critical: 14, warning: 30 }
+    group_by: [instance]
+    severity_class: page
+    slo_id: slo-infra-certificate-renewal
+    runbook: "Runbook: Certificate Expiration"
+    workflow: auto-cert-renewal-ticket
+    failure_domain: identity
+    rationale_fixed_threshold: "Expiry is an absolute boundary; 14d matches the renewal SLO danger window."
+
+  vmware-cluster-degradation:
+    title: Vmware Cluster Degradation
+    class: availability
+    detection: anomaly
+    monitor_type: query alert
+    query: "avg(last_30m):anomalies(avg:vsphere.cpu.ready.summation{env:__ENV__} by {vsphere_cluster}, 'agile', 3) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [vsphere_cluster]
+    severity_class: page
+    slo_id: slo-infra-identity-availability
+    runbook: "Runbook: Vmware Cluster Degradation"
+    workflow: auto-enrich-availability
+    failure_domain: virtualization
+    envs: [prod]

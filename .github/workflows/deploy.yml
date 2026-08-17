@@ -1,0 +1,79 @@
+name: deploy
+# Controlled deployment from main only, with a manual approval gate
+# (GitHub environment `datadog-production` requires a reviewer). Order:
+# foundation → runbooks → coverage → post-deploy verification.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency: deploy-datadog   # never two applies at once
+
+env:
+  TF_VERSION: 1.9.8
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: datadog-production   # approval gate + scoped secrets
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r tools/requirements.txt
+
+      - name: Foundation — plan & apply
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        run: |
+          cd stacks/foundation
+          terraform init -input=false -backend-config=../backend.prod.hcl
+          terraform plan -input=false -out=tfplan
+          terraform apply -input=false tfplan
+
+      - name: Runbooks — publish (API-backed, drift-aware; ADR-006)
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        run: cd tools && python publish_runbooks.py
+
+      - name: Coverage — plan & apply (monitors, SLOs, burn alerts)
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        run: |
+          cd stacks/coverage
+          terraform init -input=false -backend-config=../backend.prod.hcl
+          terraform plan -input=false -out=tfplan
+          terraform apply -input=false tfplan
+
+      - name: Post-deploy verification — idempotency (second plan must be clean)
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        run: |
+          cd stacks/coverage && terraform plan -input=false -detailed-exitcode
+          cd ../foundation && terraform plan -input=false -detailed-exitcode
+
+      - name: Post-deploy verification — coverage & contract report
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        run: |
+          cd tools
+          python build_inventory.py --live
+          python profile_engine.py
+          python coverage_report.py --live
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: generated/coverage_report.*

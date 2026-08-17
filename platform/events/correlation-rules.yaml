@@ -1,0 +1,64 @@
+# Event Management correlation configuration (ADR-007).
+#
+# Datadog's Event Management correlation is configured from this file:
+# - The deterministic KEYS come from monitor tags emitted by the factory:
+#     correlation_key = <failure_domain>.<env>.<service>   (grouping identity)
+#     dedup_key       = <service>.<env>.<archetype>[.<suffix>] (event identity)
+# - AESC (Alert Event Stream Correlation) in-app rules mirror the `rules`
+#   below. The public API for custom correlation rules is not yet GA (see
+#   ADR-007 capability gap); until it is, tools/apply_correlation.py performs
+#   a documented, versioned sync and tools/correlate_events.py is the
+#   executable reference implementation used in CI to prove the behavior.
+version: 1
+
+window_seconds: 300          # correlation window
+dedup_window_seconds: 900    # identical dedup_key within this window = 1 event
+
+rules:
+  # Same failure domain + env + service → one case; root cause ranking below
+  # decides the parent; the rest become child events (suppressed from paging).
+  - id: group-by-correlation-key
+    group_by: [correlation_key]
+    max_group_size: 200
+
+  # Deployment context: change events for the same service/env join the group
+  # as context, never as pages.
+  - id: attach-change-context
+    match: { source: [deployment, audit, change] }
+    attach_to: correlation_key
+    as: context
+
+  # Cross-domain topology: infrastructure/platform causes suppress
+  # application symptoms on the same env+region (dependency awareness).
+  - id: platform-cause-suppresses-app-symptom
+    parent_domains: [infrastructure, cloud, data]
+    child_domains: [application]
+    join_on: [env, region]
+    behavior: suppress_children
+
+root_cause_ranking:
+  # Highest wins parent/incident ownership within a correlation group.
+  - archetype_class: availability      # hard failures first
+  - archetype_class: security_control
+  - archetype_class: burn_rate         # customer impact statement
+  - archetype_class: saturation
+  - archetype_class: errors
+  - archetype_class: latency
+  - archetype_class: telemetry_health  # symptoms last
+
+incident_creation:
+  sev1: { create_incident: true,  severity: SEV-1, notify: [exec_channel, team_channel] }
+  sev2: { create_incident: true,  severity: SEV-2, notify: [team_channel] }
+  sev3: { create_incident: false }
+
+recovery:
+  # A recovery event closes its dedup_key entry; a group closes when the
+  # parent recovers AND no child is still alerting.
+  close_group_on_parent_recovery: true
+  reopen_window_seconds: 600
+
+maintenance:
+  # Downtime schedules (modules/downtime) mute matching monitors natively;
+  # correlation additionally tags any event arriving inside a window with
+  # maintenance:true so it never opens a group.
+  suppress_during_downtime: true
