@@ -1,0 +1,10 @@
+service:
+  name: order-events-consumer
+  team: application-development
+  tier: tier1
+  service_archetype: event_consumer
+  description: Consumes order lifecycle events and updates downstream systems.
+  envs: [dev, qa, stage, prod]
+  dependencies: [orders-topic, orders-sql]
+  links:
+    - { name: Repository, type: repo, url: https://github.com/acme/order-events-consumer }

@@ -1,0 +1,30 @@
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform.tfvars
+terraform.tfvars
+!terraform.tfvars.example
+*.tfplan
+.terraform.lock.hcl
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+
+# Generated artifacts (rebuilt by tooling)
+generated/
+!generated/.gitkeep
+
+# Secrets — never commit credentials
+*.pem
+*.key
+.env

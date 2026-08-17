@@ -1,0 +1,184 @@
+# =============================================================================
+# LAYER 0 — GLOBAL STANDARDS
+# Root of the configuration hierarchy. Everything below inherits from here.
+#
+# Precedence (lowest → highest):
+#   global → domain → archetype → profile → environment → tier → team → exception
+# =============================================================================
+version: 2
+
+org:
+  name: acme
+  managed_by: terraform
+  repo: droderiquesit/enterprise-observability
+  docs_base_url: https://github.com/droderiquesit/enterprise-observability/blob/main/docs
+
+# -----------------------------------------------------------------------------
+# THE MINIMUM MANDATORY TAG SET
+#
+# Only FIVE tags are the responsibility of a service owner. Everything else is
+# derived and stamped by the platform. This is deliberate: every additional
+# mandatory tag is a new way for onboarding to fail.
+# -----------------------------------------------------------------------------
+owner_applied_tags:
+  - env                 # dev | qa | stage | prod
+  - service             # service catalog identity
+  - team                # handle from teams.yaml
+  - tier                # tier0..tier3  (business criticality)
+  - service_archetype   # what KIND of thing this is → selects the monitor packs
+
+# Derived by tools/profile_engine.py from the five above + policy. Never hand-set.
+platform_derived_tags:
+  - owner               # accountable team (defaults to `team`)
+  - domain              # technology domain
+  - monitoring_profile  # observe_only | baseline | standard | critical | regulated
+  - alert_band          # none | baseline | standard | critical  ← monitor selector
+  - support_model       # 24x7 | business_hours | none
+  - managed_by          # terraform
+
+# Stamped on every monitor by modules/monitor_factory. Never hand-set.
+monitor_governance_tags:
+  - priority            # P1..P4
+  - archetype           # archetype id
+  - impact_class        # customer_impact | degradation | risk | hygiene
+  - detection           # anomaly | forecast | outlier | rate_of_change | threshold | ...
+  - slo_id
+  - runbook
+  - automation_ref
+  - notification_profile
+  - failure_domain
+  - correlation_key
+  - dedup_key
+  - managed_source      # platform | self_service | composite
+  - monitor_id          # stable platform identifier
+
+# Contextual tags — carried when the source system supplies them, never required.
+contextual_tags:
+  - region
+  - subscription
+  - account
+  - cluster
+  - datacenter
+  - compliance_scope
+  - data_classification
+  - cost_center
+  - request_id
+
+# The mandatory tag set asserted on every MONITOR (coverage check C3).
+required_monitor_tags:
+  - env
+  - service
+  - team
+  - owner
+  - tier
+  - priority
+  - domain
+  - resource_type
+  - monitoring_profile
+  - alert_band
+  - managed_by
+  - slo_id
+
+tag_vocabulary:
+  env: [dev, qa, stage, prod]
+  tier: [tier0, tier1, tier2, tier3]
+  priority: [P1, P2, P3, P4]
+  monitoring_profile: [observe_only, baseline, standard, critical, regulated]
+  alert_band: [none, baseline, standard, critical]
+  impact_class: [customer_impact, degradation, risk, hygiene]
+  detection:
+    [anomaly, seasonal_anomaly, forecast, outlier, rate_of_change, threshold,
+     service_check, slo_burn, composite, log_pattern, event]
+  managed_by: [terraform]
+  domain:
+    [application, api, kubernetes, infrastructure, vmware, cloud, database,
+     data, messaging, network, security, saas, integration, platform]
+  service_archetype:
+    [api, web, worker, event_consumer, batch_job, scheduled_job,
+     integration_flow, saas_dependency, external_endpoint, platform_service,
+     datastore, infrastructure_resource]
+
+# -----------------------------------------------------------------------------
+# MONITOR CONTRACT DEFAULTS
+# Every alerting monitor inherits these unless a higher layer overrides them.
+# -----------------------------------------------------------------------------
+monitor_defaults:
+  evaluation_delay: 300          # seconds — cloud/integration metrics lag
+  new_group_delay: 300           # seconds — suppress evaluation on newly-seen groups
+  renotify_interval: 60          # minutes, alert state only
+  renotify_statuses: [alert]
+  renotify_occurrences: 3        # stop re-paging after 3 reminders; escalation takes over
+  notify_no_data: false          # telemetry-health archetypes override to true
+  no_data_timeframe: 30          # minutes, when notify_no_data
+  require_full_window: false
+  notify_audit: false
+  include_tags: true
+  timeout_h: 0
+  notify_by: []                  # set per-archetype to collapse group storms
+  recovery_notification: true    # message contract always includes a recovery section
+
+# -----------------------------------------------------------------------------
+# CARDINALITY & MONITOR-EXPLOSION GUARDRAILS  (hard failures — see ADR-004)
+# -----------------------------------------------------------------------------
+cardinality:
+  max_group_by_keys: 3
+  max_groups_per_monitor: 1000
+  max_instances_per_archetype: 12     # archetype × env × band ceiling
+  max_total_managed_monitors: 1500    # platform-wide budget; CI fails above it
+  # PAGING BUDGET — the number that actually protects humans. Monitor count is
+  # a cost problem; paging count is a burnout problem. Both are asserted at
+  # plan time so growth is a reviewed decision, not a drift.
+  max_paging_monitors: 90
+  max_p1_monitors: 70
+  forbidden_group_keys:
+    [host_ip, container_id, pod_name, request_id, trace_id, path, url,
+     user_id, session_id, instance_id, uuid]
+  # A query whose scope is only `*` or only `env:x` with no further selector
+  # matches the whole org — banned outside explicitly allowlisted archetypes.
+  forbidden_query_patterns: ["{*}", "{ * }"]
+
+# -----------------------------------------------------------------------------
+# NAMING
+# Names are stable and parseable. Tooling identity always comes from tags
+# (monitor_id, archetype, slo_id), never from display names.
+# -----------------------------------------------------------------------------
+naming:
+  monitor: "[{priority}][{env}][{domain}] {title} ({band})"
+  composite: "[{priority}][{env}][{domain}] {title} (composite)"
+  custom: "[{priority}][{env}][{domain}] {title} ({service})"
+  slo_burn: "[{priority}][{env}][{domain}] {slo_name} — error budget burn ({window})"
+  slo: "{slo_title}"
+  runbook: "Runbook: {runbook_title}"
+  notification_rule: "route-{notification_profile}-{team}-{priority}"
+
+# -----------------------------------------------------------------------------
+# MULTI-WINDOW BURN-RATE STANDARD  (Google SRE workbook, adapted per tier)
+#   factor = burn multiple of the sustainable rate
+#   Detection windows are long/short pairs: long confirms, short recovers fast.
+# -----------------------------------------------------------------------------
+# Only the FAST and MEDIUM windows page. A 24-hour burn is a real problem with
+# days of budget left — waking someone for it teaches them that pages are not
+# urgent, which is the expensive lesson.
+burn_rate_windows:
+  fast:   { long_window: "1h",  short_window: "5m",  factor: 14.4, impact_class: customer_impact, budget_consumed_pct: 2 }
+  medium: { long_window: "6h",  short_window: "30m", factor: 6.0,  impact_class: customer_impact, budget_consumed_pct: 5 }
+  slow:   { long_window: "24h", short_window: "2h",  factor: 3.0,  impact_class: risk,            budget_consumed_pct: 10 }
+  trend:  { long_window: "72h", short_window: "6h",  factor: 1.0,  impact_class: hygiene,         budget_consumed_pct: 10 }
+
+# -----------------------------------------------------------------------------
+# DETECTION POLICY — predictive-first.
+# A fixed threshold is only acceptable when the number itself carries
+# operational meaning. Anything else needs `rationale_fixed_threshold`.
+# -----------------------------------------------------------------------------
+detection_policy:
+  # Signals where an absolute boundary IS the operational contract.
+  absolute_threshold_allowed_signals:
+    [certificate_expiry, backup_age, freshness, quota, capacity_hard_limit,
+     replication_lag, availability, job_failure, schedule_miss, control_failure,
+     telemetry_absence, dlq_depth, restart_count, error_budget]
+  # Behavioral signals must use a predictive technique unless justified.
+  behavioral_signals: [latency, error_rate, throughput, saturation, cost, volume]
+  predictive_functions: ["anomalies(", "forecast(", "outliers(", "pct_change("]
+  min_anomaly_deviations: 2
+  default_anomaly_algorithm: agile      # agile | basic | robust | seasonal
+  seasonal_algorithm: robust

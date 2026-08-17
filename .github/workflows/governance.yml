@@ -1,0 +1,101 @@
+name: governance
+# =============================================================================
+# THE CONTINUOUS GOVERNANCE LOOP.
+#
+# Coverage that is only measured at deploy time decays silently. These runs are
+# what keep the claims true between deployments: a red run here is a governance
+# incident for the observability-platform team, with an SLA, not a warning.
+# =============================================================================
+on:
+  schedule:
+    - cron: "0 6 * * *"     # drift, nightly
+    - cron: "0 7 * * 1-5"   # coverage & quality, weekday mornings
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  drift:
+    name: drift detection
+    runs-on: ubuntu-latest
+    environment: datadog-plan
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: "1.9.8" }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r tools/requirements.txt
+      - run: |
+          cp stacks/backend.azurerm.tf.example stacks/foundation/backend.tf
+          cp stacks/backend.azurerm.tf.example stacks/coverage/backend.tf
+
+      - name: Terraform drift — click-ops edits and deletions
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        run: |
+          set +e; rc=0
+          for d in stacks/foundation stacks/coverage; do
+            (cd $d && terraform init -input=false -backend-config=../backend.prod.hcl >/dev/null \
+              && terraform plan -input=false -detailed-exitcode)
+            [ $? -eq 2 ] && rc=2
+          done
+          exit $rc
+
+      - name: Runbook drift — published notebooks vs the repository
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        run: cd tools && python publish_runbooks.py --check
+
+  coverage:
+    name: coverage & quality
+    runs-on: ubuntu-latest
+    environment: datadog-plan
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r tools/requirements.txt
+
+      - name: Rebuild inventory → assign profiles → measure coverage
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        run: |
+          cd tools
+          python build_inventory.py --live
+          python profile_engine.py
+          python coverage_report.py --live
+
+      - name: Monitor quality scorecard
+        if: always()
+        run: cd tools && python monitor_scorecard.py --min-fleet-score 85
+
+      - name: Publish the report to the run summary
+        if: always()
+        run: cat generated/coverage_report.md >> $GITHUB_STEP_SUMMARY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: governance-${{ github.run_id }}
+          path: generated/
+
+      - name: Open a governance issue when the report is red
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('generated/coverage_report.md', 'utf8');
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Governance: coverage report red (${new Date().toISOString().slice(0,10)})`,
+              body: body.slice(0, 60000),
+              labels: ['governance', 'observability-platform'],
+            });

@@ -1,0 +1,252 @@
+# =============================================================================
+# MONITOR ARCHETYPE CATALOG — INTEGRATION, BATCH & SCHEDULED WORK
+#
+# The defining failure mode of this domain is ABSENCE: the job that never
+# started, the file that never arrived, the flow that silently stopped. Metric
+# thresholds cannot see absence, so most of these archetypes are explicit
+# "did the expected thing happen in the expected window?" checks.
+# =============================================================================
+version: 2
+domain: integration
+
+archetypes:
+
+  batch-job-failure:
+    title: Batch Job Failed
+    signal: job_failure
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: batch_job
+    selector: ""
+    query: 'sum(last_2h):sum:acme.batch.runs{__SCOPE__,status:failed} by {service,job_name}.as_count() >= 1'
+    thresholds: { critical: 1 }
+    group_by: [service, job_name]
+    evaluation_window: last_2h
+    envs: [prod, stage, qa]
+    bands: [critical, standard, baseline]
+    slo_id: slo-batch-completion
+    runbook: batch-job-failure
+    workflow: remediate-rerun-job
+    failure_domain: batch-platform
+    mandatory: true
+    rationale_fixed_threshold: "A failed run is a discrete outcome."
+
+  batch-duration-anomaly:
+    title: Batch Job Duration Anomaly
+    signal: latency
+    impact_class: risk
+    detection: seasonal_anomaly
+    monitor_type: query alert
+    resource_type: batch_job
+    selector: ""
+    query: "avg(last_4h):anomalies(avg:acme.batch.duration_seconds{__SCOPE__} by {service,job_name}, 'robust', 3, direction='above', seasonality='daily') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [service, job_name]
+    evaluation_window: last_4h
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-batch-completion
+    runbook: batch-duration-anomaly
+    workflow: diag-batch-job
+    failure_domain: batch-platform
+    mandatory: true
+    notes: >
+      The earliest reliable warning that tonight's batch will miss its window
+      — hours before the missed-completion monitor would fire.
+
+  batch-output-freshness:
+    title: Batch Output Not Produced In Window
+    signal: freshness
+    impact_class: customer_impact
+    detection: threshold
+    monitor_type: query alert
+    resource_type: batch_job
+    selector: ""
+    query: 'max(last_1h):max:acme.batch.hours_since_success{__SCOPE__} by {service,job_name} > 26'
+    thresholds: { critical: 26, warning: 24 }
+    group_by: [service, job_name]
+    evaluation_window: last_1h
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-batch-completion
+    runbook: batch-output-freshness
+    workflow: remediate-rerun-job
+    failure_domain: batch-platform
+    mandatory: true
+    rationale_fixed_threshold: >
+      Daily batches have a contractual delivery time; 26 hours means yesterday's
+      output never arrived. The number is the SLA.
+
+  batch-backlog-growth:
+    title: Batch Backlog Growth
+    signal: saturation
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: batch_job
+    selector: ""
+    query: "max(next_1d):forecast(avg:acme.batch.pending_items{__SCOPE__} by {service,job_name}, 'linear', 1, interval='30m', history='1w') > 100000"
+    thresholds: { critical: 100000, warning: 50000 }
+    group_by: [service, job_name]
+    evaluation_window: next_1d
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-batch-completion
+    runbook: batch-backlog-growth
+    workflow: auto-capacity-ticket
+    failure_domain: batch-platform
+    mandatory: false
+
+  schedule-missed-run:
+    title: Scheduled Job Did Not Run
+    signal: schedule_miss
+    impact_class: customer_impact
+    detection: threshold
+    monitor_type: query alert
+    resource_type: scheduled_job
+    selector: ""
+    query: 'sum(last_2h):sum:acme.scheduler.runs_started{__SCOPE__} by {service,job_name}.as_count() < 1'
+    thresholds: { critical: 1 }
+    group_by: [service, job_name]
+    evaluation_window: last_2h
+    envs: [prod, stage, qa]
+    bands: [critical, standard, baseline]
+    slo_id: slo-integration-delivery
+    runbook: schedule-missed-run
+    workflow: remediate-rerun-job
+    failure_domain: scheduler
+    mandatory: true
+    notify_no_data: true
+    no_data_timeframe: 120
+    rationale_fixed_threshold: >
+      The single most under-monitored failure in every enterprise: the job that
+      simply never fired. Nothing errors, nothing alerts, nothing runs.
+
+  schedule-job-failure:
+    title: Scheduled Job Failed
+    signal: job_failure
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: scheduled_job
+    selector: ""
+    query: 'sum(last_2h):sum:acme.scheduler.runs{__SCOPE__,status:failed} by {service,job_name}.as_count() >= 1'
+    thresholds: { critical: 1 }
+    group_by: [service, job_name]
+    evaluation_window: last_2h
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-integration-delivery
+    runbook: schedule-job-failure
+    workflow: remediate-rerun-job
+    failure_domain: scheduler
+    mandatory: true
+    rationale_fixed_threshold: "A failed run is discrete."
+
+  schedule-overrun:
+    title: Scheduled Job Overran Its Window
+    signal: latency
+    impact_class: risk
+    detection: threshold
+    monitor_type: query alert
+    resource_type: scheduled_job
+    selector: ""
+    query: 'max(last_1h):max:acme.scheduler.runtime_vs_window_pct{__SCOPE__} by {service,job_name} > 100'
+    thresholds: { critical: 100, warning: 80 }
+    group_by: [service, job_name]
+    evaluation_window: last_1h
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-integration-delivery
+    runbook: schedule-overrun
+    workflow: diag-batch-job
+    failure_domain: scheduler
+    mandatory: false
+    rationale_fixed_threshold: >
+      The declared execution window IS the threshold; overrunning it means the
+      next scheduled run will collide with this one.
+
+  integration-flow-failure:
+    title: Integration Flow Failure Rate
+    signal: error_rate
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: integration_flow
+    selector: ""
+    query: "avg(last_30m):anomalies(sum:acme.integration.flow_errors{__SCOPE__} by {service,flow_name}.as_rate(), 'agile', 3) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [service, flow_name]
+    evaluation_window: last_30m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-integration-delivery
+    runbook: integration-flow-failure
+    workflow: diag-dependency
+    failure_domain: integration-platform
+    mandatory: true
+
+  integration-transformation-errors:
+    title: Message Transformation Errors
+    signal: error_rate
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: integration_flow
+    selector: ""
+    query: 'sum(last_30m):sum:acme.integration.transformation_errors{__SCOPE__} by {service,flow_name}.as_count() > 10'
+    thresholds: { critical: 10, warning: 1 }
+    group_by: [service, flow_name]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-integration-delivery
+    runbook: integration-transformation-errors
+    workflow: diag-dependency
+    failure_domain: integration-platform
+    mandatory: false
+    rationale_fixed_threshold: >
+      Each transformation error is a business document that did not move;
+      ten is the manual reprocessing capacity of the operations team.
+
+  integration-delivery-latency:
+    title: Integration Delivery Latency
+    signal: latency
+    impact_class: degradation
+    detection: rate_of_change
+    monitor_type: query alert
+    resource_type: integration_flow
+    selector: ""
+    query: 'pct_change(avg(last_30m),last_4h):avg:acme.integration.end_to_end_seconds{__SCOPE__} by {service,flow_name} > 100'
+    thresholds: { critical: 100, warning: 50 }
+    group_by: [service, flow_name]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-integration-delivery
+    runbook: integration-delivery-latency
+    workflow: diag-dependency
+    failure_domain: integration-platform
+    mandatory: false
+
+  partner-file-delivery-missed:
+    title: Partner File Delivery Missed
+    signal: freshness
+    impact_class: customer_impact
+    detection: threshold
+    monitor_type: query alert
+    resource_type: integration_flow
+    selector: ""
+    query: 'max(last_1h):max:acme.integration.hours_since_partner_file{__SCOPE__} by {partner,feed} > 26'
+    thresholds: { critical: 26, warning: 24 }
+    group_by: [partner, feed]
+    evaluation_window: last_1h
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-integration-delivery
+    runbook: partner-file-delivery-missed
+    workflow: diag-dependency
+    failure_domain: partner-integration
+    mandatory: true
+    rationale_fixed_threshold: "The partner contract defines the delivery window."

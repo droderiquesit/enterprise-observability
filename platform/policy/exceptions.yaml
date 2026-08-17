@@ -1,0 +1,110 @@
+# =============================================================================
+# EXCEPTION MODEL
+#
+# The ONLY sanctioned way to deviate from platform defaults. Every entry needs
+# REASON, OWNER, APPROVER and EXPIRY — no exceptions to the exception rule.
+#
+#   control: monitoring_profile | priority | threshold | paging | routing | slo_waiver
+#   scope:   any combination of service / env / archetype / team
+#
+# CI fails the build on an expired entry (tools/validate_policy.py), the
+# coverage report lists every active and expired exception (check C12), and the
+# platform archetype `exception-expired` alerts on them at runtime. An
+# exception cannot be quietly forgotten.
+#
+# Maximum duration by control type is enforced in `policy` at the bottom.
+# =============================================================================
+version: 2
+
+exceptions:
+
+  - id: EXC-2026-001
+    scope: { service: efront_bts_int, env: prod }
+    control: monitoring_profile
+    value: observe_only
+    reason: >
+      Vendor-managed integration test instance; the vendor holds the
+      operational SLA and our on-call cannot act on any alert it produces.
+      Telemetry is retained for audit and appears on dashboards.
+    owner: application-development
+    approved_by: sre
+    approved_on: 2026-08-15
+    expires: 2027-02-11
+    review_note: "Retire when the vendor migration completes in Q1."
+
+  - id: EXC-2026-002
+    scope: { archetype: azure-cost-anomaly, env: prod }
+    control: priority
+    value: P4
+    reason: >
+      FinOps requested a 90-day observation window while thresholds are
+      calibrated against the new subscription layout; premature tickets were
+      being closed as noise, which trains people to ignore the signal.
+    owner: cloud-engineering
+    approved_by: observability-platform
+    approved_on: 2026-08-10
+    expires: 2026-11-08
+
+  - id: EXC-2026-003
+    scope: { archetype: host-clock-drift, env: prod }
+    control: priority
+    value: P4
+    reason: >
+      Two legacy on-prem datacentres use an upstream NTP source with known
+      15–25s excursions during WAN saturation, so this fires daily against
+      hosts nobody can fix until the NTP appliance refresh (INFRA-4471) lands.
+      Demoted to informational rather than muted: the signal stays visible on
+      dashboards and in correlation, it just stops creating work.
+      NOTE: raising the 15s threshold is deliberately NOT possible as an
+      exception — see `policy.threshold_changes` below.
+    owner: infrastructure-engineering
+    approved_by: observability-platform
+    approved_on: 2026-08-16
+    expires: 2026-11-14
+
+  - id: EXC-2026-004
+    scope: { service: legacy-statement-batch, env: prod }
+    control: slo_waiver
+    value: true
+    reason: >
+      Decommissioning in Q4 2026; the replacement service carries the SLO.
+      Monitors remain active for operational safety, but the service is
+      excluded from SLO coverage accounting so it does not distort the
+      platform error budget.
+    owner: application-development
+    approved_by: sre
+    approved_on: 2026-08-17
+    expires: 2026-12-31
+
+# -----------------------------------------------------------------------------
+# Exception policy — maximum lifetimes and required approvers.
+# Short by design: an exception that needs to be permanent is not an exception,
+# it is a missing policy, and should be proposed as one.
+# -----------------------------------------------------------------------------
+policy:
+  # `threshold` is deliberately NOT an exception control.
+  #
+  # Datadog requires a monitor's thresholds to match the numeric literal inside
+  # its query, so changing a threshold means changing the query — which is a
+  # catalog change with a diff a reviewer can read, not a metadata override
+  # applied invisibly at plan time. A team that needs a different number either
+  # proposes an archetype change (everyone benefits) or writes a self-service
+  # monitor with `archetype: custom` and its own explicit query (only they
+  # carry it). This was discovered by validating the estate against
+  # /api/v1/monitor/validate, which rejected every silently-rescaled threshold.
+  threshold_changes: not_an_exception_control
+  max_duration_days:
+    monitoring_profile: 180
+    priority: 90
+    paging: 30
+    routing: 90
+    slo_waiver: 180
+  required_approver:
+    monitoring_profile: sre
+    priority: observability-platform
+    paging: sre
+    routing: observability-platform
+    slo_waiver: sre
+  compliance_scoped_requires: security      # regulated resources need security sign-off
+  renewal_requires_new_justification: true
+  expired_exception_behavior: fail_ci       # not "warn" — fail

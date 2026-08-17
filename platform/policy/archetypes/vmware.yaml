@@ -1,0 +1,193 @@
+# =============================================================================
+# MONITOR ARCHETYPE CATALOG — VMWARE / ON-PREMISES VIRTUALIZATION
+#
+# Grouping is cluster → host → datastore. VM-level alerting is deliberately
+# absent: a VM is covered by the host-core pack through the guest agent. What
+# only vCenter can tell us is what we monitor here — the virtualization layer
+# beneath the guest.
+# =============================================================================
+version: 2
+domain: vmware
+
+archetypes:
+
+  vmware-host-disconnected:
+    title: ESXi Host Disconnected From vCenter
+    signal: availability
+    impact_class: customer_impact
+    detection: threshold
+    monitor_type: query alert
+    resource_type: esxi_host
+    selector: ""
+    query: 'max(last_10m):sum:vsphere.host.status{__SCOPE__,status:disconnected} by {vsphere_cluster,vsphere_host} >= 1'
+    thresholds: { critical: 1 }
+    group_by: [vsphere_cluster, vsphere_host]
+    evaluation_window: last_10m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-vmware-cluster-availability
+    runbook: vmware-host-disconnected
+    workflow: diag-vmware
+    failure_domain: virtualization
+    mandatory: true
+    notify_by: [vsphere_cluster]
+    rationale_fixed_threshold: "Connection state is discrete."
+
+  vmware-cluster-ha-degraded:
+    title: vSphere Cluster HA Capacity Degraded
+    signal: availability
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: vsphere_cluster
+    selector: ""
+    query: 'min(last_15m):avg:vsphere.cluster.failover_capacity{__SCOPE__} by {vsphere_cluster} < 1'
+    thresholds: { critical: 1, warning: 2 }
+    group_by: [vsphere_cluster]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-vmware-cluster-availability
+    runbook: vmware-cluster-ha-degraded
+    workflow: diag-vmware
+    failure_domain: vmware-cluster
+    mandatory: true
+    rationale_fixed_threshold: >
+      Failover capacity below one host means the cluster can no longer survive
+      a host loss — an HA design contract, not a baseline.
+
+  vmware-datastore-capacity-forecast:
+    title: Datastore Capacity Exhaustion Forecast
+    signal: capacity
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: vsphere_datastore
+    selector: ""
+    query: "max(next_1w):forecast(avg:vsphere.datastore.disk.used{__SCOPE__} by {vsphere_datastore} / avg:vsphere.datastore.disk.capacity{__SCOPE__} by {vsphere_datastore}, 'linear', 1, interval='60m', history='2w') > 0.9"
+    thresholds: { critical: 0.9, warning: 0.85 }
+    group_by: [vsphere_datastore]
+    evaluation_window: next_1w
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-vmware-cluster-availability
+    runbook: vmware-datastore-capacity-forecast
+    workflow: auto-capacity-ticket
+    failure_domain: datastore
+    mandatory: true
+    notes: >
+      A full datastore stops every VM on it simultaneously. One week of lead
+      time reflects the storage team's provisioning cycle.
+
+  vmware-datastore-latency:
+    title: Datastore Latency Degradation
+    signal: latency
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: vsphere_datastore
+    selector: ""
+    query: "avg(last_30m):anomalies(avg:vsphere.datastore.totalLatency{__SCOPE__} by {vsphere_datastore}, 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [vsphere_datastore]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-vmware-cluster-availability
+    runbook: vmware-datastore-latency
+    workflow: diag-vmware
+    failure_domain: datastore
+    mandatory: true
+
+  vmware-cpu-ready-contention:
+    title: VM CPU Ready Contention
+    signal: saturation
+    impact_class: risk
+    detection: threshold
+    monitor_type: query alert
+    resource_type: esxi_host
+    selector: ""
+    query: 'avg(last_30m):avg:vsphere.cpu.ready{__SCOPE__} by {vsphere_cluster,vsphere_host} > 10'
+    thresholds: { critical: 10, warning: 5 }
+    group_by: [vsphere_cluster, vsphere_host]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-vmware-cluster-availability
+    runbook: vmware-cpu-ready-contention
+    workflow: diag-vmware
+    failure_domain: virtualization
+    mandatory: false
+    notify_by: [vsphere_cluster]
+    rationale_fixed_threshold: >
+      CPU Ready above 10% is VMware's own published contention threshold — a
+      vendor-defined operational boundary.
+
+  vmware-memory-ballooning:
+    title: Memory Ballooning / Swapping On Host
+    signal: saturation
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: esxi_host
+    selector: ""
+    query: 'avg(last_30m):avg:vsphere.mem.swapinRate{__SCOPE__} by {vsphere_cluster,vsphere_host} > 0'
+    thresholds: { critical: 0 }
+    group_by: [vsphere_cluster, vsphere_host]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-vmware-cluster-availability
+    runbook: vmware-memory-ballooning
+    workflow: diag-vmware
+    failure_domain: virtualization
+    mandatory: false
+    notify_by: [vsphere_cluster]
+    rationale_fixed_threshold: >
+      Any host-level swap-in means the hypervisor is overcommitted past what
+      the guests can absorb; the boundary is zero by design.
+
+  vmware-vm-powered-off-unexpectedly:
+    title: VM Powered Off Unexpectedly
+    signal: availability
+    impact_class: degradation
+    detection: event
+    monitor_type: event-v2 alert
+    resource_type: vsphere_vm
+    selector: ""
+    query: 'events("source:vsphere __ESCOPE__ \"powered off\"").rollup("count").by("vsphere_cluster").last("15m") >= 1'
+    thresholds: { critical: 1 }
+    group_by: [vsphere_cluster]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-vmware-cluster-availability
+    runbook: vmware-vm-powered-off-unexpectedly
+    workflow: diag-vmware
+    failure_domain: virtualization
+    mandatory: false
+    rationale_fixed_threshold: "An unexpected power state change is a discrete event."
+
+  vmware-snapshot-age:
+    title: VM Snapshot Older Than Policy
+    signal: capacity
+    impact_class: hygiene
+    detection: threshold
+    monitor_type: query alert
+    resource_type: vsphere_vm
+    selector: ""
+    query: 'max(last_6h):max:acme.vmware.snapshot_age_days{__SCOPE__} by {vsphere_cluster,vm_name} > 7'
+    thresholds: { critical: 7, warning: 3 }
+    group_by: [vsphere_cluster, vm_name]
+    evaluation_window: last_6h
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-vmware-cluster-availability
+    runbook: vmware-snapshot-age
+    workflow: auto-capacity-ticket
+    failure_domain: datastore
+    mandatory: false
+    notify_by: [vsphere_cluster]
+    rationale_fixed_threshold: >
+      Seven days is the operational policy limit; aged snapshots consume
+      datastore capacity and slow consolidation unpredictably.

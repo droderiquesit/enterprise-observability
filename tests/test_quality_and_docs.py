@@ -1,0 +1,111 @@
+"""Scorecard, generated documentation, and runbook completeness.
+
+The generated artefacts are tested for FRESHNESS, not just correctness. A
+coverage matrix that no longer matches the catalog is worse than no matrix,
+because people trust it.
+"""
+import generate_matrix
+import generate_runbooks
+import monitor_scorecard as ms
+import obs_common as oc
+import publish_runbooks as pr
+
+POLICY = oc.load_policy()
+
+
+# --- scorecard --------------------------------------------------------------
+
+def test_fleet_scores_at_least_an_a():
+    report = ms.build(POLICY)
+    assert report["summary"]["fleet_grade"] in ("A", "B")
+    assert report["summary"]["failing"] == 0
+
+
+def test_every_team_has_a_score():
+    report = ms.build(POLICY)
+    owning = {POLICY["domains"][d].get("routing_override_team",
+                                       POLICY["domains"][d]["owner_team"])
+              for d in POLICY["domains"]}
+    for team in owning:
+        assert team in report["by_team"], f"{team} owns monitors but has no score"
+
+
+def test_scorecard_punishes_a_monitor_that_pages_from_staging():
+    inst = next(i for i in oc.expand_instances(POLICY) if i["env"] == "stage")
+    inst = dict(inst, pages=True)
+    row = ms.score_instance(POLICY, inst, POLICY["archetypes"][inst["archetype"]])
+    assert row["dimensions"]["paging"] == 0
+    assert any("pages in stage" in f for f in row["findings"])
+
+
+def test_scorecard_punishes_an_unresolvable_slo():
+    inst = next(iter(oc.expand_instances(POLICY)))
+    arch = dict(POLICY["archetypes"][inst["archetype"]])
+    row = ms.score_instance(POLICY, dict(inst, slo_id="slo-does-not-exist"), arch)
+    assert row["dimensions"]["slo_linkage"] == 0
+
+
+def test_self_service_monitors_are_scored_too():
+    report = ms.build(POLICY)
+    ids = {r["monitor_id"] for r in report["monitors"]}
+    assert any(i.startswith("custom.") for i in ids)
+
+
+# --- generated documentation ------------------------------------------------
+
+def test_coverage_matrix_is_not_stale():
+    """CI runs exactly this: the committed matrix must match the catalog."""
+    rendered = generate_matrix.render(POLICY, generate_matrix.build(POLICY))
+    assert generate_matrix.MATRIX_PATH.read_text() == rendered, (
+        "docs/monitor-coverage-matrix.md is stale — run tools/generate_matrix.py")
+
+
+def test_matrix_covers_every_domain():
+    rows = generate_matrix.build(POLICY)
+    assert {r["domain"] for r in rows} == set(POLICY["domains"])
+
+
+def test_matrix_row_count_matches_the_planned_estate():
+    assert len(generate_matrix.build(POLICY)) == len(oc.expand_instances(POLICY))
+
+
+# --- runbooks ---------------------------------------------------------------
+
+def test_every_archetype_has_a_runbook_file():
+    for aid in POLICY["archetypes"]:
+        assert (generate_runbooks.RUNBOOK_DIR / f"{aid}.md").exists(), aid
+
+
+def test_every_runbook_has_all_mandatory_sections():
+    for path in sorted(generate_runbooks.RUNBOOK_DIR.glob("*.md")):
+        assert pr.validate_template(path.read_text()) == [], path.name
+
+
+def test_runbook_registry_and_files_agree():
+    files = {p.stem for p in generate_runbooks.RUNBOOK_DIR.glob("*.md")}
+    registry = set(POLICY["runbooks"])
+    assert files == registry, f"only in files: {files - registry}; only in registry: {registry - files}"
+
+
+def test_runbook_drafts_are_not_stale():
+    for aid, a in POLICY["archetypes"].items():
+        path = generate_runbooks.RUNBOOK_DIR / f"{aid}.md"
+        generated = generate_runbooks.render(POLICY, aid, a)
+        assert path.read_text() == generate_runbooks.merge(path.read_text(), generated), (
+            f"{aid}.md generated block is stale — run tools/generate_runbooks.py")
+
+
+def test_runbook_render_is_deterministic_and_hashed():
+    src = (generate_runbooks.RUNBOOK_DIR / "slo-error-budget-burn.md").read_text()
+    assert pr.render_cells(src) == pr.render_cells(src)
+    assert "content_hash:" in pr.render_cells(src)[-1]["attributes"]["definition"]["text"]
+
+
+def test_editing_a_runbook_changes_its_hash():
+    src = (generate_runbooks.RUNBOOK_DIR / "slo-error-budget-burn.md").read_text()
+    assert pr.content_hash(src) != pr.content_hash(src + "\nan edit\n")
+
+
+def test_incomplete_runbook_is_rejected():
+    assert len(pr.validate_template("# Runbook: X\n## Meaning\nonly one section")) == \
+        len(pr.REQUIRED_SECTIONS) - 1

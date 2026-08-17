@@ -1,0 +1,50 @@
+# A genuinely unique operational requirement: the settlement partner's
+# contractual file must land by 02:00, and the platform default of 26 hours is
+# far too loose to protect a finance close.
+#
+# This uses `archetype: custom` rather than overriding the catalog archetype's
+# threshold, because Datadog requires a monitor's thresholds to MATCH the number
+# inside its query — so "same query, different number" is not a thing that can
+# exist. The validator rejects the shortcut and points here.
+monitor:
+  name: settlement-partner-file-sla
+  archetype: custom
+  service: nightly-settlement
+  team: payments
+  env:
+    - prod
+
+  domain: integration
+  monitor_type: query alert
+  detection: threshold
+  impact_class: customer_impact
+  resource_type: integration_flow
+
+  query: >-
+    max(last_1h):max:acme.integration.hours_since_partner_file{env:prod,service:nightly-settlement}
+    by {partner,feed} > 5
+
+  thresholds:
+    critical: 5
+    warning: 3
+
+  group_by: [partner, feed]
+
+  slo: slo-integration-delivery
+  priority: P1
+
+  notification_profile: production_critical
+  runbook: partner-file-delivery-missed
+  workflow: diag-dependency
+
+  summary: Settlement partner file has not arrived within the contractual window.
+  impact: >
+    Finance close and customer statement generation both block on this file.
+    Missing the window means the close slips a day and statements are late to
+    every customer in the batch.
+  justification: >
+    Fixed threshold approved: the 02:00 delivery time and the 5-hour breach
+    point are contractual terms in the settlement partner agreement, not a
+    statistical property of the feed. The platform archetype uses 26 hours,
+    which is correct as a generic default and useless as a finance-close
+    guardrail.

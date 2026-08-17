@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://acme.example/schemas/monitor.schema.json",
+  "title": "Custom monitor request",
+  "description": "One YAML file is the entire developer interface for a custom monitor. Every field the platform can derive is optional; the required set is deliberately tiny.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["monitor"],
+  "properties": {
+    "monitor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "archetype", "service", "team", "env", "slo", "runbook", "workflow"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{4,60}$",
+          "description": "Stable kebab-case identifier. Becomes monitor_id and request_id tags."
+        },
+        "archetype": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]+$",
+          "description": "An archetype id from platform/policy/archetypes/, or 'custom'."
+        },
+        "service": { "type": "string", "minLength": 2 },
+        "team": { "type": "string", "minLength": 2 },
+        "env": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["dev", "qa", "stage", "prod"] }
+        },
+        "slo": { "type": "string", "pattern": "^slo-[a-z0-9-]+$" },
+        "priority": { "enum": ["P1", "P2", "P3", "P4"] },
+        "tier": { "enum": ["tier0", "tier1", "tier2", "tier3"] },
+        "domain": {
+          "enum": ["application", "api", "kubernetes", "infrastructure", "vmware", "cloud",
+                   "database", "data", "messaging", "network", "security", "saas",
+                   "integration", "platform"]
+        },
+        "resource_type": { "type": "string" },
+        "monitor_type": {
+          "enum": ["query alert", "metric alert", "service check", "event-v2 alert", "log alert"]
+        },
+        "detection": {
+          "enum": ["anomaly", "seasonal_anomaly", "forecast", "outlier", "rate_of_change",
+                   "threshold", "service_check", "log_pattern", "event"]
+        },
+        "impact_class": { "enum": ["customer_impact", "degradation", "risk", "hygiene"] },
+        "query": { "type": "string", "minLength": 10 },
+        "thresholds": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "critical": { "oneOf": [{ "type": "number" }, { "const": "auto" }] },
+            "warning": { "oneOf": [{ "type": "number" }, { "const": "auto" }] },
+            "critical_recovery": { "type": "number" },
+            "warning_recovery": { "type": "number" }
+          }
+        },
+        "predictive": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "anomaly": { "type": "boolean" },
+            "seasonal": { "type": "boolean" },
+            "forecast": { "type": "boolean" },
+            "outlier": { "type": "boolean" }
+          }
+        },
+        "group_by": {
+          "type": "array",
+          "maxItems": 3,
+          "items": { "type": "string" },
+          "description": "Maximum three keys; identity keys are rejected by policy lint."
+        },
+        "notification_profile": {
+          "enum": ["production_critical", "production_standard", "production_baseline",
+                   "nonprod_standard", "security_operational", "release_gate"]
+        },
+        "runbook": { "type": "string", "minLength": 3 },
+        "workflow": { "type": "string", "minLength": 3 },
+        "summary": { "type": "string", "maxLength": 300 },
+        "impact": { "type": "string", "maxLength": 300 },
+        "justification": { "type": "string", "minLength": 20 },
+        "notify_no_data": { "type": "boolean" },
+        "evaluation_window": { "type": "string" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "archetype": { "const": "custom" } }, "required": ["archetype"] },
+          "then": {
+            "required": ["query", "monitor_type", "detection", "impact_class", "domain", "justification"],
+            "description": "archetype:custom must supply everything the catalog would have provided, plus a justification."
+          }
+        }
+      ]
+    }
+  }
+}

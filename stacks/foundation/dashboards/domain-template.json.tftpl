@@ -1,0 +1,64 @@
+{
+  "title": "Domain — ${display_name}",
+  "description": "Generated drill-down for the ${domain} domain (owner: ${owner_team}). Per-service detail lives in the Datadog Service Catalog, APM and Infrastructure views by design — see ADR-010.",
+  "layout_type": "ordered",
+  "reflow_type": "auto",
+  "template_variables": [
+    { "name": "env", "prefix": "env", "available_values": ["prod", "stage", "qa"], "default": "prod" },
+    { "name": "band", "prefix": "alert_band", "available_values": ["critical", "standard", "baseline"], "default": "*" },
+    { "name": "team", "prefix": "team", "default": "*" }
+  ],
+  "widgets": [
+    {
+      "definition": {
+        "type": "note",
+        "content": "**${display_name}** — owned by ${owner_team}. Alerts on this board are grouped by priority: P1/P2 page, P3 creates work, P4 is context.",
+        "background_color": "blue",
+        "font_size": "14",
+        "text_align": "left",
+        "show_tick": false
+      }
+    },
+    {
+      "definition": {
+        "title": "Open alerts by priority",
+        "type": "manage_status",
+        "summary_type": "monitors",
+        "display_format": "countsAndList",
+        "color_preference": "text",
+        "hide_zero_counts": true,
+        "query": "tag:(domain:${domain} AND managed_by:terraform AND env:$env.value)",
+        "sort": "status,asc",
+        "count": 50,
+        "start": 0
+      }
+    },
+    {
+      "definition": {
+        "title": "Error budget status — ${display_name}",
+        "type": "slo_list",
+        "query": { "query_string": "domain:${domain}", "limit": 25, "sort": [{ "column": "status.sli", "order": "asc" }] }
+      }
+    },
+    {
+      "definition": {
+        "title": "Alert volume by archetype (7d)",
+        "type": "toplist",
+        "requests": [{
+          "q": "top(sum:datadog.monitor.alert_count{domain:${domain},env:$env.value} by {archetype}.as_count(), 15, 'sum', 'desc')",
+          "style": { "palette": "dog_classic" }
+        }]
+      }
+    },
+    {
+      "definition": {
+        "title": "Paging vs non-paging alerts (7d)",
+        "type": "timeseries",
+        "requests": [
+          { "q": "sum:datadog.monitor.alert_count{domain:${domain},pages:true}.as_count()", "display_type": "bars", "style": { "palette": "warm" } },
+          { "q": "sum:datadog.monitor.alert_count{domain:${domain},pages:false}.as_count()", "display_type": "bars", "style": { "palette": "cool" } }
+        ]
+      }
+    }
+  ]
+}

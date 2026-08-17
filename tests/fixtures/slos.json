@@ -1,0 +1,439 @@
+[
+ {
+  "id": "slo477",
+  "name": "API availability",
+  "tags": [
+   "domain:api",
+   "env:prod",
+   "managed_by:terraform",
+   "monitor_type:slo",
+   "owner:application-development",
+   "platform:api",
+   "scope:domain",
+   "service:api-services",
+   "slo_id:slo-api-availability",
+   "team:application-development"
+  ],
+  "overall_status": [
+   {}
+  ]
+ },
+ {
+  "id": "slo478",
+  "name": "API latency objective",
+  "tags": [
+   "domain:api",
+   "env:prod",
+   "managed_by:terraform",
+   "monitor_type:slo",
+   "owner:application-development",
+   "platform:api",
+   "scope:domain",
+   "service:api-services",
+   "slo_id:slo-api-latency",
+   "team:application-development"
+  ],
+  "overall_status": [
+   {}
+  ]
+ },
+ {
+  "id": "slo479",
+  "name": "Application availability",
+  "tags": [
+   "domain:application",
+   "env:prod",
+   "managed_by:terraform",
+   "monitor_type:slo",
+   "owner:sre",
+   "platform:application",
+   "scope:domain",
+   "service:application-platform",
+   "slo_id:slo-app-availability",
+   "team:sre"
+  ],
+  "overall_status": [
+   {}
+  ]
+ },
+ {
+  "id": "slo480",
+  "name": "Application latency objective",
+  "tags": [
+   "domain:application",
+   "env:prod",
+   "managed_by:terraform",
+   "monitor_type:slo",
+   "owner:sre",
+   "platform:application",
+   "scope:domain",
+   "service:application-platform",
+   "slo_id:slo-app-latency",
+   "team:sre"
+  ],
+  "overall_status": [
+   {}
+  ]
+ },
+ {
+  "id": "slo481",
+  "name": "Batch completion reliability",
+  "tags": [
+   "domain:integration",
+   "env:prod",
+   "managed_by:terraform",
+   "monitor_type:slo",
+   "owner:application-development",
+   "platform:integration",
+   "scope:domain",
+   "service:batch-platform",
+   "slo_id:slo-batch-completion",
+   "team:application-development"
+  ],
+  "overall_status": [
+   {}
+  ]
+ },
+ {
+  "id": "slo482",
+  "name": "Azure platform reliability",
+  "tags": [
+   "domain:cloud",
+   "env:prod",
+   "managed_by:terraform",
+   "monitor_type:slo",
+   "owner:cloud-engineering",
+   "platform:azure",
+   "scope:domain",
+   "service:azure-landing-zone",
+   "slo_id:slo-cloud-platform-availability",
+   "team:cloud-engineering"
+  ],
+  "overall_status": [
+   {}
+  ]
+ },
+ {
+  "id": "slo483",
+  "name": "Data product freshness",
+  "tags": [
+   "domain:data",
+   "env:prod",
+   "managed_by:terraform",
+   "monitor_type:slo",
+   "owner:data-engineering",
+   "platform:data",
+   "scope:domain",
+   "service:data-platform",
+   "slo_id:slo-data-freshness",
+   "team:data-engineering"
+  ],
+  "overall_status": [
+   {}
+  ]
+ },
+ {
+  "id": "slo484",
+  "name": "Database platform availability",
+  "tags": [
+   "domain:database",
+   "env:prod",
+   "managed_by:terraform",
+   "monitor_type:slo",
+   "owner:data-engineering",
+   "platform:database",
+   "scope:domain",
+   "service:database-platform",
+   "slo_id:slo-database-availability",
+   "team:data-engineering"
+  ],
+  "overall_status": [
+   {}
+  ]
+ },
+ {
+  "id": "slo485",
+  "name": "Database query latency objective",
+  "tags": [
+   "domain:database",
+   "env:prod",
+   "managed_by:terraform",
+   "monitor_type:slo",
+   "owner:data-engineering",
+   "platform:database",
+   "scope:domain",
+   "service:database-platform",
+   "slo_id:slo-database-latency",
+   "team:data-engineering"
+  ],
+  "overall_status": [
+   {}
+  ]
+ },
+ {
+  "id": "slo486",
+  "name": "External dependency availability",
+  "tags": [
+   "domain:saas",
+   "env:prod",
+   "managed_by:terraform",
+   "monitor_type:slo",
+   "owner:sre",
+   "platform:saas",
+   "scope:domain",
+   "service:external-dependencies",
+   "slo_id:slo-external-dependency",
+   "team:sre"
+  ],
+  "overall_status": [
+   {}
+  ]
+ },
+ {
+  "id": "slo487",
+  "name": "Backup success rate",
+  "tags": [
+   "domain:infrastructure",
+   "env:prod",
+   "managed_by:terraform",
+   "monitor_type:slo",
+   "owner:infrastructure-engineering",
+   "platform:infrastructure",
+   "scope:domain",
+   "service:backup-platform",
+   "slo_id:slo-infra-backup-success",
+   "team:infrastructure-engineering"
+  ],
+  "overall_status": [
+   {}
+  ]
+ },
+ {
+  "id": "slo488",
+  "name": "Compute platform availability",
+  "tags": [
+   "domain:infrastructure",
+   "env:prod",
+   "managed_by:terraform",
+   "monitor_type:slo",
+   "owner:infrastructure-engineering",
+   "platform:infrastructure",
+   "scope:domain",
+   "service:compute-platform",
+   "slo_id:slo-infra-compute-availability",
+   "team:infrastructure-engineering"
+  ],
+  "overall_status": [
+   {}
+  ]
+ },
+ {
+  "id": "slo489",
+  "name": "Integration delivery reliability",
+  "tags": [
+   "domain:integration",
+   "env:prod",
+   "managed_by:terraform",
+   "monitor_type:slo",
+   "owner:application-development",
+   "platform:integration",
+   "scope:domain",
+   "service:integration-platform",
+   "slo_id:slo-integration-delivery",
+   "team:application-development"
+  ],
+  "overall_status": [
+   {}
+  ]
+ },
+ {
+  "id": "slo490",
+  "name": "Kubernetes workload availability",
+  "tags": [
+   "domain:kubernetes",
+   "env:prod",
+   "managed_by:terraform",
+   "monitor_type:slo",
+   "owner:cloud-engineering",
+   "platform:kubernetes",
+   "scope:domain",
+   "service:kubernetes-platform",
+   "slo_id:slo-k8s-workload-availability",
+   "team:cloud-engineering"
+  ],
+  "overall_status": [
+   {}
+  ]
+ },
+ {
+  "id": "slo491",
+  "name": "Message delivery reliability",
+  "tags": [
+   "domain:messaging",
+   "env:prod",
+   "managed_by:terraform",
+   "monitor_type:slo",
+   "owner:cloud-engineering",
+   "platform:messaging",
+   "scope:domain",
+   "service:messaging-platform",
+   "slo_id:slo-messaging-delivery",
+   "team:cloud-engineering"
+  ],
+  "overall_status": [
+   {}
+  ]
+ },
+ {
+  "id": "slo492",
+  "name": "Network availability",
+  "tags": [
+   "domain:network",
+   "env:prod",
+   "managed_by:terraform",
+   "monitor_type:slo",
+   "owner:infrastructure-engineering",
+   "platform:network",
+   "scope:domain",
+   "service:network-platform",
+   "slo_id:slo-network-availability",
+   "team:infrastructure-engineering"
+  ],
+  "overall_status": [
+   {}
+  ]
+ },
+ {
+  "id": "slo493",
+  "name": "Shared platform services availability",
+  "tags": [
+   "domain:platform",
+   "env:prod",
+   "managed_by:terraform",
+   "monitor_type:slo",
+   "owner:observability-platform",
+   "platform:platform",
+   "scope:domain",
+   "service:platform-services",
+   "slo_id:slo-platform-services",
+   "team:observability-platform"
+  ],
+  "overall_status": [
+   {}
+  ]
+ },
+ {
+  "id": "slo494",
+  "name": "Security telemetry continuity",
+  "tags": [
+   "domain:security",
+   "env:prod",
+   "managed_by:terraform",
+   "monitor_type:slo",
+   "owner:security",
+   "platform:security",
+   "scope:domain",
+   "service:security-telemetry",
+   "slo_id:slo-security-telemetry",
+   "team:security"
+  ],
+  "overall_status": [
+   {}
+  ]
+ },
+ {
+  "id": "slo495",
+  "name": "checkout-api availability (tier0)",
+  "tags": [
+   "domain:api",
+   "env:prod",
+   "managed_by:terraform",
+   "monitor_type:slo",
+   "owner:payments",
+   "scope:service",
+   "service:checkout-api",
+   "slo_id:slo-svc-checkout-api",
+   "team:payments",
+   "tier:tier0"
+  ],
+  "overall_status": [
+   {}
+  ]
+ },
+ {
+  "id": "slo496",
+  "name": "identity-api availability (tier0)",
+  "tags": [
+   "domain:api",
+   "env:prod",
+   "managed_by:terraform",
+   "monitor_type:slo",
+   "owner:security",
+   "scope:service",
+   "service:identity-api",
+   "slo_id:slo-svc-identity-api",
+   "team:security",
+   "tier:tier0"
+  ],
+  "overall_status": [
+   {}
+  ]
+ },
+ {
+  "id": "slo497",
+  "name": "Virtualization platform availability",
+  "tags": [
+   "domain:vmware",
+   "env:prod",
+   "managed_by:terraform",
+   "monitor_type:slo",
+   "owner:infrastructure-engineering",
+   "platform:vmware",
+   "scope:domain",
+   "service:virtualization-platform",
+   "slo_id:slo-vmware-cluster-availability",
+   "team:infrastructure-engineering"
+  ],
+  "overall_status": [
+   {}
+  ]
+ },
+ {
+  "id": "slo498",
+  "name": "Web frontend availability",
+  "tags": [
+   "domain:application",
+   "env:prod",
+   "managed_by:terraform",
+   "monitor_type:slo",
+   "owner:sre",
+   "platform:application",
+   "scope:domain",
+   "service:web-frontends",
+   "slo_id:slo-web-availability",
+   "team:sre"
+  ],
+  "overall_status": [
+   {}
+  ]
+ },
+ {
+  "id": "slo499",
+  "name": "Asynchronous processing reliability",
+  "tags": [
+   "domain:application",
+   "env:prod",
+   "managed_by:terraform",
+   "monitor_type:slo",
+   "owner:sre",
+   "platform:application",
+   "scope:domain",
+   "service:worker-platform",
+   "slo_id:slo-worker-throughput",
+   "team:sre"
+  ],
+  "overall_status": [
+   {}
+  ]
+ }
+]

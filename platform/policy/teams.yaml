@@ -1,0 +1,117 @@
+# =============================================================================
+# LAYER 6 — TEAM POLICY
+#
+# Teams map to Datadog Teams, On-Call schedules, escalation policies and
+# notification destinations. NO INDIVIDUAL PERSON IS EVER NAMED IN A MONITOR.
+# Monitors carry `team` + `priority`; notification rules resolve destinations.
+# Changing where a team's alerts go is a one-line change here.
+# =============================================================================
+version: 2
+
+teams:
+
+  sre:
+    name: Site Reliability Engineering
+    email: sre@acme.example
+    domains_owned: [application, saas, platform]
+    escalation_to: platform-leadership
+    teams_channel: teams-sre-alerts
+    teams_low_noise_channel: teams-sre-signals
+    servicenow_assignment_group: SRE_OPERATIONS
+    oncall: true
+    business_hours_timezone: America/New_York
+
+  application-development:
+    name: Application Development
+    email: appdev@acme.example
+    domains_owned: [api, integration]
+    escalation_to: sre
+    teams_channel: teams-appdev-alerts
+    teams_low_noise_channel: teams-appdev-signals
+    servicenow_assignment_group: APP_DEVELOPMENT
+    oncall: true
+    business_hours_timezone: America/New_York
+
+  infrastructure-engineering:
+    name: Infrastructure Engineering
+    email: infra@acme.example
+    domains_owned: [infrastructure, vmware, network]
+    escalation_to: sre
+    teams_channel: teams-infra-alerts
+    teams_low_noise_channel: teams-infra-signals
+    servicenow_assignment_group: INFRASTRUCTURE
+    oncall: true
+    business_hours_timezone: America/New_York
+
+  cloud-engineering:
+    name: Cloud Engineering
+    email: cloud@acme.example
+    domains_owned: [cloud, kubernetes, messaging]
+    escalation_to: sre
+    teams_channel: teams-cloud-alerts
+    teams_low_noise_channel: teams-cloud-signals
+    servicenow_assignment_group: CLOUD_PLATFORM
+    oncall: true
+    business_hours_timezone: America/New_York
+
+  data-engineering:
+    name: Data Engineering
+    email: data@acme.example
+    domains_owned: [database, data]
+    escalation_to: sre
+    teams_channel: teams-data-alerts
+    teams_low_noise_channel: teams-data-signals
+    servicenow_assignment_group: DATA_PLATFORM
+    oncall: true
+    business_hours_timezone: America/New_York
+
+  security:
+    name: Security Engineering
+    email: security@acme.example
+    domains_owned: [security]
+    escalation_to: security-leadership
+    teams_channel: teams-security-alerts
+    teams_low_noise_channel: teams-security-signals
+    servicenow_assignment_group: SECURITY_OPERATIONS
+    oncall: true
+    business_hours_timezone: America/New_York
+
+  payments:
+    name: Payments Engineering
+    email: payments@acme.example
+    domains_owned: []
+    escalation_to: sre
+    teams_channel: teams-payments-alerts
+    teams_low_noise_channel: teams-payments-signals
+    servicenow_assignment_group: PAYMENTS
+    oncall: true
+    business_hours_timezone: America/New_York
+
+  observability-platform:
+    name: Observability Platform (owns this repository)
+    email: o11y@acme.example
+    domains_owned: [platform]
+    escalation_to: sre
+    teams_channel: teams-o11y-alerts
+    teams_low_noise_channel: teams-o11y-signals
+    servicenow_assignment_group: OBSERVABILITY_PLATFORM
+    oncall: true
+    business_hours_timezone: America/New_York
+
+# -----------------------------------------------------------------------------
+# Fallback owner for discovered resources with no resolvable owner.
+# Resources parked here are a first-class coverage violation (check C2) with an
+# SLA — this is the mechanism that stops "unowned" from becoming permanent.
+# -----------------------------------------------------------------------------
+unowned_pool:
+  team: observability-platform
+  max_age_days: 14
+  escalation_after_days: 7
+  escalation_to: platform-leadership
+
+# Shared destinations that are not team-specific.
+shared_destinations:
+  major_incident_channel: teams-major-incident
+  exec_channel: teams-exec-bridge
+  release_channel: teams-release-train
+  event_stream_only: none

@@ -1,0 +1,115 @@
+# =============================================================================
+# EVENT CORRELATION CONFIGURATION
+#
+# Goal: five alerts for one problem become ONE incident with four children and
+# the change that caused it attached as context.
+#
+# The correlation KEYS are deterministic and are stamped on every monitor by
+# modules/monitor_factory — no per-monitor configuration and no in-app rules
+# are required for basic grouping:
+#
+#   correlation_key = <failure_domain>.<env>.<service>     (grouping identity)
+#   dedup_key       = <service>.<env>.<archetype>[.<sfx>]  (event identity)
+#
+# The richer topology and change-attachment rules below are versioned here and
+# executed by tools/correlate_events.py, which is both the executable
+# specification (proved in CI) and the operator's replay tool. See ADR-007 for
+# why this is a documented API path rather than a Terraform resource.
+# =============================================================================
+version: 2
+
+window_seconds: 300           # events within 5 minutes may join one group
+dedup_window_seconds: 900     # identical dedup_key within 15 minutes = 1 event
+
+rules:
+
+  - id: group-by-correlation-key
+    description: Same failure domain + env + service becomes one case.
+    group_by: [correlation_key]
+    max_group_size: 200
+
+  - id: attach-change-context
+    description: >
+      Deployments, Terraform applies, Kubernetes rollouts, cloud platform
+      events, ServiceNow changes and scaling events join the group as CONTEXT.
+      They never page and never become the parent — they explain it.
+    match:
+      source: [deployment, terraform, kubernetes, azure, servicenow, autoscaler, network-automation]
+    attach_to: correlation_key
+    as: context
+    lookback_seconds: 1800
+
+  - id: platform-cause-suppresses-app-symptom
+    description: >
+      Cross-domain topology. An infrastructure, network, cloud, Kubernetes or
+      database failure in the same env+region adopts application and
+      integration symptoms as children.
+    parent_domains: [infrastructure, network, cloud, vmware, kubernetes, database, messaging]
+    child_domains: [application, api, integration, data, saas]
+    join_on: [env, region]
+    behavior: suppress_children
+
+  - id: vendor-outage-suppresses-integration-symptoms
+    description: >
+      A confirmed SaaS/external dependency outage adopts every integration and
+      application error that depends on it — "it is them, not us" as a single
+      statement instead of twelve tickets.
+    parent_archetypes: [saas-availability, synthetic-endpoint-down, azure-service-health-event]
+    child_domains: [integration, application, api]
+    join_on: [env]
+    behavior: suppress_children
+
+  - id: maintenance-window-suppression
+    description: >
+      Any event arriving inside an active downtime schedule is tagged
+      maintenance:true and never opens or joins a group.
+    behavior: drop
+    condition: "active downtime matches the monitor tags"
+
+  - id: scope-uplift
+    description: >
+      If a correlation group's children span more than 25% of the services in
+      the affected pack, the parent's priority is raised one level (max P1).
+      Breadth is business impact.
+    condition: "distinct_child_services / pack_service_count > 0.25"
+    behavior: raise_priority
+    max_priority: P1
+
+# -----------------------------------------------------------------------------
+# ROOT-CAUSE RANKING — who becomes the parent of a correlation group.
+# Ordered most-causal to most-symptomatic. Ties break on severity, then time.
+# -----------------------------------------------------------------------------
+root_cause_ranking:
+  - signal: availability            # hard failures are causes
+  - signal: control_failure
+  - signal: replication_lag
+  - signal: schedule_miss
+  - signal: capacity
+  - signal: saturation
+  - signal: freshness
+  - signal: error_rate
+  - signal: latency                 # latency is nearly always a symptom
+  - signal: throughput
+  - signal: volume
+  - signal: telemetry_health        # observation problems rank last as causes
+  - signal: drift
+  - signal: cost
+  - signal: change
+
+# -----------------------------------------------------------------------------
+# INCIDENT CREATION
+# -----------------------------------------------------------------------------
+incident_creation:
+  P1: { create_incident: true,  severity: "SEV-1", notify: [exec_channel, major_incident_channel, team_channel] }
+  P2: { create_incident: true,  severity: "SEV-2", notify: [team_channel] }
+  P3: { create_incident: false }
+  P4: { create_incident: false }
+
+# -----------------------------------------------------------------------------
+# RECOVERY
+# -----------------------------------------------------------------------------
+recovery:
+  close_group_on_parent_recovery: true
+  require_all_children_recovered: true
+  reopen_window_seconds: 600
+  post_recovery_summary: true      # duration, children, error-budget consumed

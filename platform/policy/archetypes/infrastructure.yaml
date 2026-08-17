@@ -1,0 +1,278 @@
+# =============================================================================
+# MONITOR ARCHETYPE CATALOG — INFRASTRUCTURE (host / VM / storage / process)
+#
+# Infrastructure alerts EXIST TO SUPPORT DIAGNOSIS, not to page. Only two
+# infrastructure conditions are allowed to reach customer_impact: a host that
+# is gone, and a filesystem that has gone read-only. Everything else is risk or
+# degradation, and pages only when a composite confirms service impact.
+#
+# GROUPING: every host archetype groups by (cluster, host) and notifies by
+# cluster. Evaluating per host is what makes the alert actionable; notifying
+# per cluster is what stops a rack or hypervisor failure from sending five
+# hundred separate notifications. A collapse key that is not also a group key
+# does nothing, so `cluster` has to be in both.
+# =============================================================================
+version: 2
+domain: infrastructure
+
+archetypes:
+
+  host-unavailable:
+    title: Host Unavailable
+    signal: availability
+    impact_class: customer_impact
+    detection: service_check
+    monitor_type: service check
+    resource_type: host
+    selector: ""
+    query: '"datadog.agent.up".over("__SCOPE__").by("cluster","host").last(4).count_by_status()'
+    thresholds: { critical: 3, warning: 2, ok: 1 }
+    group_by: [cluster, host]
+    evaluation_window: last_4_checks
+    envs: [prod, stage, qa]
+    bands: [critical, standard, baseline]
+    slo_id: slo-infra-compute-availability
+    runbook: host-unavailable
+    workflow: diag-host
+    failure_domain: compute
+    mandatory: true
+    notify_by: [cluster]
+    # Datadog REQUIRES no-data notification on host monitors, and it is right
+    # to: a host that stops reporting is indistinguishable from a host that is
+    # gone, and the second one matters.
+    notify_no_data: true
+    no_data_timeframe: 30
+    rationale_fixed_threshold: >
+      Agent check status is discrete. Four consecutive check failures separates
+      a genuine host loss from a transient agent restart.
+
+  host-cpu-baseline-deviation:
+    title: Host CPU Baseline Deviation
+    signal: saturation
+    impact_class: risk
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: host
+    selector: ""
+    query: "avg(last_30m):anomalies(avg:system.cpu.user{__SCOPE__} by {cluster,host}, 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [cluster, host]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-infra-compute-availability
+    runbook: host-cpu-baseline-deviation
+    workflow: diag-host
+    failure_domain: compute
+    mandatory: false
+    notify_by: [cluster]
+    notes: >
+      Replaces "CPU > 80%". A batch node at 95% on schedule is healthy; an API
+      node at 55% when it normally runs at 20% is not. On its own this is a P3
+      diagnostic signal; it only becomes a page through event correlation with a
+      service-level symptom.
+
+  host-memory-pressure:
+    title: Host Memory Pressure
+    signal: saturation
+    impact_class: risk
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: host
+    selector: ""
+    query: "avg(last_30m):anomalies(avg:system.mem.pct_usable{__SCOPE__} by {cluster,host}, 'agile', 3, direction='below') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [cluster, host]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-infra-compute-availability
+    runbook: host-memory-pressure
+    workflow: diag-host
+    failure_domain: compute
+    mandatory: false
+    notify_by: [cluster]
+
+  host-disk-exhaustion-forecast:
+    title: Disk Exhaustion Forecast
+    signal: capacity
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: host
+    selector: ""
+    query: "max(next_3d):forecast(avg:system.disk.in_use{__SCOPE__} by {cluster,host,device}, 'linear', 1, interval='60m', history='1w', model='default') > 0.95"
+    thresholds: { critical: 0.95, warning: 0.9 }
+    group_by: [cluster, host, device]
+    evaluation_window: next_3d
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-infra-compute-availability
+    runbook: host-disk-exhaustion-forecast
+    workflow: auto-capacity-ticket
+    failure_domain: storage
+    mandatory: true
+    notify_by: [cluster]
+    notes: >
+      Replaces "disk > 90%". A volume steady at 92% for two years is not an
+      incident; a volume at 60% growing 8%/day is. Three days of lead time is
+      the shortest window in which a human can reliably act.
+
+  host-filesystem-readonly:
+    title: Filesystem Read-Only or Failing
+    signal: availability
+    impact_class: customer_impact
+    detection: service_check
+    monitor_type: service check
+    resource_type: host
+    selector: ""
+    query: '"system.disk.read_write".over("__SCOPE__").by("cluster","host","device").last(2).count_by_status()'
+    thresholds: { critical: 1 }
+    group_by: [cluster, host, device]
+    evaluation_window: last_2_checks
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-infra-compute-availability
+    runbook: host-filesystem-readonly
+    workflow: diag-host
+    failure_domain: storage
+    mandatory: true
+    notify_by: [cluster]
+    rationale_fixed_threshold: "Read-only remount is a binary kernel state."
+
+  host-inode-exhaustion-forecast:
+    title: Inode Exhaustion Forecast
+    signal: capacity
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: host
+    selector: ""
+    query: "max(next_3d):forecast(avg:system.fs.inodes.in_use{__SCOPE__} by {cluster,host,device}, 'linear', 1, interval='60m', history='1w') > 0.9"
+    thresholds: { critical: 0.9 }
+    group_by: [cluster, host, device]
+    evaluation_window: next_3d
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-infra-compute-availability
+    runbook: host-inode-exhaustion-forecast
+    workflow: auto-capacity-ticket
+    failure_domain: storage
+    mandatory: false
+    notify_by: [cluster]
+
+  host-process-down:
+    title: Required Process Not Running
+    signal: availability
+    impact_class: degradation
+    detection: service_check
+    monitor_type: service check
+    resource_type: host
+    selector: ""
+    query: '"process.up".over("__SCOPE__").by("cluster","host","process_name").last(3).count_by_status()'
+    thresholds: { critical: 2, warning: 1 }
+    group_by: [cluster, host, process_name]
+    evaluation_window: last_3_checks
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-infra-compute-availability
+    runbook: host-process-down
+    workflow: diag-host
+    failure_domain: compute
+    mandatory: true
+    notify_by: [cluster]
+    rationale_fixed_threshold: "Process presence is binary."
+
+  host-agent-unhealthy:
+    title: Datadog Agent Unhealthy
+    signal: telemetry_health
+    impact_class: hygiene
+    detection: threshold
+    monitor_type: query alert
+    resource_type: host
+    selector: ""
+    query: 'avg(last_30m):avg:datadog.agent.running{__SCOPE__} by {cluster,host} < 1'
+    thresholds: { critical: 1 }
+    group_by: [cluster, host]
+    evaluation_window: last_30m
+    envs: [prod, stage, qa]
+    bands: [critical, standard, baseline]
+    slo_id: slo-platform-services
+    runbook: host-agent-unhealthy
+    workflow: diag-host
+    failure_domain: compute
+    mandatory: true
+    notify_by: [cluster]
+    rationale_fixed_threshold: >
+      Agent presence is binary and is the precondition for every other host
+      signal — this is the monitor that protects the monitoring.
+
+  host-clock-drift:
+    title: Host Clock Drift
+    signal: telemetry_health
+    impact_class: hygiene
+    detection: threshold
+    monitor_type: query alert
+    resource_type: host
+    selector: ""
+    query: 'avg(last_15m):abs(avg:ntp.offset{__SCOPE__} by {cluster,host}) > 15'
+    thresholds: { critical: 15, warning: 5 }
+    group_by: [cluster, host]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-platform-services
+    runbook: host-clock-drift
+    workflow: diag-host
+    failure_domain: compute
+    mandatory: false
+    notify_by: [cluster]
+    rationale_fixed_threshold: >
+      15 seconds is the tolerance beyond which Kerberos, TLS and log
+      correlation break — a protocol boundary, not a baseline.
+
+  storage-latency-anomaly:
+    title: Storage Latency Anomaly
+    signal: latency
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: storage_volume
+    selector: "resource_type:storage_volume"
+    query: "avg(last_30m):anomalies(avg:system.io.await{__SCOPE__} by {cluster,host,device}, 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [cluster, host, device]
+    notify_by: [cluster]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-infra-compute-availability
+    runbook: storage-latency-anomaly
+    workflow: diag-host
+    failure_domain: storage
+    mandatory: false
+
+  backup-age-exceeded:
+    title: Backup Older Than Policy
+    signal: backup_age
+    impact_class: risk
+    detection: threshold
+    monitor_type: query alert
+    resource_type: backup_job
+    selector: "resource_type:backup_job"
+    query: 'max(last_4h):max:acme.backup.hours_since_success{__SCOPE__} by {service,backup_policy} > 26'
+    thresholds: { critical: 26, warning: 20 }
+    group_by: [service, backup_policy]
+    notify_by: [service]
+    evaluation_window: last_4h
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-infra-backup-success
+    runbook: backup-age-exceeded
+    workflow: auto-compliance-ticket
+    failure_domain: backup-platform
+    mandatory: true
+    compliance: true
+    rationale_fixed_threshold: >
+      26 hours encodes the contractual 24-hour RPO plus a 2-hour grace window.
+      The number IS the control.

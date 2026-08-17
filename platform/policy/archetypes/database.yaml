@@ -1,0 +1,292 @@
+# =============================================================================
+# MONITOR ARCHETYPE CATALOG — DATABASES
+# Covers self-hosted and managed engines (Azure SQL, Cosmos DB, PostgreSQL,
+# MySQL, Redis, Mongo). Grouping is db_instance; engine-specific archetypes
+# carry an engine selector so one catalog serves every engine.
+# =============================================================================
+version: 2
+domain: database
+
+archetypes:
+
+  db-availability:
+    title: Database Instance Unavailable
+    signal: availability
+    impact_class: customer_impact
+    detection: service_check
+    monitor_type: service check
+    resource_type: db_instance
+    selector: ""
+    query: '"datadog.dbm.instance.up".over("__SCOPE__").by("db_instance").last(3).count_by_status()'
+    thresholds: { critical: 2, warning: 1 }
+    group_by: [db_instance]
+    evaluation_window: last_3_checks
+    envs: [prod, stage, qa]
+    bands: [critical, standard, baseline]
+    slo_id: slo-database-availability
+    runbook: db-availability
+    workflow: diag-database
+    failure_domain: databases
+    mandatory: true
+    rationale_fixed_threshold: "Instance reachability is binary."
+
+  db-query-latency-anomaly:
+    title: Database Query Latency Anomaly
+    signal: latency
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: db_instance
+    selector: ""
+    query: "avg(last_30m):anomalies(avg:postgresql.queries.duration{__SCOPE__} by {db_instance}, 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [db_instance]
+    evaluation_window: last_30m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-database-latency
+    runbook: db-query-latency-anomaly
+    workflow: diag-database
+    failure_domain: databases
+    mandatory: true
+
+  db-connection-saturation:
+    title: Database Connection Pool Saturation Forecast
+    signal: saturation
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: db_instance
+    selector: ""
+    query: "max(next_1d):forecast(avg:postgresql.connections{__SCOPE__} by {db_instance} / avg:postgresql.max_connections{__SCOPE__} by {db_instance}, 'linear', 1, interval='15m', history='1d') > 0.9"
+    thresholds: { critical: 0.9, warning: 0.8 }
+    group_by: [db_instance]
+    evaluation_window: next_1d
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-database-availability
+    runbook: db-connection-saturation
+    workflow: diag-database
+    failure_domain: database-capacity
+    mandatory: true
+    notes: >
+      Connection exhaustion is one of the few database failures with a
+      reliable linear ramp — forecasting it converts a 3am outage into a
+      business-hours ticket.
+
+  db-replication-lag:
+    title: Database Replication Lag Beyond Limit
+    signal: replication_lag
+    impact_class: customer_impact
+    detection: threshold
+    monitor_type: query alert
+    resource_type: db_instance
+    selector: ""
+    query: 'avg(last_10m):avg:postgresql.replication_delay{__SCOPE__} by {db_instance} > 300'
+    thresholds: { critical: 300, warning: 60 }
+    group_by: [db_instance]
+    evaluation_window: last_10m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-database-availability
+    runbook: db-replication-lag
+    workflow: diag-database
+    failure_domain: database-replication
+    mandatory: true
+    rationale_fixed_threshold: >
+      300 seconds is the declared RPO for read-replica failover. Past it, a
+      failover loses committed data — the number is the contract.
+
+  db-storage-forecast:
+    title: Database Storage Exhaustion Forecast
+    signal: capacity
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: db_instance
+    selector: ""
+    query: "max(next_1w):forecast(avg:postgresql.database_size{__SCOPE__} by {db_instance} / avg:postgresql.storage_limit{__SCOPE__} by {db_instance}, 'linear', 1, interval='60m', history='2w') > 0.9"
+    thresholds: { critical: 0.9, warning: 0.85 }
+    group_by: [db_instance]
+    evaluation_window: next_1w
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-database-availability
+    runbook: db-storage-forecast
+    workflow: auto-capacity-ticket
+    failure_domain: database-capacity
+    mandatory: true
+
+  db-deadlock-anomaly:
+    title: Database Deadlock Anomaly
+    signal: error_rate
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: db_instance
+    selector: ""
+    query: "avg(last_30m):anomalies(sum:postgresql.deadlocks{__SCOPE__} by {db_instance}.as_rate(), 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [db_instance]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-database-availability
+    runbook: db-deadlock-anomaly
+    workflow: diag-database
+    failure_domain: databases
+    mandatory: false
+
+  db-long-running-query:
+    title: Long-Running Query Blocking Workload
+    signal: latency
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: db_instance
+    selector: ""
+    query: 'max(last_15m):max:postgresql.queries.longest_running_seconds{__SCOPE__} by {db_instance} > 900'
+    thresholds: { critical: 900, warning: 300 }
+    group_by: [db_instance]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-database-latency
+    runbook: db-long-running-query
+    workflow: diag-database
+    failure_domain: databases
+    mandatory: false
+    rationale_fixed_threshold: >
+      15 minutes exceeds every documented OLTP statement timeout in the
+      estate; beyond it the query is holding locks, not working.
+
+  db-backup-age:
+    title: Database Backup Older Than RPO
+    signal: backup_age
+    impact_class: risk
+    detection: threshold
+    monitor_type: query alert
+    resource_type: db_instance
+    selector: ""
+    query: 'max(last_4h):max:acme.database.hours_since_backup{__SCOPE__} by {db_instance} > 26'
+    thresholds: { critical: 26, warning: 20 }
+    group_by: [db_instance]
+    evaluation_window: last_4h
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-database-availability
+    runbook: db-backup-age
+    workflow: auto-compliance-ticket
+    failure_domain: database-capacity
+    mandatory: true
+    compliance: true
+    rationale_fixed_threshold: "24h RPO + 2h grace. The number is the control."
+
+  db-cache-hit-ratio-degradation:
+    title: Cache Hit Ratio Degradation
+    signal: latency
+    impact_class: risk
+    detection: rate_of_change
+    monitor_type: query alert
+    resource_type: db_instance
+    selector: "engine:redis"
+    query: 'pct_change(avg(last_30m),last_4h):avg:redis.stats.keyspace_hit_rate{__SCOPE__} by {db_instance} < -20'
+    thresholds: { critical: -20, warning: -10 }
+    group_by: [db_instance]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-database-latency
+    runbook: db-cache-hit-ratio-degradation
+    workflow: diag-database
+    failure_domain: databases
+    mandatory: false
+
+  cosmos-ru-throttling:
+    title: Cosmos DB Request Unit Throttling
+    signal: saturation
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_cosmos_db
+    selector: "resource_type:azure_cosmos_db"
+    query: 'sum(last_15m):sum:azure.documentdb_databaseaccounts.total_requests{__SCOPE__,status_code:429} by {subscription_name,name}.as_count() > 0'
+    thresholds: { critical: 0 }
+    group_by: [subscription_name, name]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-database-availability
+    runbook: cosmos-ru-throttling
+    workflow: remediate-scale-workload
+    failure_domain: database-capacity
+    mandatory: true
+    notify_by: [subscription_name]
+    rationale_fixed_threshold: >
+      HTTP 429 from Cosmos is a hard provisioned-throughput boundary. Any
+      throttling is real customer latency.
+
+  azuresql-dtu-saturation:
+    title: Azure SQL Compute Saturation Forecast
+    signal: saturation
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: azure_sql
+    selector: "resource_type:azure_sql"
+    query: "max(next_1d):forecast(avg:azure.sql_servers_databases.dtu_consumption_percent{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='30m', history='1w') > 90"
+    thresholds: { critical: 90, warning: 80 }
+    group_by: [subscription_name, name]
+    evaluation_window: next_1d
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-database-availability
+    runbook: azuresql-dtu-saturation
+    workflow: remediate-scale-workload
+    failure_domain: database-capacity
+    mandatory: true
+    notify_by: [subscription_name]
+
+  azuresql-connection-failures:
+    title: Azure SQL Connection Failures
+    signal: availability
+    impact_class: customer_impact
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: azure_sql
+    selector: "resource_type:azure_sql"
+    query: "avg(last_15m):anomalies(sum:azure.sql_servers_databases.connection_failed{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [subscription_name, name]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-database-availability
+    runbook: azuresql-connection-failures
+    workflow: diag-database
+    failure_domain: databases
+    mandatory: true
+    notify_by: [subscription_name]
+
+  db-telemetry-loss:
+    title: Database Stopped Reporting Telemetry
+    signal: telemetry_health
+    impact_class: hygiene
+    detection: threshold
+    monitor_type: query alert
+    resource_type: db_instance
+    selector: ""
+    query: 'sum(last_30m):sum:postgresql.connections{__SCOPE__} by {db_instance}.as_count() < 1'
+    thresholds: { critical: 1 }
+    group_by: [db_instance]
+    evaluation_window: last_30m
+    envs: [prod, stage, qa]
+    bands: [critical, standard, baseline]
+    slo_id: slo-database-availability
+    runbook: db-telemetry-loss
+    workflow: diag-database
+    failure_domain: databases
+    mandatory: true
+    notify_no_data: true
+    no_data_timeframe: 45
+    rationale_fixed_threshold: "Absence of telemetry is binary."

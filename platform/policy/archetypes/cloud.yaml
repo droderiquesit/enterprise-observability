@@ -1,0 +1,395 @@
+# =============================================================================
+# MONITOR ARCHETYPE CATALOG — AZURE / CLOUD PLATFORM
+#
+# One archetype per Azure service CLASS, not per resource. Grouping is
+# subscription → resource_group → resource_name, which is how Azure incidents
+# actually scope (a region or subscription fails, not a single app service).
+#
+# AKS is covered by the kubernetes catalog; Service Bus by messaging;
+# Azure SQL / Cosmos by database. This file holds the rest of the PaaS estate.
+# =============================================================================
+version: 2
+domain: cloud
+
+archetypes:
+
+  azure-appservice-unavailable:
+    title: Azure App Service Unavailable
+    signal: availability
+    impact_class: customer_impact
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_app_service
+    selector: "resource_type:azure_app_service"
+    query: 'min(last_10m):avg:azure.app_services.health_check_status{__SCOPE__} by {subscription_name,resource_group,name} < 1'
+    thresholds: { critical: 1 }
+    group_by: [subscription_name, resource_group, name]
+    evaluation_window: last_10m
+    envs: [prod, stage, qa]
+    bands: [critical, standard, baseline]
+    slo_id: slo-cloud-platform-availability
+    runbook: azure-appservice-unavailable
+    workflow: diag-azure-resource
+    failure_domain: azure-paas
+    mandatory: true
+    notify_by: [subscription_name]
+    rationale_fixed_threshold: "Health-check status is binary."
+
+  azure-appservice-http5xx-anomaly:
+    title: Azure App Service 5xx Anomaly
+    signal: error_rate
+    impact_class: customer_impact
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: azure_app_service
+    selector: "resource_type:azure_app_service"
+    query: "avg(last_15m):anomalies(sum:azure.app_services.http5xx{__SCOPE__} by {subscription_name,resource_group,name}.as_rate(), 'agile', 3) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [subscription_name, resource_group, name]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-cloud-platform-availability
+    runbook: azure-appservice-http5xx-anomaly
+    workflow: remediate-recycle-app-pool
+    failure_domain: azure-paas
+    mandatory: true
+    notify_by: [subscription_name]
+
+  azure-appservice-plan-saturation:
+    title: Azure App Service Plan Saturation Forecast
+    signal: saturation
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: azure_app_service_plan
+    selector: "resource_type:azure_app_service_plan"
+    query: "max(next_1d):forecast(avg:azure.app_services_plan.cpu_percentage{__SCOPE__} by {subscription_name,resource_group,name}, 'linear', 1, interval='30m', history='1w') > 90"
+    thresholds: { critical: 90, warning: 75 }
+    group_by: [subscription_name, resource_group, name]
+    evaluation_window: next_1d
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-cloud-platform-availability
+    runbook: azure-appservice-plan-saturation
+    workflow: remediate-scale-workload
+    failure_domain: azure-paas
+    mandatory: false
+    notify_by: [subscription_name]
+
+  azure-function-failure-anomaly:
+    title: Azure Function Failure Anomaly
+    signal: error_rate
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: azure_function
+    selector: "resource_type:azure_function"
+    query: "avg(last_15m):anomalies(sum:azure.functions.function_execution_failures{__SCOPE__} by {subscription_name,resource_group,name}.as_rate(), 'agile', 3) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [subscription_name, resource_group, name]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-cloud-platform-availability
+    runbook: azure-function-failure-anomaly
+    workflow: diag-azure-resource
+    failure_domain: azure-paas
+    mandatory: true
+    notify_by: [subscription_name]
+
+  azure-function-execution-stalled:
+    title: Azure Function Stopped Executing
+    signal: availability
+    impact_class: customer_impact
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_function
+    selector: "resource_type:azure_function"
+    query: 'sum(last_1h):sum:azure.functions.function_execution_count{__SCOPE__} by {subscription_name,resource_group,name}.as_count() < 1'
+    thresholds: { critical: 1 }
+    group_by: [subscription_name, resource_group, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_1h
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-cloud-platform-availability
+    runbook: azure-function-execution-stalled
+    workflow: diag-azure-resource
+    failure_domain: azure-paas
+    mandatory: false
+    notify_no_data: true
+    no_data_timeframe: 90
+    rationale_fixed_threshold: "Zero executions for a continuously-triggered function is binary."
+
+  azure-storage-availability:
+    title: Azure Storage Account Availability
+    signal: availability
+    impact_class: customer_impact
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_storage
+    selector: "resource_type:azure_storage"
+    query: 'min(last_10m):avg:azure.storage_storageaccounts.availability{__SCOPE__} by {subscription_name,resource_group,name} < 99'
+    thresholds: { critical: 99, warning: 99.9 }
+    group_by: [subscription_name, resource_group, name]
+    evaluation_window: last_10m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-cloud-platform-availability
+    runbook: azure-storage-availability
+    workflow: diag-azure-resource
+    failure_domain: azure-paas
+    mandatory: true
+    notify_by: [subscription_name]
+    rationale_fixed_threshold: >
+      99% availability is the Azure Storage SLA floor — a contractual number.
+
+  azure-storage-throttling:
+    title: Azure Storage Throttling
+    signal: saturation
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: azure_storage
+    selector: "resource_type:azure_storage"
+    query: "avg(last_15m):anomalies(sum:azure.storage_storageaccounts.transactions{__SCOPE__,response_type:throttlingerror} by {subscription_name,name}.as_rate(), 'agile', 3) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [subscription_name, name]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-cloud-platform-availability
+    runbook: azure-storage-throttling
+    workflow: diag-azure-resource
+    failure_domain: azure-paas
+    mandatory: false
+    notify_by: [subscription_name]
+
+  azure-loadbalancer-probe-failure:
+    title: Azure Load Balancer Health Probe Failing
+    signal: availability
+    impact_class: customer_impact
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_load_balancer
+    selector: "resource_type:azure_load_balancer"
+    query: 'min(last_10m):avg:azure.network_loadbalancers.dip_availability{__SCOPE__} by {subscription_name,resource_group,name} < 50'
+    thresholds: { critical: 50, warning: 80 }
+    group_by: [subscription_name, resource_group, name]
+    evaluation_window: last_10m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-cloud-platform-availability
+    runbook: azure-loadbalancer-probe-failure
+    workflow: diag-azure-resource
+    failure_domain: azure-landing-zone
+    mandatory: true
+    notify_by: [subscription_name]
+    rationale_fixed_threshold: >
+      Half the backend pool failing health probes is a redundancy boundary.
+
+  azure-appgateway-backend-unhealthy:
+    title: Application Gateway Backend Unhealthy
+    signal: availability
+    impact_class: customer_impact
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_application_gateway
+    selector: "resource_type:azure_application_gateway"
+    query: 'min(last_10m):avg:azure.network_applicationgateways.healthy_host_count{__SCOPE__} by {subscription_name,name,backend_pool} < 1'
+    thresholds: { critical: 1, warning: 2 }
+    group_by: [subscription_name, name, backend_pool]
+    evaluation_window: last_10m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-cloud-platform-availability
+    runbook: azure-appgateway-backend-unhealthy
+    workflow: diag-azure-resource
+    failure_domain: azure-landing-zone
+    mandatory: true
+    notify_by: [subscription_name]
+    rationale_fixed_threshold: "Zero healthy hosts behind a listener is binary."
+
+  azure-appgateway-5xx-anomaly:
+    title: Application Gateway 5xx Anomaly
+    signal: error_rate
+    impact_class: customer_impact
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: azure_application_gateway
+    selector: "resource_type:azure_application_gateway"
+    query: "avg(last_15m):anomalies(sum:azure.network_applicationgateways.failed_requests{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [subscription_name, name]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-cloud-platform-availability
+    runbook: azure-appgateway-5xx-anomaly
+    workflow: diag-azure-resource
+    failure_domain: azure-landing-zone
+    mandatory: false
+    notify_by: [subscription_name]
+
+  azure-keyvault-availability:
+    title: Key Vault Availability Degraded
+    signal: availability
+    impact_class: customer_impact
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_key_vault
+    selector: "resource_type:azure_key_vault"
+    query: 'min(last_10m):avg:azure.keyvault_vaults.availability{__SCOPE__} by {subscription_name,name} < 99'
+    thresholds: { critical: 99 }
+    group_by: [subscription_name, name]
+    evaluation_window: last_10m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-cloud-platform-availability
+    runbook: azure-keyvault-availability
+    workflow: diag-azure-resource
+    failure_domain: azure-paas
+    mandatory: true
+    notify_by: [subscription_name]
+    rationale_fixed_threshold: >
+      Key Vault is a hard dependency of nearly every workload; the SLA floor
+      is the boundary.
+
+  azure-keyvault-throttling:
+    title: Key Vault Throttling
+    signal: saturation
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_key_vault
+    selector: "resource_type:azure_key_vault"
+    query: 'sum(last_15m):sum:azure.keyvault_vaults.service_api_result_count{__SCOPE__,status_code:429} by {subscription_name,name}.as_count() > 0'
+    thresholds: { critical: 0 }
+    group_by: [subscription_name, name]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-cloud-platform-availability
+    runbook: azure-keyvault-throttling
+    workflow: diag-azure-resource
+    failure_domain: azure-paas
+    mandatory: false
+    notify_by: [subscription_name]
+    rationale_fixed_threshold: "HTTP 429 from Key Vault is a hard platform quota signal."
+
+  azure-vm-unavailable:
+    title: Azure VM Unavailable
+    signal: availability
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_vm
+    selector: "resource_type:azure_vm"
+    query: 'min(last_10m):avg:azure.vm.status{__SCOPE__} by {subscription_name,resource_group,name} < 1'
+    thresholds: { critical: 1 }
+    group_by: [subscription_name, resource_group, name]
+    evaluation_window: last_10m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-cloud-platform-availability
+    runbook: azure-vm-unavailable
+    workflow: diag-azure-resource
+    failure_domain: azure-landing-zone
+    mandatory: true
+    notify_by: [subscription_name]
+    rationale_fixed_threshold: "Power/provisioning state is discrete."
+
+  azure-quota-exhaustion-forecast:
+    title: Azure Subscription Quota Exhaustion Forecast
+    signal: capacity
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: azure_subscription
+    selector: "resource_type:azure_subscription"
+    query: "max(next_1w):forecast(avg:azure.usage.current_value{__SCOPE__} by {subscription_name,quota_name} / avg:azure.usage.limit{__SCOPE__} by {subscription_name,quota_name}, 'linear', 1, interval='60m', history='2w') > 0.9"
+    thresholds: { critical: 0.9, warning: 0.8 }
+    group_by: [subscription_name, quota_name]
+    notify_by: [subscription_name]
+    evaluation_window: next_1w
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-cloud-platform-availability
+    runbook: azure-quota-exhaustion-forecast
+    workflow: auto-capacity-ticket
+    failure_domain: cloud-quota
+    mandatory: true
+    notes: >
+      Quota exhaustion is the single most common cause of "the deploy failed
+      and nobody knows why" in a large Azure estate. Quota increases take days,
+      so the forecast window is a week.
+
+  azure-service-health-event:
+    title: Azure Platform Service Health Event
+    signal: availability
+    impact_class: degradation
+    detection: event
+    monitor_type: event-v2 alert
+    resource_type: azure_subscription
+    selector: "resource_type:azure_subscription"
+    query: 'events("source:azure __ESCOPE__ tags:\"event_category:ServiceHealth\"").rollup("count").by("subscription_name,region").last("15m") >= 1'
+    thresholds: { critical: 1 }
+    group_by: [subscription_name, region]
+    notify_by: [subscription_name]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-cloud-platform-availability
+    runbook: azure-service-health-event
+    workflow: auto-enrich-change
+    failure_domain: azure-landing-zone
+    mandatory: true
+    rationale_fixed_threshold: >
+      A Microsoft-declared service health event is authoritative context: it
+      becomes the PARENT of every correlated symptom in that region.
+
+  azure-integration-telemetry-gap:
+    title: Azure Integration Stopped Delivering Metrics
+    signal: telemetry_health
+    impact_class: hygiene
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_subscription
+    selector: "resource_type:azure_subscription"
+    query: 'sum(last_1h):sum:azure.usage.current_value{__SCOPE__} by {subscription_name}.as_count() < 1'
+    thresholds: { critical: 1 }
+    group_by: [subscription_name]
+    evaluation_window: last_1h
+    envs: [prod, stage, qa]
+    bands: [critical, standard, baseline]
+    slo_id: slo-platform-services
+    runbook: azure-integration-telemetry-gap
+    workflow: diag-azure-resource
+    failure_domain: azure-landing-zone
+    mandatory: true
+    notify_no_data: true
+    no_data_timeframe: 90
+    rationale_fixed_threshold: >
+      A silent Azure integration makes every cloud monitor silently green.
+      This is the tripwire that prevents false confidence.
+
+  azure-cost-anomaly:
+    title: Cloud Cost Anomaly
+    signal: cost
+    impact_class: hygiene
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: azure_subscription
+    selector: "resource_type:azure_subscription"
+    query: "avg(last_1d):anomalies(sum:azure.usage.cost{__SCOPE__} by {subscription_name}.as_rate(), 'basic', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [subscription_name]
+    evaluation_window: last_1d
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-platform-services
+    runbook: azure-cost-anomaly
+    workflow: auto-finops-review
+    failure_domain: cloud-finops
+    mandatory: false

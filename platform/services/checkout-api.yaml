@@ -1,0 +1,12 @@
+service:
+  name: checkout-api
+  team: payments
+  tier: tier0
+  service_archetype: api
+  description: Customer checkout and payment orchestration API.
+  envs: [dev, qa, stage, prod]
+  dependencies: [payments-ledger, orders-sql, stripe]
+  compliance_scope: pci
+  links:
+    - { name: Repository, type: repo, url: https://github.com/acme/checkout-api }
+    - { name: Architecture, type: doc, url: https://wiki.acme.example/checkout }
