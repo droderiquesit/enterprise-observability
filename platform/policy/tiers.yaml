@@ -1,0 +1,164 @@
+# =============================================================================
+# LAYER 5 — SERVICE TIER POLICY
+#
+# Four tiers. A tier is a BUSINESS statement, declared by the service owner and
+# reviewed by the platform team. It is the single input that decides how much
+# monitoring machinery a service gets.
+#
+# tier → monitoring_profile → alert_band → which archetype packs select it
+# =============================================================================
+version: 2
+
+tiers:
+
+  tier0:
+    display: Tier 0 — Mission Critical
+    description: >
+      Revenue-generating, customer-facing, or foundational shared platform.
+      An outage is a company event. Examples: authentication, payments,
+      trading, checkout, the API gateway, the identity platform, core network.
+    monitoring_profile: critical
+    alert_band: critical
+    support_model: 24x7
+
+    # --- SLO policy -----------------------------------------------------------
+    slo:
+      scope: per_service            # tier0 gets its OWN SLOs, not the domain SLO
+      required: true
+      objectives:
+        availability: 99.95
+        latency: 99.5
+        freshness: 99.5
+      burn_windows: [fast, medium, slow]
+      error_budget_policy: >
+        Budget exhausted → feature freeze for the owning team until the budget
+        recovers above 25%; documented exception required to deploy.
+
+    # --- Alerting behavior ----------------------------------------------------
+    paging: p1_plus_confirmed_impact   # P1, SLO burn, and composites
+    incident_creation: [P1, P2]
+    escalation:
+      ack_minutes: 5
+      escalate_minutes: 10
+      chain: [primary_oncall, secondary_oncall, team_lead, incident_commander]
+    recovery_notification: true
+    renotify_interval_minutes: 30
+    sensitivity_multiplier: 0.8              # 20% tighter than platform default
+    require_composite_confirmation: false    # tier0 pages on single strong signal
+    review_cadence: monthly
+
+  tier1:
+    display: Tier 1 — Business Critical
+    description: >
+      Important production services with meaningful business impact. Degraded
+      operation is tolerable briefly; sustained failure is not.
+    monitoring_profile: critical
+    alert_band: critical
+    support_model: 24x7
+
+    slo:
+      scope: domain                  # covered by the domain/platform SLO
+      required: true
+      objectives:
+        availability: 99.9
+        latency: 99.0
+        freshness: 99.0
+      burn_windows: [fast, slow]
+      error_budget_policy: >
+        Budget exhausted → reliability work prioritized in the next sprint;
+        change advisory review for high-risk deploys.
+
+    paging: p1_plus_confirmed_impact   # same rule; tier1 has no per-service SLO
+    incident_creation: [P1, P2]
+    escalation:
+      ack_minutes: 10
+      escalate_minutes: 20
+      chain: [primary_oncall, secondary_oncall, team_lead]
+    recovery_notification: true
+    renotify_interval_minutes: 60
+    sensitivity_multiplier: 1.0
+    require_composite_confirmation: true       # confirm saturation with impact
+    review_cadence: quarterly
+
+  tier2:
+    display: Tier 2 — Standard Production
+    description: >
+      Production services where limited degradation is tolerable. Internal
+      tools, reporting, back-office, non-customer-facing batch.
+    monitoring_profile: standard
+    alert_band: standard
+    support_model: business-hours
+
+    slo:
+      scope: domain
+      required: true
+      objectives:
+        availability: 99.5
+        latency: 98.0
+        freshness: 98.0
+      burn_windows: [slow]
+      error_budget_policy: >
+        Budget exhausted → tracked in the team's operational review; no freeze.
+
+    paging: none                               # never pages; ticket + Teams
+    incident_creation: [P1]                    # only a confirmed outage
+    escalation:
+      ack_minutes: 60
+      escalate_minutes: 240
+      chain: [team_channel, team_lead]
+    recovery_notification: true
+    renotify_interval_minutes: 120
+    sensitivity_multiplier: 1.2
+    require_composite_confirmation: true
+    review_cadence: quarterly
+
+  tier3:
+    display: Tier 3 — Development / Non-Critical
+    description: >
+      Development, experimentation, sandbox, decommissioning, and best-effort
+      workloads. Observed, never alerted on. Appears in the coverage report
+      with an explicit reason so "not monitored" is a decision, not a gap.
+    monitoring_profile: observe_only
+    alert_band: none
+    # `support_model` is a reserved Datadog tag key: 24x7 | business-hours |
+    # best-effort are the only accepted values. Discovered by validating every
+    # monitor against /api/v1/monitor/validate.
+    support_model: best-effort
+
+    slo:
+      scope: none
+      required: false
+      objectives: {}
+      burn_windows: []
+      error_budget_policy: "n/a"
+
+    paging: none
+    incident_creation: []
+    escalation:
+      ack_minutes: 0
+      escalate_minutes: 0
+      chain: []
+    recovery_notification: false
+    renotify_interval_minutes: 0
+    sensitivity_multiplier: 2.0
+    require_composite_confirmation: true
+    observe_only_reason: "tier3 non-critical workload (tier policy)"
+    review_cadence: annual
+
+# -----------------------------------------------------------------------------
+# BAND MAPPING
+# The alert_band tag is what monitor queries actually select on. Profiles that
+# behave identically for selection purposes collapse into the same band, which
+# is what keeps the monitor count bounded.
+# -----------------------------------------------------------------------------
+profile_to_band:
+  observe_only: none
+  baseline: baseline
+  standard: standard
+  critical: critical
+  regulated: critical      # regulated = critical + compliance overlay
+
+band_strictest_tier:
+  critical: tier0
+  standard: tier2
+  baseline: tier3

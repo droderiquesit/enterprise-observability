@@ -1,0 +1,185 @@
+# =============================================================================
+# ALERT PRIORITY MODEL — P1..P4
+#
+# Priority is a statement about the REQUIRED HUMAN RESPONSE, not about how bad
+# a metric looks. It is derived, never hand-picked:
+#
+#   priority = ceiling( matrix[impact_class][alert_band], env.priority_ceiling )
+#
+# where impact_class answers "what does this mean for the customer?" and
+# alert_band answers "how important is the thing it happened to?".
+#
+# Duration and scope are handled INSIDE the detection (evaluation window,
+# grouping, composite confirmation) rather than as a separate priority input —
+# a monitor that fires has already satisfied its duration contract.
+# =============================================================================
+version: 2
+
+priorities:
+  P1:
+    display: P1 — Major business impact
+    definition: >
+      Confirmed or highly probable major business outage. Customers cannot
+      complete a core function, or a mission-critical service is unavailable.
+    response: Immediate — page, 24x7, incident commander on the bridge.
+    ack_minutes: 5
+    escalate_minutes: 10
+    pages: true
+    creates_incident: true
+    datadog_incident_severity: "SEV-1"
+    servicenow_kind: incident
+    servicenow_urgency: "1"
+    teams: true
+    exec_visibility: true
+
+  P2:
+    display: P2 — Serious degradation
+    definition: >
+      Serious degradation of a critical or business-critical service requiring
+      rapid engineering response. Customers are affected but not fully blocked,
+      or error budget is burning fast enough to breach within the window.
+    response: Rapid engineering response. Pages ONLY on confirmed impact.
+    ack_minutes: 10
+    escalate_minutes: 20
+    pages: conditional
+    pages_condition: >
+      A P2 pages only when the impact is CONFIRMED, which means it comes from
+      an SLO burn-rate monitor or a composite monitor. A P2 raised by a single
+      symptom archetype (a deadlock, an OOMKill, a failed cron) creates an
+      incident, a ServiceNow record and a Teams notification — but it does not
+      wake anyone. This one rule is what takes the paging estate from ~96
+      patterns to ~37: symptoms inform, confirmed impact pages.
+    creates_incident: true
+    datadog_incident_severity: "SEV-2"
+    servicenow_kind: incident
+    servicenow_urgency: "2"
+    teams: true
+    exec_visibility: false
+
+  P3:
+    display: P3 — Actionable, not immediate
+    definition: >
+      A real, actionable problem that needs investigation within the working
+      day: a risk signal, a forecast breach, sustained non-customer-facing
+      degradation, or a staging/QA failure.
+    response: Next business day. Never pages.
+    ack_minutes: 240
+    escalate_minutes: 1440
+    pages: false
+    creates_incident: false
+    servicenow_kind: task
+    servicenow_urgency: "3"
+    servicenow_condition: "created when the condition is sustained past renotify"
+    teams: true
+    exec_visibility: false
+
+  P4:
+    display: P4 — Informational / preventative
+    definition: >
+      Context, hygiene, early warning. Goes to the event stream and a low-noise
+      channel. Nobody is expected to act on a single P4; they are inputs to
+      weekly review, dashboards and correlation.
+    response: No response expected. Reviewed in aggregate.
+    ack_minutes: 0
+    escalate_minutes: 0
+    pages: false
+    creates_incident: false
+    servicenow_kind: none
+    teams: true
+    teams_low_noise_channel: true
+    exec_visibility: false
+
+# -----------------------------------------------------------------------------
+# WHAT ACTUALLY PAGES
+#
+# Priority decides urgency. A SECOND, narrower rule decides paging, because
+# "how urgent is this?" and "must a human be woken up?" are different questions
+# and conflating them is the main cause of alert fatigue.
+#
+#   pages = production
+#           AND alert_band == critical
+#           AND ( priority == P1                       -- unambiguous outage
+#                 OR source in (slo_burn, composite) ) -- confirmed impact
+#
+# Everything else notifies, tickets, and waits for working hours.
+# -----------------------------------------------------------------------------
+paging_rule:
+  requires_env: prod
+  requires_band: critical
+  p1_always_pages: true
+  p2_pages_only_from: [slo_burn, composite]
+  rationale: >
+    An SLO burn-rate alert is a measurement of customer harm, and a composite
+    has already confirmed two independent conditions. A single degradation
+    symptom has not established either, so it is not worth a human's sleep.
+
+# -----------------------------------------------------------------------------
+# THE PRIORITY MATRIX
+# rows = impact_class (what it means), columns = alert_band (what it hit)
+# -----------------------------------------------------------------------------
+matrix:
+  customer_impact:                     # service is down / SLO burning fast
+    critical: P1
+    standard: P2
+    baseline: P3
+  degradation:                         # latency, errors, dependency failure
+    critical: P2
+    standard: P3
+    baseline: P4
+  risk:                                # saturation, forecast, capacity, expiry
+    critical: P3
+    standard: P3
+    baseline: P4
+  hygiene:                             # telemetry gaps, drift, config, cost
+    critical: P4
+    standard: P4
+    baseline: P4
+
+# -----------------------------------------------------------------------------
+# IMPACT CLASS DEFINITIONS — how an archetype author chooses one.
+# -----------------------------------------------------------------------------
+impact_classes:
+  customer_impact:
+    means: A customer-visible function is failing or unavailable RIGHT NOW.
+    examples: [endpoint unavailable, service down, fast error-budget burn, data unavailable]
+    test: "If this is real, is a customer already experiencing failure?"
+  degradation:
+    means: The service still works but measurably worse; failure is probable or partial.
+    examples: [latency regression, elevated error rate, dependency failure, deploy regression]
+    test: "Is the experience worse, or is a subset of traffic failing?"
+  risk:
+    means: Nothing is broken yet; a boundary will be crossed if nobody acts.
+    examples: [disk exhaustion forecast, quota saturation, cert expiry, backlog growth]
+    test: "Is there time to act before impact?"
+  hygiene:
+    means: The monitoring or configuration estate itself is degraded.
+    examples: [telemetry loss, agent gap, untagged resource, cost anomaly, drift]
+    test: "Does this affect our ability to observe rather than the service itself?"
+
+# -----------------------------------------------------------------------------
+# PRIORITY OVERRIDE RULES (the only sanctioned upward adjustments)
+# -----------------------------------------------------------------------------
+uplift_rules:
+  - id: multi-service-scope
+    when: "a single monitor group set exceeds 25% of the services in its pack"
+    effect: "correlation engine raises the parent group by one priority (max P1)"
+    implemented_in: platform/events/correlation-rules.yaml
+  - id: composite-confirmed
+    when: "a composite monitor confirms symptom + impact together"
+    effect: "composite carries its own (higher) priority; members stay informational"
+    implemented_in: platform/policy/composites.yaml
+  - id: sustained-p3
+    when: "a P3 remains in alert past 2 renotify intervals"
+    effect: "ServiceNow task is auto-created and the team channel is re-notified"
+    implemented_in: modules/monitor_factory (renotify) + workflow auto-ticket-sustained
+
+downgrade_rules:
+  - id: environment-ceiling
+    when: "always"
+    effect: "priority is clamped to the environment's priority_ceiling"
+  - id: maintenance-window
+    when: "an active downtime schedule matches the monitor tags"
+    effect: "no notification at all; event is tagged maintenance:true"
+  - id: known-dependency-outage
+    when: "a parent correlation group is already open for the failure domain"
+    effect: "child alerts are suppressed and attached to the parent"

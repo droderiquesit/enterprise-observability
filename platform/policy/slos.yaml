@@ -1,152 +1,317 @@
-# Platform SLO catalog. `datadog_id` present ⇒ the SLO already exists in the
-# org (survivor of the previous platform, keyed by its `slo_id` tag) and is
-# ADOPTED: burn-rate monitors attach to it; Terraform does not recreate it
-# until it is imported (migration plan step M3). `datadog_id` absent ⇒ the SLO
-# is created by the `slo_with_burn` module.
+# =============================================================================
+# SLO CATALOG
 #
-# Monitor-type SLOs whose member monitors were deleted are re-pointed at the
-# rebuilt archetype monitors via `member_archetypes` (migration step M4).
-version: 1
+# TWO SCOPES, and the distinction is what keeps SLO count sane at 100k services:
+#
+#   scope: domain    ONE SLO per domain, computed across every service in that
+#                    domain (grouped SLI query). Covers tier1/tier2 services.
+#                    ~20 SLOs total for the whole enterprise.
+#
+#   scope: service   Per-service SLO, generated ONLY for tier0 services from
+#                    the service registry. A tier0 service deserves its own
+#                    error budget; a tier2 internal tool does not.
+#
+# Burn-rate monitors are generated from `burn_alerts` — they are the PRIMARY
+# customer-impact paging signal in this framework. Everything else supports
+# diagnosis.
+# =============================================================================
+version: 2
+
+# Objective defaults by tier come from tiers.yaml; a catalog entry may override.
 slos:
+
+  # --- application -----------------------------------------------------------
   slo-app-availability:
     name: Application availability
-    type: metric
+    scope: domain
     domain: application
     service: application-platform
     team: sre
+    type: metric
     target: 99.9
     timeframe: 30d
     query:
-      numerator: "sum:trace.http.request.hits{env:prod} by {service}.as_count() - sum:trace.http.request.errors{env:prod} by {service}.as_count()"
-      denominator: "sum:trace.http.request.hits{env:prod} by {service}.as_count()"
-    burn_alerts: [fast, slow, warn]
+      numerator: "sum:trace.span.hits{env:prod,alert_band:critical}.as_count() - sum:trace.span.errors{env:prod,alert_band:critical}.as_count()"
+      denominator: "sum:trace.span.hits{env:prod,alert_band:critical}.as_count()"
+    burn_alerts: [fast, medium, slow]
 
   slo-app-latency:
     name: Application latency objective
-    datadog_id: e8f6dde773ef530983a3536cbf04a9b6
-    type: time_slice
+    scope: domain
     domain: application
     service: application-platform
-    team: application-development
-    target: 99.0
-    timeframe: 30d
-    burn_alerts: [fast, slow]
-
-  slo-cloud-azure-platform:
-    name: Azure platform reliability
-    datadog_id: ba053cdd64795cb894515700de432d2a
-    type: monitor
-    domain: cloud
-    service: azure-landing-zone
-    team: cloud-engineering
-    target: 99.9
-    timeframe: 30d
-    member_archetypes: [k8s-workload-unavailable, cloud-api-throttling]   # replaces deleted 311841687, 311841681
-    burn_alerts: [fast, slow]
-
-  slo-cloud-async-freshness:
-    name: Async processing backlog containment
-    datadog_id: b5e33ab767305142881e17aaedffe3e8
-    type: time_slice
-    domain: cloud
-    service: messaging-platform
-    team: cloud-engineering
-    target: 99.0
-    timeframe: 30d
-    burn_alerts: [fast, slow]
-
-  slo-infra-database-availability:
-    name: Database platform availability
-    datadog_id: 55422a0e08a25c11bf996e7dfd31f4de
-    type: monitor
-    domain: data
-    service: database-platform
-    team: infrastructure-engineering
-    target: 99.9
-    timeframe: 30d
-    member_archetypes: [db-connection-saturation, db-replication-lag]      # replaces 6 deleted monitors
-    burn_alerts: [fast, slow]
-
-  slo-infra-identity-availability:
-    name: Identity platform availability
-    datadog_id: 7c890cc570435b83a75436bf2d5af11f
-    type: monitor
-    domain: infrastructure
-    service: identity-platform
-    team: infrastructure-engineering
-    target: 99.95
-    timeframe: 30d
-    member_archetypes: [host-unavailable]                                  # replaces deleted 311841304
-    burn_alerts: [fast]
-
-  slo-infra-storage-availability:
-    name: Storage platform availability
-    datadog_id: 9ecdb905acf755deb34b31a042eb7bd6
-    type: monitor
-    domain: infrastructure
-    service: storage-platform
-    team: infrastructure-engineering
-    target: 99.95
-    timeframe: 30d
-    member_archetypes: [storage-latency-anomaly]                           # replaces deleted 311841340
-    burn_alerts: [fast]
-
-  slo-infra-backup-success:
-    name: Backup success rate
-    datadog_id: d7ab6cf043f05e8a99569b3a4955fde4
+    team: sre
     type: metric
-    domain: infrastructure
-    service: backup-platform
-    team: infrastructure-engineering
-    target: 99.0
-    timeframe: 30d
-    burn_alerts: [warn]
-    telemetry_dependency: "acme.backup.job.* custom metrics (currently silent — coverage gap DG-1)"
-
-  slo-infra-certificate-renewal:
-    name: Certificate renewal timeliness
-    datadog_id: b153cef3cf2452aaa2bc3376030452ec
-    type: metric
-    domain: infrastructure
-    service: identity-platform
-    team: infrastructure-engineering
-    target: 99.5
-    timeframe: 90d
-    burn_alerts: [warn]
-    telemetry_dependency: "acme.identity.certs_* custom metrics (currently silent — coverage gap DG-2)"
-
-  slo-data-pipeline-freshness:
-    name: Data pipeline freshness
-    type: metric
-    domain: data
-    service: data-pipelines
-    team: data-engineering
     target: 99.0
     timeframe: 30d
     query:
-      numerator: "sum:acme.data.pipeline.runs_fresh{env:prod}.as_count()"
-      denominator: "sum:acme.data.pipeline.runs_total{env:prod}.as_count()"
-    burn_alerts: [slow, warn]
+      numerator: "sum:trace.span.hits{env:prod,alert_band:critical,latency_bucket:fast}.as_count()"
+      denominator: "sum:trace.span.hits{env:prod,alert_band:critical}.as_count()"
+    burn_alerts: [fast, slow]
 
-  slo-sec-log-freshness:
-    name: Security log freshness
-    datadog_id: bd9f9dc113b951d3a51663debf9ccfc0
-    type: time_slice
+  slo-web-availability:
+    name: Web frontend availability
+    scope: domain
+    domain: application
+    service: web-frontends
+    team: sre
+    type: monitor
+    target: 99.9
+    timeframe: 30d
+    member_archetypes: [web-synthetic-availability, web-origin-5xx-anomaly]
+    burn_alerts: [fast, slow]
+
+  slo-worker-throughput:
+    name: Asynchronous processing reliability
+    scope: domain
+    domain: application
+    service: worker-platform
+    team: sre
+    type: monitor
+    target: 99.5
+    timeframe: 30d
+    member_archetypes: [worker-stalled, worker-error-anomaly]
+    burn_alerts: [slow]
+
+  # --- api -------------------------------------------------------------------
+  slo-api-availability:
+    name: API availability
+    scope: domain
+    domain: api
+    service: api-services
+    team: application-development
+    type: metric
+    target: 99.95
+    timeframe: 30d
+    query:
+      numerator: "sum:trace.http.request.hits{env:prod,alert_band:critical}.as_count() - sum:trace.http.request.errors{env:prod,alert_band:critical,http.status_class:5xx}.as_count()"
+      denominator: "sum:trace.http.request.hits{env:prod,alert_band:critical}.as_count()"
+    burn_alerts: [fast, medium, slow]
+
+  slo-api-latency:
+    name: API latency objective
+    scope: domain
+    domain: api
+    service: api-services
+    team: application-development
+    type: metric
+    target: 99.5
+    timeframe: 30d
+    query:
+      numerator: "sum:trace.http.request.hits{env:prod,alert_band:critical,latency_bucket:fast}.as_count()"
+      denominator: "sum:trace.http.request.hits{env:prod,alert_band:critical}.as_count()"
+    burn_alerts: [fast, slow]
+
+  # --- kubernetes ------------------------------------------------------------
+  slo-k8s-workload-availability:
+    name: Kubernetes workload availability
+    scope: domain
+    domain: kubernetes
+    service: kubernetes-platform
+    team: cloud-engineering
+    type: monitor
+    target: 99.9
+    timeframe: 30d
+    member_archetypes: [k8s-deployment-unavailable, k8s-pod-crashloop, k8s-node-not-ready]
+    burn_alerts: [fast, slow]
+
+  # --- infrastructure --------------------------------------------------------
+  slo-infra-compute-availability:
+    name: Compute platform availability
+    scope: domain
+    domain: infrastructure
+    service: compute-platform
+    team: infrastructure-engineering
+    type: monitor
+    target: 99.9
+    timeframe: 30d
+    member_archetypes: [host-unavailable, host-filesystem-readonly]
+    burn_alerts: [fast, slow]
+
+  slo-infra-backup-success:
+    name: Backup success rate
+    scope: domain
+    domain: infrastructure
+    service: backup-platform
+    team: infrastructure-engineering
+    type: metric
+    target: 99.0
+    timeframe: 30d
+    query:
+      numerator: "sum:acme.backup.jobs{env:prod,status:success}.as_count()"
+      denominator: "sum:acme.backup.jobs{env:prod}.as_count()"
+    burn_alerts: [slow]
+    telemetry_dependency: "acme.backup.jobs — custom metric, producer must be deployed"
+
+  # --- vmware ----------------------------------------------------------------
+  slo-vmware-cluster-availability:
+    name: Virtualization platform availability
+    scope: domain
+    domain: vmware
+    service: virtualization-platform
+    team: infrastructure-engineering
+    type: monitor
+    target: 99.9
+    timeframe: 30d
+    member_archetypes: [vmware-host-disconnected, vmware-cluster-ha-degraded]
+    burn_alerts: [slow]
+
+  # --- cloud -----------------------------------------------------------------
+  slo-cloud-platform-availability:
+    name: Azure platform reliability
+    scope: domain
+    domain: cloud
+    service: azure-landing-zone
+    team: cloud-engineering
+    type: monitor
+    target: 99.9
+    timeframe: 30d
+    member_archetypes:
+      [azure-appservice-unavailable, azure-loadbalancer-probe-failure,
+       azure-appgateway-backend-unhealthy, azure-keyvault-availability]
+    burn_alerts: [fast, slow]
+
+  # --- database --------------------------------------------------------------
+  slo-database-availability:
+    name: Database platform availability
+    scope: domain
+    domain: database
+    service: database-platform
+    team: data-engineering
+    type: monitor
+    target: 99.95
+    timeframe: 30d
+    member_archetypes: [db-availability, db-replication-lag, azuresql-connection-failures]
+    burn_alerts: [fast, medium, slow]
+
+  slo-database-latency:
+    name: Database query latency objective
+    scope: domain
+    domain: database
+    service: database-platform
+    team: data-engineering
+    type: metric
+    target: 99.0
+    timeframe: 30d
+    query:
+      numerator: "sum:postgresql.queries.count{env:prod,latency_bucket:fast}.as_count()"
+      denominator: "sum:postgresql.queries.count{env:prod}.as_count()"
+    burn_alerts: [slow]
+
+  # --- data ------------------------------------------------------------------
+  slo-data-freshness:
+    name: Data product freshness
+    scope: domain
+    domain: data
+    service: data-platform
+    team: data-engineering
+    type: monitor
+    target: 99.0
+    timeframe: 30d
+    member_archetypes: [pipeline-output-stale, pipeline-volume-anomaly, data-quality-check-failure]
+    burn_alerts: [fast, slow]
+
+  # --- messaging -------------------------------------------------------------
+  slo-messaging-delivery:
+    name: Message delivery reliability
+    scope: domain
+    domain: messaging
+    service: messaging-platform
+    team: cloud-engineering
+    type: monitor
+    target: 99.9
+    timeframe: 30d
+    member_archetypes: [consumer-absent, messaging-publish-failure, broker-namespace-throttling]
+    burn_alerts: [fast, slow]
+
+  # --- network ---------------------------------------------------------------
+  slo-network-availability:
+    name: Network availability
+    scope: domain
+    domain: network
+    service: network-platform
+    team: infrastructure-engineering
+    type: monitor
+    target: 99.95
+    timeframe: 30d
+    member_archetypes: [network-device-unreachable, dns-resolution-failure, vpn-tunnel-down]
+    burn_alerts: [fast, medium, slow]
+
+  # --- security --------------------------------------------------------------
+  slo-security-telemetry:
+    name: Security telemetry continuity
+    scope: domain
     domain: security
     service: security-telemetry
     team: security
-    target: 99.9
-    timeframe: 30d
-    burn_alerts: [fast, slow]
-
-  slo-sec-notification-delivery:
-    name: Security notification delivery
-    datadog_id: e07de62a5d5c5aa8b7dec6ef99921114
-    type: metric
-    domain: security
-    service: security-response
-    team: security
+    type: monitor
     target: 99.5
     timeframe: 30d
-    burn_alerts: [fast]
-    telemetry_dependency: "acme.security.notifications_* custom metrics (currently silent — coverage gap DG-3)"
+    member_archetypes: [security-log-source-missing, audit-log-continuity-gap, security-control-failure]
+    burn_alerts: [fast, slow]
+
+  # --- saas ------------------------------------------------------------------
+  slo-external-dependency:
+    name: External dependency availability
+    scope: domain
+    domain: saas
+    service: external-dependencies
+    team: sre
+    type: monitor
+    target: 99.5
+    timeframe: 30d
+    member_archetypes: [synthetic-endpoint-down, saas-availability]
+    burn_alerts: [slow]
+
+  # --- integration -----------------------------------------------------------
+  slo-integration-delivery:
+    name: Integration delivery reliability
+    scope: domain
+    domain: integration
+    service: integration-platform
+    team: application-development
+    type: monitor
+    target: 99.5
+    timeframe: 30d
+    member_archetypes: [schedule-missed-run, integration-flow-failure, partner-file-delivery-missed]
+    burn_alerts: [fast, slow]
+
+  slo-batch-completion:
+    name: Batch completion reliability
+    scope: domain
+    domain: integration
+    service: batch-platform
+    team: application-development
+    type: monitor
+    target: 99.0
+    timeframe: 30d
+    member_archetypes: [batch-job-failure, batch-output-freshness]
+    burn_alerts: [slow]
+
+  # --- platform --------------------------------------------------------------
+  slo-platform-services:
+    name: Shared platform services availability
+    scope: domain
+    domain: platform
+    service: platform-services
+    team: observability-platform
+    type: monitor
+    target: 99.9
+    timeframe: 30d
+    member_archetypes: [platform-service-unavailable, ingest-pipeline-degraded]
+    burn_alerts: [fast, slow]
+
+# -----------------------------------------------------------------------------
+# TIER0 PER-SERVICE SLOs
+# Generated from platform/services/*.yaml where tier == tier0. This is the ONLY
+# place per-service objects are created, and it is bounded by the number of
+# mission-critical services (tens), not by the size of the estate.
+# -----------------------------------------------------------------------------
+tier0_slo_template:
+  type: metric
+  timeframe: 30d
+  target_from_tier: true          # tiers.yaml → tier0.slo.objectives.availability
+  burn_alerts: [fast, medium, slow]
+  query:
+    numerator: "sum:trace.http.request.hits{env:prod,service:__SERVICE__}.as_count() - sum:trace.http.request.errors{env:prod,service:__SERVICE__,http.status_class:5xx}.as_count()"
+    denominator: "sum:trace.http.request.hits{env:prod,service:__SERVICE__}.as_count()"

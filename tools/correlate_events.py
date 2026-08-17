@@ -1,11 +1,21 @@
 #!/usr/bin/env python3
-"""Reference implementation of platform/events/correlation-rules.yaml.
+"""EVENT CORRELATION — executable reference implementation.
 
-Purpose:
-  1. Executable spec: CI proves that a storm of related monitor alerts
-     collapses into ONE actionable incident (see tests/test_correlation.py).
-  2. Operator tool: replay real alert events (JSON) through the ruleset to
-     debug grouping behavior before changing the in-app configuration.
+Two jobs:
+
+  1. EXECUTABLE SPECIFICATION. CI proves, on every pull request, that a storm of
+     related alerts collapses into ONE actionable incident with the right parent
+     and the right context attached. "We correlate alerts" is a claim; this is
+     the test that makes it a fact.
+
+  2. OPERATOR TOOL. Replay real alert events through the ruleset to debug
+     grouping behaviour before changing the in-app configuration.
+
+The deterministic keys (`correlation_key`, `dedup_key`) are stamped on every
+monitor by the factory, so native Datadog Event Management aggregation works
+with zero custom rules. The topology, vendor-outage, scope-uplift and
+maintenance rules in platform/events/correlation-rules.yaml are the intended
+policy; this module is their reference behaviour.
 """
 from __future__ import annotations
 
@@ -15,6 +25,8 @@ from collections import defaultdict
 import obs_common as oc
 
 RULES = None
+PRIORITY_RANK = {"P1": 1, "P2": 2, "P3": 3, "P4": 4}
+RANK_PRIORITY = {v: k for k, v in PRIORITY_RANK.items()}
 
 
 def load_rules() -> dict:
@@ -22,23 +34,33 @@ def load_rules() -> dict:
     if RULES is None:
         import yaml
         RULES = yaml.safe_load(
-            (oc.REPO_ROOT / "platform" / "events" / "correlation-rules.yaml").read_text()
+            (oc.PLATFORM_DIR / "events" / "correlation-rules.yaml").read_text()
         )
     return RULES
 
 
-SEV_ORDER = {"sev1": 0, "sev2": 1, "sev3": 2, "informational": 3}
+def _rule(rules: dict, rid: str) -> dict:
+    for r in rules["rules"]:
+        if r["id"] == rid:
+            return r
+    raise KeyError(rid)
 
 
-def correlate(events: list[dict]) -> list[dict]:
-    """events: [{ts, correlation_key, dedup_key, severity, archetype_class,
-    domain, env, region, service, kind('alert'|'recovery'|'change'), title}]
-    Returns correlation groups with parent, children, context, pages count.
+def correlate(events: list[dict], pack_service_counts: dict | None = None) -> list[dict]:
+    """Correlate a list of alert/recovery/change events into incident groups.
+
+    event = {ts, correlation_key, dedup_key, priority, signal, domain, env,
+             region, service, kind: alert|recovery|change, title,
+             maintenance: bool}
     """
     rules = load_rules()
-    ranking = [r["archetype_class"] for r in rules["root_cause_ranking"]]
+    ranking = [r["signal"] for r in rules["root_cause_ranking"]]
+    pack_service_counts = pack_service_counts or {}
 
-    # 1. Dedup identical dedup_keys inside the dedup window.
+    # --- 0. maintenance suppression -----------------------------------------
+    events = [e for e in events if not e.get("maintenance")]
+
+    # --- 1. deduplicate identical dedup_keys inside the window --------------
     seen: dict[str, float] = {}
     deduped = []
     for e in sorted(events, key=lambda x: x["ts"]):
@@ -49,38 +71,40 @@ def correlate(events: list[dict]) -> list[dict]:
             seen[e["dedup_key"]] = e["ts"]
         deduped.append(e)
 
-    # 2. Group alerts by correlation_key within the window; attach change
-    #    events as context on (env, service).
+    # --- 2. group alerts by correlation_key; attach change events as context -
     groups: dict[str, dict] = {}
     recovered: set[str] = set()
+    change_events = [e for e in deduped if e.get("kind") == "change"]
+
     for e in deduped:
         if e.get("kind") == "change":
-            for g in groups.values():
-                if g["env"] == e["env"] and abs(e["ts"] - g["first_ts"]) <= rules["window_seconds"]:
-                    g["context"].append(e)
             continue
         if e.get("kind") == "recovery":
             recovered.add(e["dedup_key"])
             continue
         key = e["correlation_key"]
-        g = groups.setdefault(key, {
-            "correlation_key": key, "env": e["env"], "region": e.get("region"),
-            "first_ts": e["ts"], "members": [], "context": [], "closed": False,
-        })
-        if e["ts"] - g["first_ts"] <= rules["window_seconds"]:
-            g["members"].append(e)
-        else:
-            # outside window → its own group keyed by time bucket
-            groups[f"{key}#{int(e['ts'])}"] = {
+        g = groups.get(key)
+        if g is None or e["ts"] - g["first_ts"] > rules["window_seconds"]:
+            gkey = key if g is None else f"{key}#{int(e['ts'])}"
+            groups[gkey] = {
                 "correlation_key": key, "env": e["env"], "region": e.get("region"),
                 "first_ts": e["ts"], "members": [e], "context": [], "closed": False,
             }
+        else:
+            g["members"].append(e)
 
-    # 3. Parent selection by root-cause ranking then severity.
+    # change events join every group in the same env inside the lookback window
+    lookback = _rule(rules, "attach-change-context")["lookback_seconds"]
+    for c in change_events:
+        for g in groups.values():
+            if g["env"] == c["env"] and abs(c["ts"] - g["first_ts"]) <= lookback:
+                g["context"].append(c)
+
+    # --- 3. parent selection: root-cause ranking, then priority, then time ---
     def rank(e):
-        cls = e.get("archetype_class", "telemetry_health")
-        return (ranking.index(cls) if cls in ranking else len(ranking),
-                SEV_ORDER.get(e.get("severity"), 9), e["ts"])
+        sig = e.get("signal", "telemetry_health")
+        return (ranking.index(sig) if sig in ranking else len(ranking),
+                PRIORITY_RANK.get(e.get("priority"), 9), e["ts"])
 
     result = []
     for g in groups.values():
@@ -88,47 +112,91 @@ def correlate(events: list[dict]) -> list[dict]:
             continue
         members = sorted(g["members"], key=rank)
         parent, children = members[0], members[1:]
-        if rules["recovery"]["close_group_on_parent_recovery"] \
-                and parent["dedup_key"] in recovered \
-                and not any(c["dedup_key"] not in recovered for c in children):
+
+        if (rules["recovery"]["close_group_on_parent_recovery"]
+                and parent["dedup_key"] in recovered
+                and (not rules["recovery"]["require_all_children_recovered"]
+                     or all(c["dedup_key"] in recovered for c in children))):
             g["closed"] = True
 
-        sev = parent.get("severity", "sev3")
-        inc = load_rules()["incident_creation"].get(sev, {"create_incident": False})
         result.append({
             "correlation_key": g["correlation_key"],
             "parent": parent,
             "children": children,
             "context": g["context"],
             "closed": g["closed"],
-            "creates_incident": bool(inc.get("create_incident")),
-            "pages": 0 if g["closed"] else (1 if sev in ("sev1", "sev2") else 0),
+            "priority": parent.get("priority", "P3"),
             "suppressed": len(children),
         })
 
-    # 4. Topology rule: platform cause suppresses application symptom groups
-    #    in the same env+region → merge them as children of the cause group.
-    topo = next(r for r in load_rules()["rules"] if r["id"] == "platform-cause-suppresses-app-symptom")
-    causes = [g for g in result if g["parent"].get("domain") in topo["parent_domains"]]
-    merged = []
+    # --- 4. topology: platform cause adopts application symptoms ------------
+    topo = _rule(rules, "platform-cause-suppresses-app-symptom")
+    vendor = _rule(rules, "vendor-outage-suppresses-integration-symptoms")
+
+    def _absorb(parents_pred, child_pred, join_region: bool):
+        nonlocal result
+        causes = [g for g in result if parents_pred(g)]
+        merged = []
+        for g in result:
+            if child_pred(g) and g not in causes:
+                cause = next(
+                    (c for c in causes
+                     if c["parent"]["env"] == g["parent"]["env"]
+                     and (not join_region or c["parent"].get("region") == g["parent"].get("region"))
+                     and abs(c["parent"]["ts"] - g["parent"]["ts"]) <= rules["window_seconds"]),
+                    None)
+                if cause:
+                    cause["children"].extend([g["parent"], *g["children"]])
+                    cause["context"].extend(g["context"])
+                    cause["suppressed"] += 1 + len(g["children"])
+                    continue
+            merged.append(g)
+        result = merged
+
+    _absorb(lambda g: g["parent"].get("domain") in vendor["parent_domains"]
+            if "parent_domains" in vendor
+            else g["parent"].get("archetype") in vendor["parent_archetypes"],
+            lambda g: g["parent"].get("domain") in vendor["child_domains"],
+            join_region=False)
+
+    _absorb(lambda g: g["parent"].get("domain") in topo["parent_domains"],
+            lambda g: g["parent"].get("domain") in topo["child_domains"],
+            join_region=True)
+
+    # --- 5. scope uplift: breadth is business impact -------------------------
+    uplift = _rule(rules, "scope-uplift")
     for g in result:
-        if g["parent"].get("domain") in topo["child_domains"]:
-            cause = next((c for c in causes
-                          if c["parent"]["env"] == g["parent"]["env"]
-                          and c["parent"].get("region") == g["parent"].get("region")
-                          and abs(c["parent"]["ts"] - g["parent"]["ts"]) <= load_rules()["window_seconds"]), None)
-            if cause:
-                cause["children"].extend([g["parent"], *g["children"]])
-                cause["suppressed"] += 1 + len(g["children"])
-                continue
-        merged.append(g)
-    return merged
+        pack = g["parent"].get("pack")
+        total = pack_service_counts.get(pack)
+        if total:
+            distinct = len({c.get("service") for c in g["children"] if c.get("service")}
+                           | {g["parent"].get("service")})
+            if distinct / total > 0.25:
+                new_rank = max(1, PRIORITY_RANK[g["priority"]] - 1)
+                g["priority"] = RANK_PRIORITY[new_rank]
+                g["uplifted"] = True
+
+    # --- 6. final incident/paging decision -----------------------------------
+    for g in result:
+        inc = rules["incident_creation"].get(g["priority"], {"create_incident": False})
+        g["creates_incident"] = bool(inc.get("create_incident")) and not g["closed"]
+        # The correlation layer pages once per GROUP, never per member.
+        g["pages"] = 0 if g["closed"] else (1 if g["priority"] in ("P1", "P2") else 0)
+
+    return result
 
 
 if __name__ == "__main__":
     import sys
     events = json.load(open(sys.argv[1]))
     for g in correlate(events):
-        print(json.dumps({k: (v if k not in ("parent",) else v["title"])
-                          for k, v in g.items() if k != "children"} |
-                         {"children": [c["title"] for c in g["children"]]}, indent=2))
+        print(json.dumps({
+            "correlation_key": g["correlation_key"],
+            "priority": g["priority"],
+            "parent": g["parent"]["title"],
+            "children": [c["title"] for c in g["children"]],
+            "context": [c["title"] for c in g["context"]],
+            "pages": g["pages"],
+            "creates_incident": g["creates_incident"],
+            "closed": g["closed"],
+        }, indent=2))

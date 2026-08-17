@@ -1,0 +1,228 @@
+# =============================================================================
+# LAYER 2 — SERVICE / RESOURCE ARCHETYPE
+#
+# A SERVICE archetype answers "what kind of thing is this?" and selects the
+# monitor PACKS that apply to it. This is the single choice a team makes at
+# onboarding (tag: service_archetype), and it is what makes zero-touch
+# onboarding possible: tag the service, get the right monitors.
+#
+# Monitors select resources by tag, so a pack is instantiated ONCE per
+# (env × band) and covers every service carrying the archetype tag — a new
+# service joins an existing monitor as a new GROUP, creating zero new objects.
+# =============================================================================
+version: 2
+
+service_archetypes:
+
+  api:
+    display: API Service
+    domain: api
+    description: Synchronous HTTP/gRPC service with external or internal consumers.
+    packs: [api-core, app-runtime, dependency, deployment]
+    required_telemetry: [apm_traces, http_metrics]
+    default_slis: [availability, latency, error_rate]
+    group_by: [service]
+    example: payments-api, identity-api, partner-gateway
+
+  web:
+    display: Web / Frontend
+    domain: application
+    description: Browser-delivered application or SSR frontend.
+    packs: [web-core, app-runtime, dependency, deployment, synthetic-endpoint]
+    required_telemetry: [rum_or_synthetics, apm_traces]
+    default_slis: [availability, latency, error_rate]
+    group_by: [service]
+    example: checkout-web, customer-portal
+
+  worker:
+    display: Background Worker
+    domain: application
+    description: Long-running asynchronous processor without inbound HTTP.
+    packs: [worker-core, app-runtime, dependency]
+    required_telemetry: [apm_traces, custom_metrics]
+    default_slis: [throughput, error_rate, saturation]
+    group_by: [service]
+    example: notification-worker, indexing-worker
+
+  event_consumer:
+    display: Event / Queue Consumer
+    domain: messaging
+    description: Consumes from a queue, topic or stream.
+    packs: [consumer-core, worker-core, app-runtime, messaging-client]
+    required_telemetry: [consumer_lag_metrics, apm_traces]
+    default_slis: [lag, throughput, error_rate]
+    group_by: [service]
+    example: order-events-consumer, cdc-consumer
+
+  batch_job:
+    display: Batch Workload
+    domain: integration
+    description: Bounded compute run producing a dataset or file, usually nightly.
+    packs: [batch-core, dependency]
+    required_telemetry: [job_events_or_metrics]
+    default_slis: [completion, duration, freshness]
+    group_by: [service, job_name]
+    example: nightly-settlement, statement-generation
+
+  scheduled_job:
+    display: Scheduled Job / Cron
+    domain: integration
+    description: Time-triggered task where NOT running is the primary failure.
+    packs: [schedule-core]
+    required_telemetry: [job_events_or_heartbeat]
+    default_slis: [schedule_adherence, completion]
+    group_by: [service, job_name]
+    example: cert-rotation-cron, cleanup-cron
+
+  integration_flow:
+    display: Integration Flow
+    domain: integration
+    description: Mapping/transformation flow on an integration platform.
+    packs: [integration-core, dependency]
+    required_telemetry: [flow_metrics]
+    default_slis: [delivery, error_rate, latency]
+    group_by: [service, flow_name]
+    example: erp-to-crm-sync, edi-inbound
+
+  saas_dependency:
+    display: SaaS Dependency
+    domain: saas
+    description: Third-party SaaS the business depends on but does not operate.
+    packs: [external-dependency]
+    required_telemetry: [synthetics_or_integration_metrics]
+    default_slis: [availability, latency]
+    group_by: [service]
+    example: salesforce, workday, stripe
+
+  external_endpoint:
+    display: External Endpoint
+    domain: saas
+    description: URL/host monitored from outside the perimeter.
+    packs: [synthetic-endpoint, certificate]
+    required_telemetry: [synthetics]
+    default_slis: [availability, latency, certificate_validity]
+    group_by: [check_id]
+    example: www.acme.example, api.acme.example
+
+  platform_service:
+    display: Shared Platform Service
+    domain: platform
+    description: Internal capability many teams depend on (auth, config, CI).
+    packs: [api-core, app-runtime, dependency, deployment]
+    required_telemetry: [apm_traces]
+    default_slis: [availability, latency, error_rate]
+    group_by: [service]
+    example: feature-flags, secrets-broker, artifact-registry
+
+  datastore:
+    display: Datastore
+    domain: database
+    description: Managed or self-hosted database / cache / search cluster.
+    packs: [datastore-core]
+    required_telemetry: [dbm_or_integration_metrics]
+    default_slis: [availability, latency, replication]
+    group_by: [db_instance]
+    example: orders-sql, sessions-redis
+
+  infrastructure_resource:
+    display: Infrastructure Resource
+    domain: infrastructure
+    description: Host, VM, cluster node, network device or storage volume.
+    packs: [host-core]
+    required_telemetry: [agent_metrics]
+    default_slis: [availability, saturation]
+    group_by: [host]
+    example: vm-app-eastus2-014, esxi-dc1-07
+
+# -----------------------------------------------------------------------------
+# PACK DEFINITIONS
+# A pack is a named list of monitor archetypes. Packs exist so that a service
+# archetype is a short, readable declaration instead of 20 archetype ids.
+# CI verifies every archetype named here exists in platform/policy/archetypes/.
+# -----------------------------------------------------------------------------
+packs:
+
+  api-core:
+    description: The API golden signals.
+    archetypes:
+      [api-availability, api-latency-p99, api-5xx-anomaly, api-4xx-anomaly,
+       api-traffic-anomaly, api-dependency-latency, api-rate-limit-saturation]
+
+  web-core:
+    description: Frontend delivery and browser experience.
+    archetypes:
+      [web-synthetic-availability, web-page-load-degradation,
+       web-js-error-anomaly, web-origin-5xx-anomaly]
+
+  worker-core:
+    description: Asynchronous processing health.
+    archetypes:
+      [worker-throughput-anomaly, worker-processing-latency,
+       worker-error-anomaly, worker-stalled]
+
+  consumer-core:
+    description: Queue/stream consumption health.
+    archetypes:
+      [consumer-lag-forecast, consumer-absent, consumer-dlq-growth,
+       consumer-retry-storm]
+
+  app-runtime:
+    description: Runtime health shared by every application archetype.
+    archetypes:
+      [app-crash-anomaly, app-saturation-threadpool, app-telemetry-loss,
+       app-memory-leak-forecast]
+
+  dependency:
+    description: Outbound dependency health.
+    archetypes: [dependency-error-anomaly, dependency-latency-degradation]
+
+  deployment:
+    description: Change-related regression detection.
+    archetypes: [deployment-regression, deployment-error-spike]
+
+  batch-core:
+    description: Batch completion and duration.
+    archetypes:
+      [batch-job-failure, batch-duration-anomaly, batch-output-freshness,
+       batch-backlog-growth]
+
+  schedule-core:
+    description: Did the scheduled thing actually run?
+    archetypes: [schedule-missed-run, schedule-job-failure, schedule-overrun]
+
+  integration-core:
+    description: Integration flow delivery.
+    archetypes:
+      [integration-flow-failure, integration-transformation-errors,
+       integration-delivery-latency]
+
+  messaging-client:
+    description: Client-side messaging health.
+    archetypes: [messaging-publish-failure, messaging-client-disconnect]
+
+  external-dependency:
+    description: Third-party SaaS health from our point of view.
+    archetypes:
+      [saas-availability, saas-latency-degradation, saas-error-anomaly]
+
+  synthetic-endpoint:
+    description: Outside-in endpoint checks.
+    archetypes: [synthetic-endpoint-down, synthetic-latency-degradation]
+
+  certificate:
+    description: TLS lifecycle.
+    archetypes: [certificate-expiry]
+
+  datastore-core:
+    description: Database instance health.
+    archetypes:
+      [db-availability, db-query-latency-anomaly, db-connection-saturation,
+       db-replication-lag, db-storage-forecast, db-deadlock-anomaly,
+       db-backup-age]
+
+  host-core:
+    description: Host / VM health.
+    archetypes:
+      [host-unavailable, host-cpu-baseline-deviation, host-memory-pressure,
+       host-disk-exhaustion-forecast, host-filesystem-readonly,
+       host-agent-unhealthy, host-process-down]

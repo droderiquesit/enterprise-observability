@@ -1,24 +1,336 @@
-# Workflow Automation registry. All 18 workflows EXIST in the org (survivors,
-# verified 2026-08-17) and are adopted by UUID via gated import blocks in
-# stacks/foundation (var.adopt_existing_workflows). kind/approval/read_only
-# mirror the live tags; the module enforces the approval-gate rule.
-version: 1
+# =============================================================================
+# WORKFLOW AUTOMATION REGISTRY
+#
+# Every alerting monitor names a workflow. Automation is classified by BLAST
+# RADIUS, and the module refuses to publish a workflow whose class does not
+# match its safeguards:
+#
+#   diagnostic_only    read-only. Gathers context, never changes anything.
+#                      Runs automatically on every alert. No approval.
+#   fully_automatic    changes production, but the action is provably safe,
+#                      idempotent, and reversible, AND has a blast-radius cap.
+#                      Requires: max_actions_per_hour, rollback documented.
+#   approval_required  changes production and needs a human decision. The
+#                      workflow prepares everything and waits for an approver.
+#   manual             documented in the runbook, no automation exists (yet).
+#
+# RULE (ADR-008): a workflow attached to a monitor may only be fully_automatic
+# if `reversible: true` AND `blast_radius` is bounded. Anything that can lose
+# data, restart a stateful service, or scale cost is approval_required.
+# =============================================================================
+version: 2
+
 workflows:
-  auto-enrich-availability: { id: af989c71-a8b1-4da3-b346-3ed89509d3b5, name: enrich-availability-alert, kind: enrichment, team: sre, approval: none, read_only: true }
-  auto-enrich-latency:      { id: d6b7c931-4832-42e8-b0d7-1b6438a91634, name: enrich-latency-alert, kind: enrichment, team: application-development, approval: none, read_only: true }
-  auto-enrich-errors:       { id: 22c833cd-3567-4f17-851d-fe94a95ab724, name: enrich-error-rate-alert, kind: enrichment, team: application-development, approval: none, read_only: true }
-  auto-enrich-traffic:      { id: 2e775b4a-bfde-4a1b-97e4-6d7a2642958e, name: enrich-traffic-alert, kind: enrichment, team: application-development, approval: none, read_only: true }
-  auto-enrich-saturation:   { id: 878599fd-7a6d-4c1b-8f13-9c953c0a0318, name: enrich-saturation-alert, kind: enrichment, team: sre, approval: none, read_only: true }
-  auto-enrich-dependency:   { id: 939a87a0-a0fb-4c69-8f1c-649576b7e636, name: enrich-dependency-alert, kind: enrichment, team: application-development, approval: none, read_only: true }
-  auto-enrich-queue:        { id: 1214249b-8442-4d02-9de2-6187c084baaf, name: enrich-queue-alert, kind: enrichment, team: cloud-engineering, approval: none, read_only: true }
-  auto-enrich-replication:  { id: 70d2a280-c30c-4487-b037-c692c5832b48, name: enrich-replication-alert, kind: enrichment, team: data-engineering, approval: none, read_only: true }
-  auto-enrich-change:       { id: 623ba02b-328c-4203-8737-5c25f539991c, name: identify-recent-deployment, kind: enrichment, team: application-development, approval: none, read_only: true }
-  auto-agent-health-check:  { id: 72542d49-b59e-49ae-9ac1-4cef3aaa4f7e, name: agent-health-context, kind: remediation, team: sre, approval: none, read_only: true }
-  auto-backup-rerun:        { id: 7ff79c64-0140-4c53-90cb-9030c119fe68, name: backup-failure-context, kind: remediation, team: cloud-engineering, approval: owner, read_only: true }
-  auto-job-rerun:           { id: ae63ad39-c178-4e43-b79e-7acae3493395, name: job-failure-context, kind: remediation, team: data-engineering, approval: owner, read_only: true }
-  auto-capacity-ticket:     { id: 4eba2168-f995-41e3-a228-a2cf72a664e9, name: capacity-context, kind: ticket, team: sre, approval: none, read_only: true }
-  auto-cert-renewal-ticket: { id: 3d4ea974-af28-4f78-931a-fcccececf5df, name: cert-renewal-context, kind: ticket, team: cloud-engineering, approval: none, read_only: true }
-  auto-compliance-ticket:   { id: 77cb0f46-47ae-4dc8-b055-b11c531f9982, name: compliance-change-context, kind: ticket, team: security, approval: none, read_only: true }
-  auto-drift-ticket:        { id: 44a61b01-4840-4b9e-a0b9-6b452bfa772b, name: drift-change-context, kind: ticket, team: cloud-engineering, approval: none, read_only: true }
-  auto-finops-review:       { id: 2b52a205-476a-439c-8cb6-76f771b54812, name: finops-cost-context, kind: ticket, team: cloud-engineering, approval: none, read_only: true }
-  auto-major-incident:      { id: 349f43b2-cf2c-44f6-bb1b-ba26de24a45a, name: major-incident-context, kind: incident, team: sre, approval: none, read_only: true }
+
+  # --- diagnostic_only: enrichment that runs on every alert ------------------
+  diag-app-health:
+    name: enrich-application-health
+    class: diagnostic_only
+    team: sre
+    read_only: true
+    approval: none
+    actions: [fetch_monitor, query_recent_errors, fetch_deploy_history, fetch_dependency_map]
+    attaches: "error samples, last 3 deploys, dependency health summary"
+
+  diag-api-health:
+    name: enrich-api-health
+    class: diagnostic_only
+    team: application-development
+    read_only: true
+    approval: none
+    actions: [fetch_monitor, top_failing_endpoints, upstream_status, rate_limit_state]
+    attaches: "top failing routes, upstream health, current rate-limit headroom"
+
+  diag-dependency:
+    name: enrich-dependency-health
+    class: diagnostic_only
+    team: application-development
+    read_only: true
+    approval: none
+    actions: [fetch_monitor, peer_service_health, circuit_breaker_state, vendor_status_page]
+    attaches: "peer service SLO state, breaker state, vendor status page result"
+
+  diag-k8s-workload:
+    name: enrich-kubernetes-workload
+    class: diagnostic_only
+    team: cloud-engineering
+    read_only: true
+    approval: none
+    actions: [fetch_monitor, describe_workload, recent_pod_events, container_logs_tail, rollout_history]
+    attaches: "kubectl describe equivalent, last 50 pod events, rollout history"
+
+  diag-host:
+    name: enrich-host-health
+    class: diagnostic_only
+    team: infrastructure-engineering
+    read_only: true
+    approval: none
+    actions: [fetch_monitor, host_process_list, disk_usage_breakdown, recent_host_events]
+    attaches: "top processes, per-mount usage, host event timeline"
+
+  diag-vmware:
+    name: enrich-vmware-context
+    class: diagnostic_only
+    team: infrastructure-engineering
+    read_only: true
+    approval: none
+    actions: [fetch_monitor, cluster_state, datastore_state, recent_vcenter_events]
+    attaches: "cluster/datastore state, recent vCenter tasks and alarms"
+
+  diag-azure-resource:
+    name: enrich-azure-resource
+    class: diagnostic_only
+    team: cloud-engineering
+    read_only: true
+    approval: none
+    actions: [fetch_monitor, azure_resource_health, azure_activity_log, quota_state]
+    attaches: "Azure Resource Health, activity log for the resource, quota headroom"
+
+  diag-database:
+    name: enrich-database-health
+    class: diagnostic_only
+    team: data-engineering
+    read_only: true
+    approval: none
+    actions: [fetch_monitor, active_sessions, blocking_tree, top_queries_by_time, replication_state]
+    attaches: "active sessions, blocking chain, top 10 queries, replica state"
+
+  diag-data-pipeline:
+    name: enrich-data-pipeline
+    class: diagnostic_only
+    team: data-engineering
+    read_only: true
+    approval: none
+    actions: [fetch_monitor, last_run_logs, upstream_dataset_freshness, row_count_delta]
+    attaches: "last run log tail, upstream freshness, row-count delta vs baseline"
+
+  diag-messaging:
+    name: enrich-messaging-health
+    class: diagnostic_only
+    team: cloud-engineering
+    read_only: true
+    approval: none
+    actions: [fetch_monitor, consumer_group_state, dlq_sample, broker_metrics]
+    attaches: "consumer group members, 5 sample DLQ messages, broker throughput"
+
+  diag-network:
+    name: enrich-network-context
+    class: diagnostic_only
+    team: infrastructure-engineering
+    read_only: true
+    approval: none
+    actions: [fetch_monitor, path_traceroute, device_interface_state, recent_config_changes]
+    attaches: "traceroute, interface counters, config diffs in the last 24h"
+
+  diag-security-control:
+    name: enrich-security-control
+    class: diagnostic_only
+    team: security
+    read_only: true
+    approval: none
+    actions: [fetch_monitor, control_last_success, source_agent_state, related_signals]
+    attaches: "last successful control run, agent state, related Cloud SIEM signals"
+
+  diag-external-endpoint:
+    name: enrich-external-endpoint
+    class: diagnostic_only
+    team: sre
+    read_only: true
+    approval: none
+    actions: [fetch_monitor, synthetic_run_detail, dns_resolution_check, vendor_status_page]
+    attaches: "failing assertion, resolved IPs per location, vendor status"
+
+  diag-batch-job:
+    name: enrich-batch-job
+    class: diagnostic_only
+    team: application-development
+    read_only: true
+    approval: none
+    actions: [fetch_monitor, job_run_history, job_log_tail, upstream_dependency_state]
+    attaches: "last 10 runs with durations, log tail, upstream readiness"
+
+  auto-enrich-change:
+    name: correlate-recent-change
+    class: diagnostic_only
+    team: application-development
+    read_only: true
+    approval: none
+    actions: [fetch_monitor, deploy_events_window, terraform_runs_window, servicenow_changes_window]
+    attaches: "every deploy, Terraform apply and change record in the last 2h"
+    notes: >
+      The highest-value diagnostic in the catalog. Most production incidents
+      are change-induced, and this answers "what moved?" before a human asks.
+
+  # --- fully_automatic: bounded, reversible, capped -------------------------
+  auto-major-incident:
+    name: declare-major-incident
+    class: fully_automatic
+    team: sre
+    read_only: false
+    approval: none
+    reversible: true
+    blast_radius: "creates a Datadog incident and a ServiceNow P1; changes no infrastructure"
+    max_actions_per_hour: 20
+    actions: [create_incident, page_incident_commander, open_bridge, post_status_update]
+
+  auto-ticket-sustained:
+    name: create-sustained-condition-ticket
+    class: fully_automatic
+    team: sre
+    read_only: false
+    approval: none
+    reversible: true
+    blast_radius: "creates a ServiceNow task; changes no infrastructure"
+    max_actions_per_hour: 100
+    actions: [create_servicenow_task, link_monitor, notify_team_channel]
+
+  auto-capacity-ticket:
+    name: create-capacity-ticket
+    class: fully_automatic
+    team: sre
+    read_only: false
+    approval: none
+    reversible: true
+    blast_radius: "creates a ServiceNow task with the forecast attached"
+    max_actions_per_hour: 50
+    actions: [attach_forecast_chart, create_servicenow_task, assign_to_owner]
+
+  auto-cert-renewal-ticket:
+    name: create-certificate-renewal-request
+    class: fully_automatic
+    team: security
+    read_only: false
+    approval: none
+    reversible: true
+    blast_radius: "creates a PKI renewal request; does not install anything"
+    max_actions_per_hour: 50
+    actions: [lookup_certificate_owner, create_pki_request, notify_owner]
+
+  auto-compliance-ticket:
+    name: create-compliance-finding
+    class: fully_automatic
+    team: security
+    read_only: false
+    approval: none
+    reversible: true
+    blast_radius: "creates a tracked compliance finding"
+    max_actions_per_hour: 50
+    actions: [capture_evidence, create_servicenow_task, notify_compliance]
+
+  auto-drift-ticket:
+    name: create-drift-finding
+    class: fully_automatic
+    team: observability-platform
+    read_only: false
+    approval: none
+    reversible: true
+    blast_radius: "creates a ticket recording the drift and the diff"
+    max_actions_per_hour: 50
+    actions: [capture_diff, create_servicenow_task, notify_platform_team]
+
+  auto-finops-review:
+    name: create-cost-review
+    class: fully_automatic
+    team: cloud-engineering
+    read_only: false
+    approval: none
+    reversible: true
+    blast_radius: "creates a FinOps review item"
+    max_actions_per_hour: 20
+    actions: [attach_cost_breakdown, create_servicenow_task, notify_finops]
+
+  # --- approval_required: prepares, then waits for a human ------------------
+  remediate-restart-workload:
+    name: restart-unhealthy-workload
+    class: approval_required
+    team: cloud-engineering
+    read_only: false
+    approval: owner
+    reversible: true
+    blast_radius: "rolling restart of ONE deployment in ONE namespace"
+    max_actions_per_hour: 4
+    guardrails:
+      - "refuses if the workload is stateful"
+      - "refuses if a rollout is already in progress"
+      - "refuses if replicas_available == 0 (restart will not help; escalate)"
+      - "refuses during an active change freeze"
+    actions: [validate_guardrails, request_approval, rolling_restart, verify_recovery]
+
+  remediate-recycle-app-pool:
+    name: recycle-application-process
+    class: approval_required
+    team: application-development
+    read_only: false
+    approval: owner
+    reversible: true
+    blast_radius: "recycles the worker process of ONE App Service slot"
+    max_actions_per_hour: 4
+    guardrails:
+      - "refuses if in-flight request count exceeds the drain threshold"
+      - "refuses during an active change freeze"
+    actions: [capture_memory_dump, request_approval, recycle_process, verify_recovery]
+
+  remediate-scale-workload:
+    name: scale-workload
+    class: approval_required
+    team: cloud-engineering
+    read_only: false
+    approval: owner
+    reversible: true
+    blast_radius: "increases replicas/SKU within a pre-approved ceiling; costs money"
+    max_actions_per_hour: 6
+    guardrails:
+      - "hard ceiling from the service's declared max capacity"
+      - "refuses if the increase would exceed the monthly cost guardrail"
+      - "always scales UP only; scale-down is manual"
+    actions: [compute_target_size, estimate_cost, request_approval, apply_scale, verify]
+
+  remediate-clear-dlq:
+    name: replay-dead-letter-queue
+    class: approval_required
+    team: cloud-engineering
+    read_only: false
+    approval: change-board
+    reversible: false
+    blast_radius: "REPLAYS BUSINESS MESSAGES — can cause duplicate processing"
+    max_actions_per_hour: 1
+    guardrails:
+      - "requires change-board approval, never owner-only"
+      - "samples and attaches 5 messages for human review before replay"
+      - "refuses if the consumer is not currently healthy"
+      - "irreversible: replay is logged with full message ids for audit"
+    actions: [sample_messages, request_change_board_approval, replay_batch, verify_drain]
+
+  remediate-rerun-job:
+    name: rerun-failed-job
+    class: approval_required
+    team: data-engineering
+    read_only: false
+    approval: owner
+    # reversible: true ONLY because the first guardrail below makes it so — the
+    # workflow refuses to touch a job that has not declared itself idempotent,
+    # and re-running an idempotent job changes nothing. Without that refusal
+    # this would be reversible: false and would require change-board approval,
+    # which the module enforces.
+    reversible: true
+    blast_radius: "re-executes ONE job run; restricted to jobs that declare idempotent: true"
+    max_actions_per_hour: 4
+    guardrails:
+      - "REFUSES unless the job declares idempotent: true in platform/services/<svc>.yaml"
+      - "refuses if a downstream consumer is mid-read"
+      - "single retry only; a second failure escalates to a human"
+    actions: [check_idempotency_flag, request_approval, trigger_rerun, verify_completion]
+
+# -----------------------------------------------------------------------------
+# Automation coverage policy
+# -----------------------------------------------------------------------------
+policy:
+  every_monitor_has_a_workflow: true
+  default_class_for_new_archetypes: diagnostic_only
+  fully_automatic_requires: [reversible, blast_radius, max_actions_per_hour]
+  approval_required_requires: [guardrails, approval]
+  forbidden_without_change_board:
+    - "any action that deletes data"
+    - "any action that replays business messages"
+    - "any action affecting more than one service simultaneously"
+    - "any action that changes network or identity configuration"

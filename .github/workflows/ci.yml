@@ -1,8 +1,14 @@
 name: ci
-# Validation pipeline for every PR: formatting, policy lint, manifest
-# validation, module/stack validation, unit + scale tests, offline plan, and —
-# when the repo secrets are available — a credentialed plan whose monitor
-# definitions are validated against the live Datadog API.
+# =============================================================================
+# VALIDATION PIPELINE — every stage is a guardrail that can fail the build.
+#
+#   YAML → schema → policy → tags → naming → SLO → runbook → routing →
+#   duplicates → cardinality → fmt → validate → plan → security → cost/budget →
+#   determinism → credentialed plan (live monitor validation)
+#
+# Nothing merges that violates a standard, and every standard is checked by a
+# command anyone can run locally with `make validate`.
+# =============================================================================
 on:
   pull_request:
   push:
@@ -13,73 +19,161 @@ permissions:
   pull-requests: write
 
 env:
-  TF_VERSION: 1.9.8
+  TF_VERSION: "1.9.8"
+  PYTHON_VERSION: "3.11"
 
 jobs:
+  # ---------------------------------------------------------------------------
   validate:
+    name: policy & configuration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install tooling
+        run: pip install -r tools/requirements.txt
+
+      - name: "1 · YAML syntax"
+        run: |
+          python - <<'PY'
+          import sys, yaml, pathlib
+          bad = []
+          for p in sorted(pathlib.Path("platform").rglob("*.yaml")):
+              try:
+                  yaml.safe_load(p.read_text())
+              except yaml.YAMLError as exc:
+                  bad.append(f"{p}: {exc}")
+          for b in bad:
+              print("YAML ERROR:", b)
+          sys.exit(1 if bad else 0)
+          PY
+
+      - name: "2 · JSON schema — service registrations & monitor manifests"
+        run: |
+          pip install --quiet jsonschema
+          python - <<'PY'
+          import json, sys, pathlib, yaml, jsonschema
+          fails = 0
+          for schema_name, glob in (("monitor", "platform/monitors/*.yaml"),
+                                    ("service", "platform/services/*.yaml")):
+              schema = json.loads(pathlib.Path(f"platform/schemas/{schema_name}.schema.json").read_text())
+              for p in sorted(pathlib.Path().glob(glob)):
+                  try:
+                      jsonschema.validate(yaml.safe_load(p.read_text()), schema)
+                  except jsonschema.ValidationError as exc:
+                      print(f"SCHEMA ERROR {p}: {exc.message} (at {list(exc.path)})")
+                      fails += 1
+          sys.exit(1 if fails else 0)
+          PY
+
+      # Stages 3–10 are all implemented by validate_policy.py, which reports
+      # them as tagged sections so a failure names the standard it violated:
+      # SCHEMA / REFERENCE / SCOPE / CARDINALITY / DETECTION / PRIORITY /
+      # COMPOSITE / PACKS / SLO / EXCEPTION / AUTOMATION / BUDGET.
+      - name: "3-10 · Policy, tags, naming, SLO, runbook, routing, cardinality, budget"
+        run: cd tools && python validate_policy.py
+
+      - name: "11 · Self-service manifests (incl. duplicate-monitor detection)"
+        run: cd tools && python validate_monitors.py
+
+      - name: "12 · Runbook completeness & registry sync"
+        run: cd tools && python publish_runbooks.py --dry-run
+
+      - name: "13 · Generated docs are not stale"
+        run: |
+          cd tools
+          python generate_matrix.py --check
+          python generate_runbooks.py --check
+
+      - name: "14 · Monitor quality scorecard"
+        run: cd tools && python monitor_scorecard.py --min-fleet-score 85 --max-failing 0
+
+      - name: "15 · Unit, governance & scale tests"
+        run: python -m pytest tests/ -q
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quality-reports
+          path: generated/
+
+  # ---------------------------------------------------------------------------
+  terraform:
+    name: terraform
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-      - name: Install tooling
-        run: pip install -r tools/requirements.txt
-      - name: Terraform fmt
+
+      - name: "16 · terraform fmt"
         run: terraform fmt -recursive -check
-      - name: Policy lint (archetypes, exceptions, vocabularies, cardinality)
-        run: cd tools && python validate_policy.py
-      - name: Self-service manifest validation
-        run: cd tools && python validate_manifests.py
-      - name: Module + stack validate
+
+      - name: "17 · terraform validate (all modules and stacks)"
         run: |
-          for d in modules/* stacks/*; do
+          for d in modules/* stacks/coverage stacks/foundation; do
             echo "== $d"
             (cd "$d" && terraform init -backend=false -input=false >/dev/null && terraform validate)
           done
-      - name: Unit, governance & scale tests (incl. 1.2M-resource estate)
-        run: python -m pytest tests/ -q
-      - name: Offline plan (no credentials; graph + preconditions + cardinality gates)
+
+      - name: "18 · Offline plan — preconditions, budgets, cardinality gates"
         run: |
           cd stacks/coverage
           terraform init -input=false >/dev/null
           DD_API_KEY=offline DD_APP_KEY=offline terraform plan -input=false \
-            -var datadog_validate=false -var adopt_existing_slos=false -out=plan.out
+            -var datadog_validate=false -out=plan.out
           cd ../foundation
           terraform init -input=false >/dev/null
           DD_API_KEY=offline DD_APP_KEY=offline terraform plan -input=false \
-            -var datadog_validate=false -var manage_rbac=false
-      - name: Determinism — second plan must equal the first
+            -var datadog_validate=false -var manage_rbac=false -out=plan.out
+
+      - name: "19 · Determinism — a second plan must equal the first"
         run: |
           cd stacks/coverage
           terraform show -json plan.out | jq -S '.resource_changes | map({address, actions: .change.actions})' > p1.json
           DD_API_KEY=offline DD_APP_KEY=offline terraform plan -input=false \
-            -var datadog_validate=false -var adopt_existing_slos=false -out=plan2.out
+            -var datadog_validate=false -out=plan2.out
           terraform show -json plan2.out | jq -S '.resource_changes | map({address, actions: .change.actions})' > p2.json
           diff p1.json p2.json
 
+      - name: "20 · Estate report on the PR"
+        run: |
+          cd stacks/coverage
+          echo '### Planned monitoring estate' >> $GITHUB_STEP_SUMMARY
+          terraform show -json plan.out \
+            | jq -r '.output_changes | {
+                monitors: .monitor_count.after,
+                per_env: .instances_by_env.after,
+                per_priority: .instances_by_priority.after,
+                paging: (.paging_monitors.after | length)
+              }' >> $GITHUB_STEP_SUMMARY
+
+  # ---------------------------------------------------------------------------
   security:
+    name: security scan
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: tfsec (IaC security scan)
+      - name: "21 · IaC security scan"
         uses: aquasecurity/tfsec-action@v1.0.3
         with:
           soft_fail: false
-      - name: Secret scan
+      - name: "22 · Secret scan"
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
+  # ---------------------------------------------------------------------------
   credentialed-plan:
-    # Runs only where the org's CI service-account secrets exist (not on
-    # forks). Full plan with live provider validation: every monitor is
-    # checked against /api/v1/monitor/validate before merge.
-    if: github.event.pull_request.head.repo.fork == false
+    name: live monitor validation
+    # Runs only where the CI service-account secrets exist (never on forks).
+    # Every monitor definition is checked against Datadog's own validation API
+    # before merge, so a syntactically invalid query cannot reach production.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
     runs-on: ubuntu-latest
     environment: datadog-plan
     steps:
@@ -87,11 +181,12 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
-      - name: Plan with live validation
+      - name: "23 · Plan with live API validation"
         env:
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
           DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
         run: |
           if [ -z "$DD_API_KEY" ]; then echo "no secrets in this context — skipping"; exit 0; fi
-          cd stacks/coverage && terraform init -input=false >/dev/null
+          cd stacks/coverage
+          terraform init -input=false >/dev/null
           terraform plan -input=false

@@ -1,6 +1,19 @@
-# Monitoring profiles. A profile decides WHICH archetype classes apply and how
-# strictly. Profiles inherit `base` and add only what they require.
-version: 1
+# =============================================================================
+# LAYER 3 — MONITORING PROFILES
+#
+# FIVE profiles. That is the smallest set that covers an enterprise without
+# collapsing distinctions that actually change behavior:
+#
+#   observe_only   telemetry only, no alerting                    (tier3, dev)
+#   baseline       "is it alive and reporting?"                   (qa, low value)
+#   standard       golden signals + saturation + forecast         (tier2 prod)
+#   critical       standard + burn-rate paging + correlation      (tier0/tier1)
+#   regulated      critical + compliance absolutes                (SOX/PCI scope)
+#
+# Two OVERLAYS modify a profile without becoming profiles of their own —
+# this is what stops profile sprawl.
+# =============================================================================
+version: 2
 
 base:
   alerting: true
@@ -8,54 +21,111 @@ base:
   require_runbook: true
   require_workflow: true
   require_routing: true
-  archetype_classes: [availability, saturation, telemetry_health]
+  require_ownership: true
 
 profiles:
+
   observe_only:
+    display: Observe Only
     description: >
-      Telemetry collected, dashboards and events only. NO alerting monitors.
-      Assignment is policy-driven (sandbox env, tier4, or approved exception)
-      and every observe_only resource appears in the coverage report with the
-      reason it is not alerted on.
+      Telemetry is collected, dashboards and the service catalog work, events
+      flow — but NO alerting monitor selects these resources. Assignment is
+      always policy-driven (tier3, dev env, or an approved exception) and every
+      observe_only resource appears in the coverage report WITH ITS REASON.
+      "Not monitored" is never allowed to be an accident.
     alerting: false
-    archetype_classes: []
+    band: none
+    signal_classes: []
     requires_reason: true
 
+  baseline:
+    display: Baseline
+    description: >
+      The minimum honest answer to "is this thing running and telling us
+      anything?". Availability and telemetry-health only. Used for QA and for
+      low-value production workloads that still must not disappear silently.
+    alerting: true
+    band: baseline
+    signal_classes: [availability, telemetry_health]
+    burn_alerts: false
+    composite_confirmation: false
+
   standard:
-    description: Default for tier2/tier3 production and staging workloads.
-    archetype_classes: [availability, latency, errors, saturation, telemetry_health, capacity_forecast]
+    display: Standard Production
+    description: >
+      The enterprise default. Golden signals (availability, latency, errors,
+      throughput), saturation, capacity forecasting, and telemetry health.
+      Predictive detection everywhere the signal is behavioral.
+    alerting: true
+    band: standard
+    signal_classes:
+      [availability, latency, errors, throughput, saturation, capacity_forecast,
+       telemetry_health, dependency]
+    burn_alerts: [slow]
+    composite_confirmation: true
+    overrides:
+      renotify_interval: 120
 
   critical:
+    display: Critical
     description: >
-      Tier1 / customer-facing. Adds burn-rate paging, outlier and
-      rate-of-change detection, dependency correlation, and stricter no-data.
-    archetype_classes: [availability, latency, errors, traffic, saturation,
-                        telemetry_health, capacity_forecast, burn_rate,
-                        outlier, rate_of_change, dependency]
+      Everything in standard, plus multi-window SLO burn-rate paging (the
+      primary customer-impact signal), peer-group outlier detection, change /
+      deployment correlation, dependency mapping, and stricter no-data.
+      Assigned to tier0 and tier1.
+    inherits: standard
+    alerting: true
+    band: critical
+    signal_classes_add:
+      [burn_rate, outlier, rate_of_change, change_correlation, crash_anomaly]
+    burn_alerts: [fast, medium, slow]
+    composite_confirmation: true
     overrides:
       notify_no_data: true
       renotify_interval: 30
+      new_group_delay: 180
 
   regulated:
+    display: Regulated
     description: >
-      Everything in `critical` plus compliance-driven absolutes: backup age,
-      certificate expiry, audit-log continuity, retention. Exceptions require
-      compliance approval and downtimes require change tickets.
+      Critical plus compliance absolutes where the number itself is the
+      control: backup age, certificate expiry, audit-log continuity, retention,
+      encryption posture. Downtimes require a change ticket; exceptions require
+      compliance approval.
     inherits: critical
-    archetype_classes_add: [compliance_absolute, audit_continuity]
+    alerting: true
+    band: critical
+    signal_classes_add: [compliance_absolute, audit_continuity, data_retention]
     overrides:
       require_change_ticket_for_downtime: true
+      require_compliance_approval_for_exception: true
     tags_add:
       compliance_scope: sox
 
+# -----------------------------------------------------------------------------
+# OVERLAYS — applied ON TOP of a profile, never instead of one.
+# An overlay adds signal classes and/or redirects routing. Keeping these as
+# overlays instead of profiles is what holds the profile count at five.
+# -----------------------------------------------------------------------------
+overlays:
+
   security_sensitive:
+    display: Security Overlay
+    applies_when: "domain == security OR tags.data_classification == restricted"
     description: >
-      Security telemetry sources and controls. Adds integration-health,
-      control-failure, auth-anomaly and telemetry-gap archetypes. Routed to the
-      security team regardless of resource ownership.
-    inherits: critical
-    archetype_classes_add: [security_control, security_telemetry_gap, auth_anomaly]
-    overrides:
-      route_to_team: security
+      Security-relevant operational signals. Adds control-failure, auth-anomaly
+      and telemetry-gap detection, and routes to the security team regardless
+      of who owns the resource — because the responder is not the owner.
+    signal_classes_add: [security_control, security_telemetry_gap, auth_anomaly]
+    routing_override_team: security
     tags_add:
       data_classification: restricted
+
+  release_gate:
+    display: Release Gate Overlay
+    applies_when: "env == stage AND tier == tier0 AND archetype.release_gate == true"
+    description: >
+      Lets a small set of stage archetypes raise a P2 to the release channel
+      during an active release window, without giving staging a pager.
+    priority_ceiling: P2
+    notification_profile: release_gate

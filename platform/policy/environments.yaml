@@ -1,20 +1,122 @@
-# Environment policy layer.
-version: 1
+# =============================================================================
+# LAYER 4 — ENVIRONMENT POLICY  (DEV → QA → STAGE → PROD)
+#
+# The SAME archetype definition is reused across environments. The environment
+# never changes WHAT is detected; it changes HOW LOUD the result is:
+#   - which alert bands are instantiated at all
+#   - sensitivity multiplier applied to thresholds
+#   - evaluation window multiplier (longer windows = fewer transient alerts)
+#   - the priority CEILING (an env can only ever be quieter, never louder)
+#   - whether paging / ServiceNow incidents / SLO impact are permitted
+# =============================================================================
+version: 2
+
 environments:
-  prod:
-    default_profile: standard
-    paging_allowed: true
-    business_hours_only: false
-  staging:
-    default_profile: standard
-    paging_allowed: false          # staging never pages; sev floor is ticket
-    severity_floor: sev3
-    business_hours_only: true
+
   dev:
+    display: Development
+    description: >
+      Telemetry, dashboards and events only. Developers see everything in
+      Datadog; nothing alerts, nothing pages, nothing files a ticket.
+      Rationale: a dev CPU anomaly is not an operational event.
+    alerting: false
+    bands_instantiated: []                 # → zero monitors created for dev
     default_profile: observe_only
-    observe_only_reason: "non-production development environment (policy)"
+    observe_only_reason: "development environment (global policy)"
+    priority_ceiling: P4
     paging_allowed: false
-  sandbox:
-    default_profile: observe_only
-    observe_only_reason: "sandbox environment (policy)"
+    incident_creation_allowed: false
+    servicenow_allowed: false
+    teams_notifications: false
+    slo_impact: false
+    recovery_notifications: false
+    sensitivity_multiplier: 1.0
+    window_multiplier: 1.0
+    escalation: none
+    grouping: none
+
+  qa:
+    display: Quality Assurance
+    description: >
+      Release-blocking signals only. QA alerts exist to protect the release
+      train, not to wake anyone. Ticket-only, business hours, team channel.
+    alerting: true
+    bands_instantiated: [baseline]          # only mandatory availability/telemetry packs
+    default_profile: baseline
+    priority_ceiling: P3                    # nothing in QA is ever P1/P2
     paging_allowed: false
+    incident_creation_allowed: false
+    servicenow_allowed: true                # work items only, never incidents
+    servicenow_kind: task
+    teams_notifications: true
+    teams_channel_suffix: "-qa"
+    slo_impact: false
+    recovery_notifications: true
+    sensitivity_multiplier: 1.5             # recorded, not auto-applied (see locals_instances.tf §5)
+    window_multiplier: 2.0                  # double the evaluation window
+    escalation: none
+    business_hours_only: true
+    grouping: by_service
+
+  stage:
+    display: Staging / Pre-Production
+    description: >
+      Production-shaped validation. Detects the same conditions as prod with
+      production thresholds, but routes to the team channel and a ServiceNow
+      task. Never pages: a staging failure has no customer.
+      Exception: tier0 release-gate archetypes may raise a P2 during an
+      active release window (see release_window_overrides).
+    alerting: true
+    bands_instantiated: [standard, critical]
+    default_profile: standard
+    priority_ceiling: P3
+    paging_allowed: false
+    incident_creation_allowed: false
+    servicenow_allowed: true
+    servicenow_kind: task
+    teams_notifications: true
+    teams_channel_suffix: "-stage"
+    slo_impact: false                       # stage burn does not consume prod budget
+    recovery_notifications: true
+    sensitivity_multiplier: 1.2             # recorded, not auto-applied (see locals_instances.tf §5)
+    window_multiplier: 1.5
+    escalation: none
+    business_hours_only: false
+    grouping: by_service
+    release_window_overrides:
+      # During an active release window, tier0 release-gate archetypes are
+      # allowed to reach P2 and notify the release channel (still no page).
+      enabled: true
+      applies_to_tiers: [tier0]
+      applies_to_archetype_tags: [release_gate]
+      priority_ceiling: P2
+      notification_profile: release_gate
+
+  prod:
+    display: Production
+    description: >
+      Full policy. Customer impact pages; degradation raises an incident and
+      notifies; risk creates work; hygiene is informational. Priority is
+      derived from impact class × alert band and is never overridden upward
+      by an environment.
+    alerting: true
+    bands_instantiated: [baseline, standard, critical]
+    default_profile: standard
+    priority_ceiling: P1
+    paging_allowed: true
+    incident_creation_allowed: true
+    servicenow_allowed: true
+    servicenow_kind: incident
+    teams_notifications: true
+    teams_channel_suffix: ""
+    slo_impact: true
+    recovery_notifications: true
+    sensitivity_multiplier: 1.0
+    window_multiplier: 1.0
+    escalation: full
+    business_hours_only: false
+    grouping: by_service
+
+# Promotion order used by the CI/CD pipeline. The SAME definitions promote;
+# only this policy file changes their behavior.
+promotion_order: [dev, qa, stage, prod]

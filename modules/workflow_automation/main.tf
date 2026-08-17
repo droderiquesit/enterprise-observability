@@ -8,11 +8,12 @@ resource "datadog_workflow_automation" "this" {
 
   tags = [
     "automation_ref:${each.key}",
-    "kind:${each.value.kind}",
+    "automation_class:${each.value.kind}",
     "team:${each.value.team}",
     "approval:${each.value.approval}",
     "read_only:${each.value.read_only}",
+    "reversible:${try(each.value.reversible, true)}",
+    "rate_cap_per_hour:${try(each.value.max_actions_per_hour, 0)}",
     "managed_by:${var.managed_by}",
-    "attaches_to:automation:${each.key}",
   ]
 }

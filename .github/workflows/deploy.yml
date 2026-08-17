@@ -1,69 +1,115 @@
 name: deploy
-# Controlled deployment from main only, with a manual approval gate
-# (GitHub environment `datadog-production` requires a reviewer). Order:
-# foundation → runbooks → coverage → post-deploy verification.
+# =============================================================================
+# CONTROLLED PROMOTION — the SAME definitions move through every environment.
+#
+#   qa → stage → prod
+#
+# Nothing is copied between environments. Promotion narrows the `environments`
+# variable; platform/policy/environments.yaml decides how loud each one is.
+# Production requires a manual approval on the `datadog-production` GitHub
+# environment and holds a concurrency lock so two applies can never overlap.
+# =============================================================================
 on:
   workflow_dispatch:
+    inputs:
+      target:
+        description: "Promotion target"
+        required: true
+        default: nonprod
+        type: choice
+        options: [nonprod, production]
   push:
     branches: [main]
 
 permissions:
   contents: read
 
-concurrency: deploy-datadog   # never two applies at once
+concurrency: deploy-datadog
 
 env:
-  TF_VERSION: 1.9.8
+  TF_VERSION: "1.9.8"
+  PYTHON_VERSION: "3.11"
 
 jobs:
-  deploy:
+  # ---------------------------------------------------------------------------
+  nonprod:
+    name: "promote → qa + stage"
     runs-on: ubuntu-latest
-    environment: datadog-production   # approval gate + scoped secrets
+    environment: datadog-nonprod
+    if: github.event_name == 'push' || inputs.target == 'nonprod'
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - run: pip install -r tools/requirements.txt
-
-      - name: Foundation — plan & apply
-        env:
-          DD_API_KEY: ${{ secrets.DD_API_KEY }}
-          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
-        run: |
-          cd stacks/foundation
-          terraform init -input=false -backend-config=../backend.prod.hcl
-          terraform plan -input=false -out=tfplan
-          terraform apply -input=false tfplan
-
-      - name: Runbooks — publish (API-backed, drift-aware; ADR-006)
-        env:
-          DD_API_KEY: ${{ secrets.DD_API_KEY }}
-          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
-        run: cd tools && python publish_runbooks.py
-
-      - name: Coverage — plan & apply (monitors, SLOs, burn alerts)
+        with: { terraform_version: "1.9.8" }
+      - name: Inject the remote backend
+        run: cp stacks/backend.azurerm.tf.example stacks/coverage/backend.tf
+      - name: Plan & apply — non-production only
         env:
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
           DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
         run: |
           cd stacks/coverage
           terraform init -input=false -backend-config=../backend.prod.hcl
-          terraform plan -input=false -out=tfplan
+          terraform plan  -input=false -var 'environments=["qa","stage"]' -out=tfplan
           terraform apply -input=false tfplan
 
-      - name: Post-deploy verification — idempotency (second plan must be clean)
+  # ---------------------------------------------------------------------------
+  production:
+    name: "promote → prod"
+    runs-on: ubuntu-latest
+    needs: [nonprod]
+    environment: datadog-production      # approval gate + scoped secrets
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: "1.9.8" }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r tools/requirements.txt
+
+      - name: Inject the remote backend
+        run: |
+          cp stacks/backend.azurerm.tf.example stacks/foundation/backend.tf
+          cp stacks/backend.azurerm.tf.example stacks/coverage/backend.tf
+
+      # Foundation first: an alert that fires into a routing void is worse than
+      # no alert, because it creates the appearance of coverage.
+      - name: "1 · Foundation — teams, routing, on-call, workflows, RBAC"
         env:
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
           DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
         run: |
-          cd stacks/coverage && terraform plan -input=false -detailed-exitcode
-          cd ../foundation && terraform plan -input=false -detailed-exitcode
+          cd stacks/foundation
+          terraform init -input=false -backend-config=../backend.prod.hcl
+          terraform plan  -input=false -out=tfplan
+          terraform apply -input=false tfplan
 
-      - name: Post-deploy verification — coverage & contract report
+      - name: "2 · Runbooks — publish (API-backed, hash-drift aware; ADR-006)"
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        run: cd tools && python publish_runbooks.py
+
+      - name: "3 · Coverage — monitors, SLOs, burn-rate alerts, composites"
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        run: |
+          cd stacks/coverage
+          terraform init -input=false -backend-config=../backend.prod.hcl
+          terraform plan  -input=false -out=tfplan
+          terraform apply -input=false tfplan
+
+      # ---- post-deployment validation ----------------------------------------
+      - name: "4 · Idempotency — a second plan must be empty"
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        run: |
+          cd stacks/foundation && terraform plan -input=false -detailed-exitcode
+          cd ../coverage      && terraform plan -input=false -detailed-exitcode
+
+      - name: "5 · Coverage & compliance report against the live org"
         env:
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
           DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
@@ -72,8 +118,12 @@ jobs:
           python build_inventory.py --live
           python profile_engine.py
           python coverage_report.py --live
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+
+      - name: "6 · Quality scorecard against the deployed estate"
+        run: cd tools && python monitor_scorecard.py
+
+      - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: coverage-report
-          path: generated/coverage_report.*
+          name: post-deploy-evidence
+          path: generated/

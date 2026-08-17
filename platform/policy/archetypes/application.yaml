@@ -1,108 +1,355 @@
-# SRE / application coverage pack. Grouped by {service} — one monitor covers
-# every APM service in the environment; new services are covered on first
-# trace with zero configuration. SLO burn-rate monitors (the PRIMARY paging
-# signal) are generated from slos.yaml by the slo_with_burn module, not here.
-version: 1
+# =============================================================================
+# MONITOR ARCHETYPE CATALOG — APPLICATION
+#
+# Every archetype is instantiated as ONE grouped multi-alert monitor per
+# (environment × alert_band). Services are GROUPS inside it, selected by tag.
+# A new service that starts emitting traces joins on its first trace with zero
+# configuration and zero new Datadog objects.
+#
+# __SCOPE__ is replaced at plan time with:  env:<env>,alert_band:<band>[,<selector>]
+# =============================================================================
+version: 2
 domain: application
+
 archetypes:
-  app-error-rate-anomaly:
-    title: Application Error Rate Anomaly
-    class: errors
-    detection: anomaly
-    monitor_type: query alert
-    query: "avg(last_15m):anomalies(sum:trace.http.request.errors{env:__ENV__} by {service}.as_rate(), 'agile', 3) >= 1"
-    thresholds: { critical: 1.0 }
-    group_by: [service]
-    severity_class: page
-    slo_id: slo-app-availability
-    runbook: "Runbook: Application Error Rate Anomaly"
-    workflow: auto-enrich-errors
-    failure_domain: application-platform
 
-  app-latency-degradation:
-    title: Application Latency Degradation
-    class: latency
-    detection: rate_of_change
-    monitor_type: query alert
-    query: "pct_change(avg(last_15m),last_1h):avg:trace.http.request.duration{env:__ENV__} by {service} > 100"
-    thresholds: { critical: 100, warning: 50 }
-    group_by: [service]
-    severity_class: page
-    slo_id: slo-app-latency
-    runbook: "Runbook: Application Latency Degradation"
-    workflow: auto-enrich-latency
-    failure_domain: application-platform
-
-  app-traffic-anomaly:
-    title: Application Traffic Anomaly
-    class: traffic
-    detection: anomaly
-    monitor_type: query alert
-    query: "avg(last_30m):anomalies(sum:trace.http.request.hits{env:__ENV__} by {service}.as_rate(), 'agile', 3, direction='below') >= 1"
-    thresholds: { critical: 1.0 }
-    group_by: [service]
-    severity_class: page
-    slo_id: slo-app-availability
-    runbook: "Runbook: Application Traffic Anomaly"
-    workflow: auto-enrich-traffic
-    failure_domain: application-platform
-    tiers: [tier1]
-
-  app-endpoint-unavailable:
-    title: Application Endpoint Unavailable
-    class: availability
+  # --- web-core --------------------------------------------------------------
+  web-synthetic-availability:
+    title: Web Application Unavailable
+    signal: availability
+    impact_class: customer_impact
     detection: threshold
     monitor_type: query alert
-    query: "sum(last_10m):sum:synthetics.test_runs{env:__ENV__,status:failed} by {check_id}.as_count() >= 3"
+    resource_type: synthetic_check
+    selector: "service_archetype:web"
+    query: 'sum(last_10m):sum:synthetics.test_runs{__SCOPE__,status:failed} by {service,check_id}.as_count() >= 3'
     thresholds: { critical: 3, warning: 1 }
-    group_by: [check_id]
-    severity_class: page_fast
-    slo_id: slo-app-availability
-    runbook: "Runbook: Application Endpoint Unavailable"
-    workflow: auto-major-incident
-    failure_domain: application-platform
+    group_by: [service, check_id]
+    evaluation_window: last_10m
+    envs: [prod, stage, qa]
+    bands: [critical, standard, baseline]
+    slo_id: slo-web-availability
+    runbook: web-synthetic-availability
+    workflow: diag-app-health
+    failure_domain: web-frontends
+    mandatory: true
+    release_gate: true
+    rationale_fixed_threshold: >
+      Three consecutive synthetic failures across locations is a discrete
+      availability boundary, not a statistical judgement.
 
-  app-dependency-degradation:
-    title: Application Dependency Degradation
-    class: dependency
-    detection: anomaly
-    monitor_type: query alert
-    query: "avg(last_15m):anomalies(sum:trace.http.client.request.errors{env:__ENV__} by {service,peer_service}.as_rate(), 'agile', 3) >= 1"
-    thresholds: { critical: 1.0 }
-    group_by: [service, peer_service]
-    severity_class: page
-    slo_id: slo-app-availability
-    runbook: "Runbook: Application Dependency Degradation"
-    workflow: auto-enrich-dependency
-    failure_domain: application-platform
-    tiers: [tier1, tier2]
-
-  deployment-regression:
-    title: Deployment Regression
-    class: rate_of_change
+  web-page-load-degradation:
+    title: Web Page Load Degradation
+    signal: latency
+    impact_class: degradation
     detection: rate_of_change
     monitor_type: query alert
-    query: "pct_change(avg(last_10m),last_30m):sum:trace.http.request.errors{env:__ENV__} by {service}.as_rate() > 300"
-    thresholds: { critical: 300 }
+    resource_type: service
+    selector: "service_archetype:web"
+    query: 'pct_change(avg(last_15m),last_1h):avg:synthetics.browser.page_load{__SCOPE__} by {service} > 40'
+    thresholds: { critical: 40, warning: 25 }
     group_by: [service]
-    severity_class: page
-    slo_id: slo-app-availability
-    runbook: "Runbook: Deployment Regression"
-    workflow: auto-enrich-change
-    failure_domain: application-platform
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-web-availability
+    runbook: web-page-load-degradation
+    workflow: diag-app-health
+    failure_domain: web-frontends
+    mandatory: false
 
-  app-telemetry-loss:
-    title: Application Stopped Logging
-    class: telemetry_health
+  web-js-error-anomaly:
+    title: Browser Error Rate Anomaly
+    signal: error_rate
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: service
+    selector: "service_archetype:web"
+    query: "avg(last_15m):anomalies(sum:rum.error.count{__SCOPE__} by {service}.as_rate(), 'agile', 3) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [service]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-web-availability
+    runbook: web-js-error-anomaly
+    workflow: diag-app-health
+    failure_domain: web-frontends
+    mandatory: false
+
+  web-origin-5xx-anomaly:
+    title: Web Origin 5xx Anomaly
+    signal: error_rate
+    impact_class: customer_impact
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: service
+    selector: "service_archetype:web"
+    query: "avg(last_10m):anomalies(sum:trace.http.request.errors{__SCOPE__,http.status_class:5xx} by {service}.as_rate(), 'agile', 3) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [service]
+    evaluation_window: last_10m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-web-availability
+    runbook: web-origin-5xx-anomaly
+    workflow: diag-app-health
+    failure_domain: web-frontends
+    mandatory: true
+
+  # --- worker-core -----------------------------------------------------------
+  worker-throughput-anomaly:
+    title: Worker Throughput Anomaly
+    signal: throughput
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: service
+    selector: "service_archetype:worker"
+    query: "avg(last_30m):anomalies(sum:trace.async.operation.hits{__SCOPE__} by {service}.as_rate(), 'agile', 3, direction='below') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [service]
+    evaluation_window: last_30m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-worker-throughput
+    runbook: worker-throughput-anomaly
+    workflow: diag-app-health
+    failure_domain: worker-platform
+    mandatory: true
+
+  worker-processing-latency:
+    title: Worker Processing Latency Degradation
+    signal: latency
+    impact_class: degradation
+    detection: rate_of_change
+    monitor_type: query alert
+    resource_type: service
+    selector: "service_archetype:worker"
+    query: 'pct_change(avg(last_15m),last_1h):avg:trace.async.operation.duration{__SCOPE__} by {service} > 75'
+    thresholds: { critical: 75, warning: 40 }
+    group_by: [service]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-worker-throughput
+    runbook: worker-processing-latency
+    workflow: diag-app-health
+    failure_domain: worker-platform
+    mandatory: false
+
+  worker-error-anomaly:
+    title: Worker Error Rate Anomaly
+    signal: error_rate
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: service
+    selector: "service_archetype:worker"
+    query: "avg(last_15m):anomalies(sum:trace.async.operation.errors{__SCOPE__} by {service}.as_rate(), 'agile', 3) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [service]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-worker-throughput
+    runbook: worker-error-anomaly
+    workflow: diag-app-health
+    failure_domain: worker-platform
+    mandatory: true
+
+  worker-stalled:
+    title: Worker Stopped Processing
+    signal: availability
+    impact_class: customer_impact
     detection: threshold
     monitor_type: query alert
-    query: "sum(last_30m):sum:trace.http.request.hits{env:__ENV__} by {service}.as_count() < 1"
+    resource_type: service
+    selector: "service_archetype:worker"
+    query: 'sum(last_30m):sum:trace.async.operation.hits{__SCOPE__} by {service}.as_count() < 1'
     thresholds: { critical: 1 }
     group_by: [service]
-    severity_class: ticket
+    evaluation_window: last_30m
+    envs: [prod, stage, qa]
+    bands: [critical, standard, baseline]
+    slo_id: slo-worker-throughput
+    runbook: worker-stalled
+    workflow: diag-app-health
+    failure_domain: worker-platform
+    mandatory: true
+    notify_no_data: true
+    no_data_timeframe: 45
+    rationale_fixed_threshold: >
+      Zero work processed in 30 minutes is an absolute liveness boundary for a
+      continuously-fed worker; there is no statistical interpretation of zero.
+
+  # --- app-runtime (shared by every application service archetype) -----------
+  app-crash-anomaly:
+    title: Application Crash / Fatal Error Anomaly
+    signal: error_rate
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: service
+    selector: ""
+    query: "avg(last_15m):anomalies(sum:trace.span.errors{__SCOPE__,error.type:fatal} by {service}.as_rate(), 'agile', 3) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [service]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical]
     slo_id: slo-app-availability
-    runbook: "Runbook: Application Stopped Logging"
-    workflow: auto-enrich-availability
+    runbook: app-crash-anomaly
+    workflow: diag-app-health
     failure_domain: application-platform
+    mandatory: false
+
+  app-saturation-threadpool:
+    title: Application Runtime Saturation
+    signal: saturation
+    impact_class: risk
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: service
+    selector: ""
+    query: "avg(last_15m):anomalies(avg:runtime.thread_pool.utilization{__SCOPE__} by {service}, 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [service]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-app-availability
+    runbook: app-saturation-threadpool
+    workflow: diag-app-health
+    failure_domain: application-platform
+    mandatory: false
+
+  app-memory-leak-forecast:
+    title: Application Memory Exhaustion Forecast
+    signal: saturation
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: service
+    selector: ""
+    query: "max(next_1d):forecast(avg:runtime.memory.heap_used_pct{__SCOPE__} by {service}, 'linear', 1, interval='30m', history='1w') > 0.92"
+    thresholds: { critical: 0.92 }
+    group_by: [service]
+    evaluation_window: next_1d
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-app-availability
+    runbook: app-memory-leak-forecast
+    workflow: remediate-recycle-app-pool
+    failure_domain: application-platform
+    mandatory: false
+
+  app-telemetry-loss:
+    title: Application Stopped Reporting Telemetry
+    signal: telemetry_health
+    impact_class: hygiene
+    detection: threshold
+    monitor_type: query alert
+    resource_type: service
+    selector: ""
+    query: 'sum(last_30m):sum:trace.span.hits{__SCOPE__} by {service}.as_count() < 1'
+    thresholds: { critical: 1 }
+    group_by: [service]
+    evaluation_window: last_30m
+    envs: [prod, stage, qa]
+    bands: [critical, standard, baseline]
+    slo_id: slo-app-availability
+    runbook: app-telemetry-loss
+    workflow: diag-app-health
+    failure_domain: application-platform
+    mandatory: true
     notify_no_data: true
     no_data_timeframe: 60
+    rationale_fixed_threshold: >
+      Absence of telemetry is a binary condition. This is the monitor that
+      guarantees "no alerts" never silently means "no data".
+
+  # --- dependency ------------------------------------------------------------
+  dependency-error-anomaly:
+    title: Outbound Dependency Failure
+    signal: error_rate
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: service
+    selector: ""
+    query: "avg(last_15m):anomalies(sum:trace.http.client.request.errors{__SCOPE__} by {service,peer.service}.as_rate(), 'agile', 3) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [service, peer.service]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-app-availability
+    runbook: dependency-error-anomaly
+    workflow: diag-dependency
+    failure_domain: application-platform
+    mandatory: true
+
+  dependency-latency-degradation:
+    title: Outbound Dependency Latency Degradation
+    signal: latency
+    impact_class: degradation
+    detection: rate_of_change
+    monitor_type: query alert
+    resource_type: service
+    selector: ""
+    query: 'pct_change(avg(last_15m),last_1h):avg:trace.http.client.request.duration{__SCOPE__} by {service,peer.service} > 100'
+    thresholds: { critical: 100, warning: 50 }
+    group_by: [service, peer.service]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-app-latency
+    runbook: dependency-latency-degradation
+    workflow: diag-dependency
+    failure_domain: application-platform
+    mandatory: false
+
+  # --- deployment ------------------------------------------------------------
+  deployment-regression:
+    title: Deployment Regression
+    signal: error_rate
+    impact_class: degradation
+    detection: rate_of_change
+    monitor_type: query alert
+    resource_type: service
+    selector: ""
+    query: 'pct_change(avg(last_10m),last_30m):sum:trace.span.errors{__SCOPE__} by {service}.as_rate() > 300'
+    thresholds: { critical: 300, warning: 150 }
+    group_by: [service]
+    evaluation_window: last_10m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-app-availability
+    runbook: deployment-regression
+    workflow: auto-enrich-change
+    failure_domain: application-platform
+    mandatory: true
+    release_gate: true
+
+  deployment-error-spike:
+    title: Post-Deployment Error Spike
+    signal: error_rate
+    impact_class: customer_impact
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: service
+    selector: ""
+    query: "avg(last_10m):anomalies(sum:trace.span.errors{__SCOPE__,version:*} by {service,version}.as_rate(), 'agile', 4) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [service, version]
+    evaluation_window: last_10m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-app-availability
+    runbook: deployment-error-spike
+    workflow: auto-enrich-change
+    failure_domain: application-platform
+    mandatory: false
+    release_gate: true

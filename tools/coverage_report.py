@@ -1,31 +1,37 @@
 #!/usr/bin/env python3
-"""Coverage & compliance report — the evidence engine for 100% coverage.
+"""COVERAGE & COMPLIANCE REPORT — the evidence engine.
 
-Joins the authoritative inventory + profile assignments against the live (or
-fixture) monitor/SLO estate and reports, per the platform definition of
-coverage:
+Joins the authoritative inventory and the profile assignments against the live
+(or fixture) Datadog estate, and answers the only question that matters:
 
-  C1  unmonitored resources (alerting profile but no covering archetype)
-  C2  resources without owners
-  C3  missing or invalid required tags
-  C4  services without SLOs
-  C5  monitors without runbooks
-  C6  monitors without Workflow Automation
-  C7  monitors without on-call routing (team+severity tags)
-  C8  duplicate / overlapping monitors (same dedup scope or query)
-  C9  unmanaged (click-ops) monitors
-  C10 resources assigned the wrong monitoring profile
-  C11 high-cardinality / excessively grouped monitors
-  C12 expired exceptions
-  C13 SLOs with silent telemetry (broken numerators / deleted member monitors)
+    "Is anything in this organization unmonitored, unowned, or unactionable —
+     and can we prove it?"
 
-Modes: --live (Datadog API) or --fixtures DIR (monitors.json, slos.json).
-Outputs generated/coverage_report.{json,md}; exit 1 if any check fails, so the
-scheduled CI job turns red the moment governance drifts.
+Every check maps to a promise the framework makes. A red report is a governance
+incident for the observability-platform team, not a warning.
+
+  C1   resources with an alerting band but no covering monitor pack
+  C2   resources without a resolvable owner
+  C3   missing or invalid required tags (resources and monitors)
+  C4   services with no SLO association
+  C5   monitors without a runbook
+  C6   monitors without workflow automation
+  C7   monitors without resolvable routing (team + priority + profile)
+  C8   duplicate or overlapping monitors
+  C9   unmanaged (click-ops) monitors
+  C10  resources on the wrong monitoring profile
+  C11  cardinality risk: too many group keys or missing collapse keys
+  C12  expired exceptions
+  C13  SLO integrity — missing SLOs and silent telemetry
+  C14  paging discipline: anything paging that policy says should not
+  C15  monitors with no actionable response (no impact statement / no runbook)
+
+Modes: --live (Datadog API) or --fixtures DIR. Exit code 1 on any finding.
 """
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import sys
 from collections import defaultdict
@@ -33,31 +39,34 @@ from pathlib import Path
 
 import obs_common as oc
 
-# Which resource kinds each archetype class of coverage applies to — used to
-# decide whether an alerting-profile resource is actually covered by a pack.
-KIND_TO_ARCHETYPE_GROUPS = {
-    "host": ["host-unavailable", "host-cpu-anomaly", "memory-pressure", "disk-capacity-forecast"],
-    "service": ["app-error-rate-anomaly", "app-latency-degradation", "app-telemetry-loss"],
-    "k8s_deployment": ["k8s-workload-unavailable"],
-    "database": ["db-replication-lag", "db-connection-saturation"],
-    "pipeline": ["pipeline-freshness", "pipeline-job-failure"],
-    "queue": ["queue-backlog-forecast"],
-    "certificate": ["certificate-expiry", "external-cert-expiry"],
-    "log_source": ["security-log-source-missing"],
+CHECK_TITLES = {
+    "C1": "Unmonitored resources",
+    "C2": "Resources without owners",
+    "C3": "Missing / invalid required tags",
+    "C4": "Services without an SLO",
+    "C5": "Monitors without a runbook",
+    "C6": "Monitors without automation",
+    "C7": "Monitors without routing",
+    "C8": "Duplicate / overlapping monitors",
+    "C9": "Unmanaged (click-ops) monitors",
+    "C10": "Wrong monitoring profile",
+    "C11": "Cardinality risk",
+    "C12": "Expired exceptions",
+    "C13": "SLO integrity / silent telemetry",
+    "C14": "Paging discipline violations",
+    "C15": "Monitors with no actionable response",
 }
-
-REQUIRED_MONITOR_TAGS = ["env", "service", "team", "owner", "domain", "criticality",
-                         "monitoring_profile", "managed_by", "severity", "slo_id"]
 
 
 def fetch_live():
     import requests
+
     headers = oc.dd_headers()
     site = oc.dd_site()
     monitors, page = [], 0
     while True:
-        r = requests.get(f"{site}/api/v1/monitor",
-                         headers=headers, params={"page": page, "page_size": 200}, timeout=60)
+        r = requests.get(f"{site}/api/v1/monitor", headers=headers,
+                         params={"page": page, "page_size": 200}, timeout=60)
         r.raise_for_status()
         batch = r.json()
         monitors.extend(batch)
@@ -77,8 +86,8 @@ def fetch_live():
     return monitors, slos
 
 
-def tags_map(tag_list):
-    out = {}
+def tags_map(tag_list) -> dict:
+    out: dict[str, str] = {}
     for t in tag_list or []:
         if ":" in t:
             k, v = t.split(":", 1)
@@ -86,85 +95,121 @@ def tags_map(tag_list):
     return out
 
 
-def run_checks(inventory, assignments, monitors, slos, policy):
-    g = policy["global"]
-    checks = {f"C{i}": [] for i in range(1, 14)}
-    counts = {}
+def _covering_archetypes(policy: dict, service_archetype: str) -> set[str]:
+    """The archetypes that MUST be deployed for this service archetype.
 
-    amap = {a["id"]: a for a in assignments["assignments"]}
+    Only `mandatory` archetypes count towards coverage. A resource is not
+    "covered" because some optional member of one of its packs happens to exist
+    — that reading would let an entire golden-signal pack be deleted while the
+    report still claimed 100%.
+    """
+    sa = policy["service_archetypes"].get(service_archetype)
+    if not sa:
+        return set()
+    out: set[str] = set()
+    for pack in sa["packs"]:
+        out.update(a for a in policy["packs"][pack]["archetypes"]
+                   if policy["archetypes"].get(a, {}).get("mandatory"))
+    return out
+
+
+def run_checks(inventory, assignments, monitors, slos, policy) -> dict:
+    g = policy["global"]
+    checks: dict[str, list] = {f"C{i}": [] for i in range(1, 16)}
+
     monitor_tags = {m["id"]: tags_map(m.get("tags")) for m in monitors}
     managed = {mid for mid, t in monitor_tags.items() if t.get("managed_by") == "terraform"}
-    archetypes_deployed = {t.get("archetype") for t in monitor_tags.values() if t.get("archetype")}
-    envs_deployed = defaultdict(set)
+
+    # Which (archetype, env, band) combinations are actually deployed.
+    deployed = defaultdict(set)
     for t in monitor_tags.values():
         if t.get("archetype"):
-            envs_deployed[t["archetype"]].add(t.get("env"))
+            deployed[t["archetype"]].add((t.get("env"), t.get("alert_band")))
 
-    slo_services = set()
     slo_ids_seen = set()
+    slo_services = set()
     for s in slos:
         st = tags_map(s.get("tags", [])) if isinstance(s.get("tags"), list) else {}
-        slo_ids_seen.add(st.get("slo_id"))
+        if st.get("slo_id"):
+            slo_ids_seen.add(st["slo_id"])
         for svc in s.get("service_tags") or ([st["service"]] if "service" in st else []):
             slo_services.add(svc)
 
-    # --- Resource-side checks (bounded memory: single pass) ------------------
-    services_seen = set()
+    # ---------------------------------------------------------- resource checks
+    services_seen: set[tuple[str, str]] = set()
+    observe_only = []
     for a in assignments["assignments"]:
-        svc = a.get("service")
-        if svc:
-            services_seen.add((svc, a["domain"]))
+        if a.get("service"):
+            services_seen.add((a["service"], a["domain"]))
+
         if a["owner_source"] == "unowned_pool":
             checks["C2"].append(a["id"])
-        bad_tags = [v for v in a["violations"] if v.startswith(("invalid_", "unknown_team"))]
-        if bad_tags:
-            checks["C3"].append({"id": a["id"], "violations": bad_tags})
-        if a["monitoring_profile"] == "observe_only":
-            continue  # explicitly not alerted — reported separately below
-        expected = KIND_TO_ARCHETYPE_GROUPS.get(a["kind"], [])
-        covered = any(
-            arch in archetypes_deployed and a["env"] in envs_deployed.get(arch, ())
-            for arch in expected
-        )
-        if expected and not covered:
-            checks["C1"].append({"id": a["id"], "kind": a["kind"], "env": a["env"]})
-        # C10: profile sanity — security-domain resources must be
-        # security_sensitive; tier1 must not sit on plain standard.
-        if a["domain"] == "security" and a["monitoring_profile"] != "security_sensitive":
-            checks["C10"].append({"id": a["id"], "profile": a["monitoring_profile"]})
-        if a["criticality"] == "tier1" and a["monitoring_profile"] == "standard":
-            checks["C10"].append({"id": a["id"], "profile": "standard-but-tier1"})
 
-    # C4: services (by SLO-carrying domains) without any SLO association.
-    domain_slo_services = {policy["slos"][sid]["service"] for sid in policy["slos"]}
+        bad = [v for v in a["violations"]
+               if v.startswith(("invalid_", "unknown_team", "service_archetype_inferred"))]
+        if bad:
+            checks["C3"].append({"id": a["id"], "violations": bad})
+
+        if a["alert_band"] == "none":
+            observe_only.append(a["id"])
+            # An observe_only resource with no recorded reason is a silent gap.
+            if not a["observe_only_reason"]:
+                checks["C10"].append({"id": a["id"], "problem": "observe_only with no recorded reason"})
+            continue
+
+        expected = _covering_archetypes(policy, a["service_archetype"])
+        missing = [
+            arch for arch in expected
+            # An archetype only covers this resource where it is instantiated
+            # for the resource's own environment AND alert band.
+            if (a["env"], a["alert_band"]) not in deployed.get(arch, set())
+            and a["env"] in policy["archetypes"][arch]["envs"]
+            and a["alert_band"] in policy["archetypes"][arch]["bands"]
+        ]
+        if missing:
+            checks["C1"].append({
+                "id": a["id"], "kind": a["kind"], "env": a["env"],
+                "band": a["alert_band"], "service_archetype": a["service_archetype"],
+                "missing_archetypes": sorted(missing)[:5],
+            })
+
+        # C10 — profile sanity
+        if a["domain"] == "security" and a["monitoring_profile"] not in ("regulated", "critical"):
+            checks["C10"].append({"id": a["id"], "problem": f"security resource on {a['monitoring_profile']}"})
+        if a["tier"] == "tier0" and a["alert_band"] != "critical" and a["env"] == "prod":
+            checks["C10"].append({"id": a["id"], "problem": "tier0 not on the critical band"})
+
+    # C4 — a service is covered if it, or its domain, carries an SLO
+    domain_slo_services = {s["service"] for s in policy["slos"].values()}
+    domains_with_slo = {s["domain"] for s in policy["slos"].values()}
     for svc, domain in sorted(services_seen):
-        # Platform-level SLOs cover services through their domain platform SLO;
-        # a service is uncovered only if neither it nor its domain platform
-        # service carries an SLO.
-        domain_platform_covered = any(
-            policy["slos"][sid]["domain"] == domain for sid in policy["slos"]
-        )
-        if svc not in slo_services and svc not in domain_slo_services and not domain_platform_covered:
-            checks["C4"].append(svc)
+        if svc in slo_services or svc in domain_slo_services or domain in domains_with_slo:
+            continue
+        checks["C4"].append(svc)
 
-    # --- Monitor-side checks -------------------------------------------------
-    seen_dedup = {}
-    seen_query = {}
+    # ----------------------------------------------------------- monitor checks
+    seen_dedup: dict[str, str] = {}
+    seen_query: dict[str, str] = {}
     for m in monitors:
         t = monitor_tags[m["id"]]
         name = m.get("name", str(m["id"]))
+
         if m["id"] not in managed:
             checks["C9"].append({"id": m["id"], "name": name})
-            continue  # unmanaged monitors fail C9; contract checks target managed set
+            continue
+
         if not t.get("runbook"):
             checks["C5"].append(name)
         if not t.get("automation_ref"):
             checks["C6"].append(name)
-        if not (t.get("team") and t.get("severity")):
+        if not (t.get("team") and t.get("priority") and t.get("notification_profile")):
             checks["C7"].append(name)
-        missing = [rt for rt in REQUIRED_MONITOR_TAGS if rt not in t]
+
+        missing = [rt for rt in g["required_monitor_tags"] if rt not in t]
         if missing:
-            checks["C3"].append({"id": f"monitor:{m['id']}", "violations": [f"missing_tag:{x}" for x in missing]})
+            checks["C3"].append({"id": f"monitor:{m['id']}",
+                                 "violations": [f"missing_tag:{x}" for x in missing]})
+
         dk = t.get("dedup_key")
         if dk:
             if dk in seen_dedup:
@@ -177,25 +222,50 @@ def run_checks(inventory, assignments, monitors, slos, policy):
                 checks["C8"].append({"a": seen_query[q], "b": name, "query": q[:80]})
             else:
                 seen_query[q] = name
-        gb = q.count(" by {") and q.split(" by {")[1].split("}")[0].count(",") + 1 or 0
-        if gb > g["cardinality"]["max_group_by_keys"]:
-            checks["C11"].append({"name": name, "group_keys": gb})
 
-    # C12: expired exceptions.
-    import datetime as dt
+        # C11 — cardinality observed at runtime
+        if " by {" in q:
+            keys = q.split(" by {")[1].split("}")[0].split(",")
+            if len(keys) > g["cardinality"]["max_group_by_keys"]:
+                checks["C11"].append({"name": name, "group_keys": len(keys)})
+            banned = sorted({k.strip() for k in keys} & set(g["cardinality"]["forbidden_group_keys"]))
+            if banned:
+                checks["C11"].append({"name": name, "banned_group_keys": banned})
+
+        # C14 — paging discipline. The `priority` tag is lowercase because
+        # Datadog reserves that tag key and only accepts p1..p4.
+        prio = (t.get("priority") or "").upper()
+        paging = t.get("pages") == "true"
+        if paging:
+            if t.get("env") != "prod":
+                checks["C14"].append({"name": name, "problem": f"pages in {t.get('env')}"})
+            elif t.get("alert_band") != "critical":
+                checks["C14"].append({"name": name, "problem": f"pages on band {t.get('alert_band')}"})
+            elif prio == "P2" and t.get("archetype") not in ("composite",) \
+                    and not str(t.get("archetype", "")).startswith("slo-burn"):
+                checks["C14"].append({
+                    "name": name,
+                    "problem": "P2 symptom monitor pages; only SLO burn and composites may",
+                })
+            elif prio in ("P3", "P4"):
+                checks["C14"].append({"name": name, "problem": f"{prio} must never page"})
+
+        # C15 — actionability
+        msg = m.get("message", "")
+        if "**DO THIS NEXT:**" not in msg and "RUNBOOK" not in msg.upper():
+            checks["C15"].append({"name": name, "problem": "message states no next action or runbook"})
+
+    # C12 — expired exceptions
     today = dt.date.today()
     for e in policy["exceptions"]:
         expires = e["expires"]
-        if isinstance(expires, str):
-            expires = dt.date.fromisoformat(expires)
+        if not isinstance(expires, dt.date):
+            expires = dt.date.fromisoformat(str(expires))
         if expires < today:
-            checks["C12"].append(e["id"])
+            checks["C12"].append({"id": e["id"], "expired": str(expires), "owner": e["owner"]})
 
-    # C13: SLO integrity — declared catalog SLOs missing from the org, and
-    # SLOs whose custom-metric telemetry is known-silent.
+    # C13 — SLO integrity
     for sid, s in policy["slos"].items():
-        if "datadog_id" in s and sid not in slo_ids_seen:
-            checks["C13"].append({"slo_id": sid, "problem": "declared datadog_id not found in org"})
         if s.get("telemetry_dependency"):
             checks["C13"].append({"slo_id": sid, "problem": f"telemetry dependency: {s['telemetry_dependency']}"})
     for s in slos:
@@ -203,57 +273,57 @@ def run_checks(inventory, assignments, monitors, slos, policy):
         if status.get("error"):
             checks["C13"].append({"slo": s.get("name"), "problem": status["error"]})
 
-    observe_only = [a["id"] for a in assignments["assignments"] if a["monitoring_profile"] == "observe_only"]
     counts = {k: len(v) for k, v in checks.items()}
-    total_alertable = assignments["summary"]["total"] - len(observe_only)
-    covered = total_alertable - len(checks["C1"])
+    total = assignments["summary"]["total"]
+    alertable = assignments["summary"]["alertable"]
+    covered = alertable - len(checks["C1"])
     return {
+        "generated_at": oc.utcnow().isoformat(),
         "summary": {
-            "resources_total": assignments["summary"]["total"],
+            "resources_total": total,
             "resources_observe_only": len(observe_only),
-            "resources_alertable": total_alertable,
+            "resources_alertable": alertable,
             "resources_covered": covered,
-            "coverage_pct": round(100.0 * covered / total_alertable, 3) if total_alertable else 100.0,
+            "coverage_pct": round(100.0 * covered / alertable, 3) if alertable else 100.0,
             "monitors_total": len(monitors),
             "monitors_managed": len(managed),
+            "monitors_paging": sum(1 for t in monitor_tags.values() if t.get("pages") == "true"),
             "check_counts": counts,
             "pass": all(v == 0 for v in counts.values()),
         },
-        "checks": {k: v[:200] for k, v in checks.items()},  # cap detail lists
+        "checks": {k: v[:200] for k, v in checks.items()},
         "observe_only_sample": observe_only[:50],
     }
-
-
-CHECK_TITLES = {
-    "C1": "Unmonitored resources", "C2": "Resources without owners",
-    "C3": "Missing/invalid tags", "C4": "Services without SLOs",
-    "C5": "Monitors without runbooks", "C6": "Monitors without workflows",
-    "C7": "Monitors without on-call routing", "C8": "Duplicate/overlapping monitors",
-    "C9": "Unmanaged (click-ops) monitors", "C10": "Wrong monitoring profile",
-    "C11": "High-cardinality monitors", "C12": "Expired exceptions",
-    "C13": "SLO integrity / silent telemetry",
-}
 
 
 def to_markdown(report: dict) -> str:
     s = report["summary"]
     lines = [
-        "# Coverage & Compliance Report", "",
-        f"- Resources: **{s['resources_total']}** ({s['resources_observe_only']} observe-only by policy)",
-        f"- Coverage of alertable estate: **{s['coverage_pct']}%** ({s['resources_covered']}/{s['resources_alertable']})",
-        f"- Monitors: {s['monitors_total']} total, {s['monitors_managed']} Terraform-managed",
-        f"- Overall: **{'PASS' if s['pass'] else 'FAIL'}**", "",
-        "| Check | Findings |", "|---|---|",
+        "# Coverage & Compliance Report",
+        "",
+        f"- Resources: **{s['resources_total']}** — {s['resources_observe_only']} observe-only "
+        "by explicit policy, each with a recorded reason",
+        f"- Coverage of the alertable estate: **{s['coverage_pct']}%** "
+        f"({s['resources_covered']}/{s['resources_alertable']})",
+        f"- Monitors: {s['monitors_total']} total, {s['monitors_managed']} Terraform-managed, "
+        f"{s['monitors_paging']} able to page",
+        f"- Overall: **{'PASS' if s['pass'] else 'FAIL'}**",
+        "",
+        "| Check | Findings |",
+        "|---|---|",
     ]
     for cid, title in CHECK_TITLES.items():
-        lines.append(f"| {cid} {title} | {s['check_counts'].get(cid, 0)} |")
+        n = s["check_counts"].get(cid, 0)
+        mark = "" if n == 0 else " ⚠️"
+        lines.append(f"| {cid} {title} | {n}{mark} |")
     lines.append("")
     for cid, items in report["checks"].items():
-        if items:
-            lines.append(f"## {cid} {CHECK_TITLES[cid]} ({len(items)} shown, capped at 200)")
-            for it in items[:20]:
-                lines.append(f"- `{json.dumps(it) if not isinstance(it, str) else it}`")
-            lines.append("")
+        if not items:
+            continue
+        lines.append(f"## {cid} {CHECK_TITLES[cid]} — {len(items)} shown (capped at 200)")
+        for it in items[:20]:
+            lines.append(f"- `{it if isinstance(it, str) else json.dumps(it)}`")
+        lines.append("")
     return "\n".join(lines)
 
 

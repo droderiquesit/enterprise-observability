@@ -1,0 +1,211 @@
+# =============================================================================
+# MONITOR ARCHETYPE CATALOG — MESSAGING / STREAMING
+# Azure Service Bus, Kafka/Event Hubs, RabbitMQ, and client-side messaging.
+# Grouping is namespace → entity (queue/topic) → consumer group.
+# =============================================================================
+version: 2
+domain: messaging
+
+archetypes:
+
+  consumer-lag-forecast:
+    title: Consumer Lag Exhaustion Forecast
+    signal: saturation
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: queue
+    selector: ""
+    query: "max(next_1d):forecast(avg:acme.messaging.consumer_lag{__SCOPE__} by {namespace,entity,consumer_group}, 'linear', 1, interval='15m', history='1d') > 100000"
+    thresholds: { critical: 100000, warning: 25000 }
+    group_by: [namespace, entity, consumer_group]
+    evaluation_window: next_1d
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-messaging-delivery
+    runbook: consumer-lag-forecast
+    workflow: remediate-scale-workload
+    failure_domain: messaging-platform
+    mandatory: true
+    notify_by: [namespace]
+    notes: >
+      Backlogs are the textbook forecastable failure: growth is monotonic and
+      the drain rate is measurable, so exhaustion time is computable hours
+      ahead of impact.
+
+  consumer-absent:
+    title: No Active Consumer On Queue
+    signal: availability
+    impact_class: customer_impact
+    detection: threshold
+    monitor_type: query alert
+    resource_type: queue
+    selector: ""
+    query: 'min(last_15m):avg:acme.messaging.active_consumers{__SCOPE__} by {namespace,entity} < 1'
+    thresholds: { critical: 1 }
+    group_by: [namespace, entity]
+    evaluation_window: last_15m
+    envs: [prod, stage, qa]
+    bands: [critical, standard, baseline]
+    slo_id: slo-messaging-delivery
+    runbook: consumer-absent
+    workflow: diag-messaging
+    failure_domain: messaging-platform
+    mandatory: true
+    notify_by: [namespace]
+    rationale_fixed_threshold: >
+      Zero consumers on a live queue is binary and silent — the queue looks
+      healthy while the business stops.
+
+  consumer-dlq-growth:
+    title: Dead Letter Queue Growth
+    signal: dlq_depth
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: queue
+    selector: ""
+    query: 'avg(last_30m):avg:azure.servicebus_namespaces.deadletteredmessages{__SCOPE__} by {namespace,entity} > 100'
+    thresholds: { critical: 100, warning: 10 }
+    group_by: [namespace, entity]
+    evaluation_window: last_30m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-messaging-delivery
+    runbook: consumer-dlq-growth
+    workflow: remediate-clear-dlq
+    failure_domain: messaging-platform
+    mandatory: true
+    notify_by: [namespace]
+    rationale_fixed_threshold: >
+      Dead-lettered messages are business events that were permanently lost;
+      the threshold reflects the manual replay capacity of one engineer.
+
+  consumer-retry-storm:
+    title: Consumer Retry Storm
+    signal: error_rate
+    impact_class: degradation
+    detection: rate_of_change
+    monitor_type: query alert
+    resource_type: queue
+    selector: ""
+    query: 'pct_change(avg(last_15m),last_1h):sum:acme.messaging.delivery_attempts{__SCOPE__} by {namespace,entity}.as_rate() > 200'
+    thresholds: { critical: 200, warning: 100 }
+    group_by: [namespace, entity]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-messaging-delivery
+    runbook: consumer-retry-storm
+    workflow: diag-messaging
+    failure_domain: messaging-platform
+    mandatory: false
+    notify_by: [namespace]
+
+  queue-depth-anomaly:
+    title: Queue Depth Anomaly
+    signal: saturation
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: queue
+    selector: ""
+    query: "avg(last_30m):anomalies(avg:azure.servicebus_namespaces.activemessages{__SCOPE__} by {namespace,entity}, 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [namespace, entity]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-messaging-delivery
+    runbook: queue-depth-anomaly
+    workflow: diag-messaging
+    failure_domain: messaging-platform
+    mandatory: false
+    notify_by: [namespace]
+
+  messaging-publish-failure:
+    title: Message Publish Failures
+    signal: error_rate
+    impact_class: customer_impact
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: service
+    selector: ""
+    query: "avg(last_15m):anomalies(sum:acme.messaging.publish_errors{__SCOPE__} by {service,namespace}.as_rate(), 'agile', 3) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [service, namespace]
+    notify_by: [namespace]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-messaging-delivery
+    runbook: messaging-publish-failure
+    workflow: diag-messaging
+    failure_domain: messaging-platform
+    mandatory: true
+
+  messaging-client-disconnect:
+    title: Messaging Client Disconnect Storm
+    signal: availability
+    impact_class: degradation
+    detection: rate_of_change
+    monitor_type: query alert
+    resource_type: service
+    selector: ""
+    query: 'pct_change(avg(last_10m),last_1h):sum:acme.messaging.client_disconnects{__SCOPE__} by {service,namespace}.as_rate() > 200'
+    thresholds: { critical: 200 }
+    group_by: [service, namespace]
+    notify_by: [namespace]
+    evaluation_window: last_10m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-messaging-delivery
+    runbook: messaging-client-disconnect
+    workflow: diag-messaging
+    failure_domain: messaging-platform
+    mandatory: false
+
+  broker-namespace-throttling:
+    title: Messaging Namespace Throttled
+    signal: saturation
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: messaging_namespace
+    selector: ""
+    query: 'sum(last_15m):sum:azure.servicebus_namespaces.throttledrequests{__SCOPE__} by {namespace}.as_count() > 0'
+    thresholds: { critical: 0 }
+    group_by: [namespace]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-messaging-delivery
+    runbook: broker-namespace-throttling
+    workflow: remediate-scale-workload
+    failure_domain: messaging-platform
+    mandatory: true
+    rationale_fixed_threshold: "Broker throttling is a hard platform quota signal."
+
+  stream-partition-skew:
+    title: Stream Partition Skew
+    signal: saturation
+    impact_class: risk
+    detection: outlier
+    monitor_type: query alert
+    resource_type: stream
+    selector: ""
+    query: "avg(last_1h):outliers(avg:acme.streaming.partition_lag{__SCOPE__} by {stream,partition}, 'DBSCAN', 3) > 0"
+    thresholds: { critical: 0 }
+    group_by: [stream, partition]
+    notify_by: [stream]
+    evaluation_window: last_1h
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-messaging-delivery
+    runbook: stream-partition-skew
+    workflow: diag-messaging
+    failure_domain: event-streaming
+    mandatory: false
+    notes: >
+      Peer comparison is the only honest way to detect skew: every partition
+      is supposed to look like its siblings, so the outlier IS the defect.

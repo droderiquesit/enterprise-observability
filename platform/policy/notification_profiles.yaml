@@ -1,0 +1,133 @@
+# =============================================================================
+# NOTIFICATION POLICY ARCHITECTURE
+#
+# Monitors NEVER contain a destination. They carry tags:
+#     team:<t>  priority:<P1..P4>  notification_profile:<p>  env:<e>
+# and Datadog monitor notification rules (modules/notification_rules) resolve
+# those tags to destinations. A destination change touches zero monitors.
+#
+# There are SIX notification profiles for the entire enterprise. A team never
+# picks one — it is derived from environment × band × domain overlay.
+# =============================================================================
+version: 2
+
+# --- Integration handles: defined once, org-wide -----------------------------
+destinations:
+  servicenow:
+    incident_p1: "@servicenow-acme-incident-p1"
+    incident_p2: "@servicenow-acme-incident-p2"
+    task_p3: "@servicenow-acme-task"
+  teams_webhook_prefix: "@teams-"
+  oncall_handle_prefix: "@oncall-"          # Datadog On-Call team handle
+  exec_channel: "@teams-exec-bridge"
+  major_incident_channel: "@teams-major-incident"
+  release_channel: "@teams-release-train"
+
+# --- The six profiles --------------------------------------------------------
+notification_profiles:
+
+  production_critical:
+    display: Production — Critical
+    provisioned: true
+    applies_to_teams: all
+    selected_when: "env == prod AND alert_band == critical"
+    description: Full response path for tier0/tier1 production.
+    routes:
+      P1: { page: true, urgency: high, servicenow: incident_p1, teams: team_channel,
+            extra_channels: [major_incident_channel, exec_channel], datadog_incident: "SEV-1" }
+      P2: { page: true, urgency: low,  servicenow: incident_p2, teams: team_channel,
+            datadog_incident: "SEV-2" }
+      P3: { page: false, servicenow: task_p3_when_sustained, teams: team_channel }
+      P4: { page: false, servicenow: none, teams: low_noise_channel }
+
+  production_standard:
+    display: Production — Standard
+    provisioned: true
+    applies_to_teams: all
+    selected_when: "env == prod AND alert_band == standard"
+    description: Tier2 production. Never pages; work items and team channel.
+    routes:
+      P1: { page: false, servicenow: incident_p2, teams: team_channel, datadog_incident: "SEV-2" }
+      P2: { page: false, servicenow: incident_p2, teams: team_channel }
+      P3: { page: false, servicenow: task_p3_when_sustained, teams: team_channel }
+      P4: { page: false, servicenow: none, teams: low_noise_channel }
+
+  production_baseline:
+    display: Production — Baseline
+    provisioned: true
+    applies_to_teams: all
+    selected_when: "env == prod AND alert_band == baseline"
+    description: Low-value production. Liveness only, ticket-driven.
+    routes:
+      P3: { page: false, servicenow: task_p3_when_sustained, teams: low_noise_channel }
+      P4: { page: false, servicenow: none, teams: low_noise_channel }
+
+  nonprod_standard:
+    display: Non-Production
+    provisioned: true
+    applies_to_teams: all
+    selected_when: "env in [qa, stage]"
+    description: >
+      Stage and QA. Team channel (env-suffixed) and ServiceNow TASKS only.
+      Never pages, never creates an incident, never consumes error budget.
+    routes:
+      P3: { page: false, servicenow: task_p3, teams: team_channel_env_suffixed }
+      P4: { page: false, servicenow: none, teams: low_noise_channel }
+
+  security_operational:
+    display: Security Operational
+    provisioned: true
+    # Security monitors carry team:security (domains.yaml routing_override_team),
+    # so only the security team needs rules for this profile. Generating it for
+    # all eight teams would create 28 rules that can never match.
+    applies_to_teams: [security]
+    selected_when: "domain == security OR overlay == security_sensitive"
+    description: >
+      Routes to the security team regardless of resource ownership, because the
+      responder is not the owner. Owning team is notified in parallel for
+      context, never as the primary responder.
+    routes:
+      P1: { page: true, urgency: high, servicenow: incident_p1,
+            teams: security_channel, extra_channels: [major_incident_channel],
+            cc_owner_team: true, datadog_incident: "SEV-1" }
+      P2: { page: true, urgency: low, servicenow: incident_p2,
+            teams: security_channel, cc_owner_team: true }
+      P3: { page: false, servicenow: task_p3, teams: security_channel, cc_owner_team: true }
+      P4: { page: false, servicenow: none, teams: security_low_noise, cc_owner_team: false }
+
+  release_gate:
+    display: Release Gate
+    # Not provisioned yet: activating it requires the release-window signal from
+    # the deployment pipeline (a `release_window:active` tag on the monitor).
+    # The policy is defined and reviewed here so the behavior is agreed before
+    # it is switched on — provisioning dead notification rules would only add
+    # objects nobody can trace to a monitor.
+    provisioned: false
+    applies_to_teams: all
+    selected_when: "env == stage AND overlay == release_gate AND release window active"
+    description: >
+      The one sanctioned way a non-production signal gets loud: a tier0
+      release-gate archetype notifies the release channel at P2 so a bad
+      release is stopped before it reaches production. Still never pages.
+    routes:
+      P2: { page: false, servicenow: task_p3, teams: release_channel, cc_owner_team: true }
+      P3: { page: false, servicenow: none, teams: release_channel }
+
+# --- Resolution order --------------------------------------------------------
+# First match wins. Implemented in stacks/coverage/locals_routing.tf.
+resolution_order:
+  - security_operational       # overlay beats everything
+  - release_gate
+  - nonprod_standard
+  - production_critical
+  - production_standard
+  - production_baseline
+
+# --- Sustained-P3 promotion --------------------------------------------------
+# A P3 that stays in alert past this many renotifications gets a ServiceNow
+# task automatically. This is how "actionable but not urgent" avoids becoming
+# "quietly ignored forever".
+sustained_promotion:
+  after_renotifications: 2
+  creates: servicenow_task
+  workflow: auto-ticket-sustained

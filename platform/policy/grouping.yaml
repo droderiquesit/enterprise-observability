@@ -1,0 +1,129 @@
+# =============================================================================
+# ALERT GROUPING & DEDUPLICATION POLICY
+#
+# The failure this file prevents: an Azure region degrades, 4,000 Kubernetes
+# pods restart, and 4,000 notifications arrive. With this policy the same event
+# produces ONE page and a group of children.
+#
+# Four independent mechanisms, applied in order:
+#   1. MULTI-ALERT GROUPING   the monitor evaluates per group, not per resource
+#   2. NOTIFY-BY COLLAPSE     Datadog notifies once per collapse key, not per group
+#   3. DEDUPLICATION          identical dedup_key inside the window = one event
+#   4. CORRELATION            related groups become one parent + children
+# =============================================================================
+version: 2
+
+# -----------------------------------------------------------------------------
+# 1. Grouping strategy per resource class.
+# The rule of thumb: group by the smallest set of keys that a human would need
+# to START INVESTIGATING, and never by anything that identifies an individual
+# ephemeral object.
+# -----------------------------------------------------------------------------
+grouping_strategy:
+  service_level:
+    keys: [service]
+    applies_to: [api, web, worker, event_consumer, platform_service]
+    rationale: "The service is the unit of ownership and the unit of impact."
+  workload_level:
+    keys: [kube_cluster_name, kube_namespace, kube_deployment]
+    applies_to: [kubernetes]
+    rationale: "Cluster→namespace→workload is how Kubernetes ownership resolves."
+  host_level:
+    keys: [host]
+    applies_to: [infrastructure]
+    collapse_to: [cluster]
+    rationale: "Investigate per host, notify per cluster."
+  cloud_resource_level:
+    keys: [subscription_name, resource_group, name]
+    applies_to: [cloud]
+    collapse_to: [subscription_name]
+    rationale: "Azure failures scope to a subscription or region, not a resource."
+  datastore_level:
+    keys: [db_instance]
+    applies_to: [database]
+  messaging_level:
+    keys: [namespace, entity, consumer_group]
+    applies_to: [messaging]
+    collapse_to: [namespace]
+  pipeline_level:
+    keys: [pipeline]
+    applies_to: [data]
+  job_level:
+    keys: [service, job_name]
+    applies_to: [batch_job, scheduled_job]
+  network_level:
+    keys: [site, device]
+    applies_to: [network]
+    collapse_to: [site]
+
+# Keys that may NEVER appear in a group_by. Enforced three times: policy lint,
+# plan-time precondition, runtime coverage check C11.
+forbidden_group_keys:
+  [host_ip, container_id, pod_name, request_id, trace_id, path, url,
+   user_id, session_id, instance_id, uuid]
+
+# -----------------------------------------------------------------------------
+# 2. Notify-by collapse (`notify_by` on the monitor).
+# A monitor grouped by [kube_cluster_name, kube_namespace, kube_deployment] with
+# notify_by [kube_cluster_name] evaluates 4,000 groups but sends ONE
+# notification per cluster. This is the single most effective storm control in
+# Datadog and is set on every archetype whose group count can exceed ~50.
+# -----------------------------------------------------------------------------
+notify_by_policy:
+  required_when_expected_groups_exceed: 50
+  standard_collapse_keys:
+    kubernetes: [kube_cluster_name]
+    infrastructure: [cluster]
+    cloud: [subscription_name]
+    messaging: [namespace]
+    network: [site]
+    vmware: [vsphere_cluster]
+
+# -----------------------------------------------------------------------------
+# 3. Deduplication.
+# dedup_key = <service>.<env>.<archetype>[.<suffix>] is stamped on every
+# monitor by the factory. Two events with the same dedup_key inside the window
+# are ONE event.
+# -----------------------------------------------------------------------------
+deduplication:
+  dedup_key_template: "{service}.{env}.{archetype}{suffix}"
+  window_seconds: 900
+  flap_suppression:
+    # A group that recovers and re-alerts more than N times in the window is
+    # flapping: it is muted and a ticket is raised instead of paging again.
+    max_transitions: 4
+    window_seconds: 3600
+    action: mute_and_ticket
+    workflow: auto-ticket-sustained
+
+# -----------------------------------------------------------------------------
+# 4. Storm limits — the circuit breaker.
+# If a single monitor or team exceeds these rates, the platform stops notifying
+# and raises ONE storm event instead. A storm is itself an incident.
+# -----------------------------------------------------------------------------
+storm_limits:
+  per_monitor:
+    max_groups_alerting: 100
+    action: "collapse to a single 'N groups alerting' notification"
+  per_team_per_hour:
+    max_notifications: 25
+    action: "suppress further notifications, raise one storm event, page platform"
+  per_correlation_group:
+    max_children: 200
+    action: "truncate child list in the page; full list stays in the event"
+  global_per_hour:
+    max_pages: 50
+    action: "declare a major incident; stop paging; open the bridge"
+
+# -----------------------------------------------------------------------------
+# 5. Symptom-over-cause suppression.
+# When a service-level symptom and its infrastructure cause both fire, the
+# CAUSE becomes the parent and the symptoms become children — but the page
+# carries the SYMPTOM's business impact, because that is what the responder
+# needs to communicate.
+# -----------------------------------------------------------------------------
+suppression:
+  cause_domains: [infrastructure, network, cloud, vmware, kubernetes, database]
+  symptom_domains: [application, api, integration, data]
+  join_on: [env, region]
+  behavior: parent_is_cause_impact_is_symptom

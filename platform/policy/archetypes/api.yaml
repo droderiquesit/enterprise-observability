@@ -1,0 +1,209 @@
+# =============================================================================
+# MONITOR ARCHETYPE CATALOG — API
+# One monitor per (env × band) covering EVERY service tagged
+# service_archetype:api. Groups are services; new APIs join automatically.
+# =============================================================================
+version: 2
+domain: api
+
+archetypes:
+
+  api-availability:
+    title: API Availability
+    signal: availability
+    impact_class: customer_impact
+    detection: threshold
+    monitor_type: query alert
+    resource_type: service
+    selector: "service_archetype:api"
+    query: 'sum(last_5m):sum:trace.http.request.hits{__SCOPE__,http.status_class:5xx} by {service}.as_count() / sum:trace.http.request.hits{__SCOPE__} by {service}.as_count() > 0.5'
+    thresholds: { critical: 0.5, warning: 0.2 }
+    group_by: [service]
+    evaluation_window: last_5m
+    envs: [prod, stage, qa]
+    bands: [critical, standard, baseline]
+    slo_id: slo-api-availability
+    runbook: api-availability
+    workflow: diag-api-health
+    failure_domain: api-services
+    mandatory: true
+    release_gate: true
+    rationale_fixed_threshold: >
+      More than half of requests failing is an availability boundary, not a
+      behavioral deviation. Sub-outage degradation is caught by the anomaly and
+      burn-rate archetypes; this one exists to fire fast and unambiguously.
+
+  api-latency-p99:
+    title: API p99 Latency Degradation
+    signal: latency
+    impact_class: degradation
+    detection: rate_of_change
+    monitor_type: query alert
+    resource_type: service
+    selector: "service_archetype:api"
+    query: 'pct_change(avg(last_15m),last_1h):p99:trace.http.request.duration{__SCOPE__} by {service} > 100'
+    thresholds: { critical: 100, warning: 50 }
+    group_by: [service]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-api-latency
+    runbook: api-latency-p99
+    workflow: diag-api-health
+    failure_domain: api-services
+    mandatory: true
+    release_gate: true
+    # A team that asks for `predictive: {anomaly: true}` on this archetype gets
+    # the seasonal variant instead of the rate-of-change form.
+    predictive_variant: api-latency-seasonal
+
+  api-latency-seasonal:
+    title: API Latency Seasonal Anomaly
+    signal: latency
+    impact_class: degradation
+    detection: seasonal_anomaly
+    monitor_type: query alert
+    resource_type: service
+    selector: "service_archetype:api"
+    query: "avg(last_30m):anomalies(p95:trace.http.request.duration{__SCOPE__} by {service}, 'robust', 3, direction='above', seasonality='weekly') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [service]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-api-latency
+    runbook: api-latency-p99
+    workflow: diag-api-health
+    failure_domain: api-services
+    mandatory: false
+
+  api-5xx-anomaly:
+    title: API 5xx Error Rate Anomaly
+    signal: error_rate
+    impact_class: customer_impact
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: service
+    selector: "service_archetype:api"
+    query: "avg(last_15m):anomalies(sum:trace.http.request.errors{__SCOPE__,http.status_class:5xx} by {service}.as_rate(), 'agile', 3) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [service]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-api-availability
+    runbook: api-5xx-anomaly
+    workflow: diag-api-health
+    failure_domain: api-services
+    mandatory: true
+
+  api-4xx-anomaly:
+    title: API 4xx Client Error Anomaly
+    signal: error_rate
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: service
+    selector: "service_archetype:api"
+    query: "avg(last_30m):anomalies(sum:trace.http.request.hits{__SCOPE__,http.status_class:4xx} by {service}.as_rate(), 'agile', 4) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [service]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-api-availability
+    runbook: api-4xx-anomaly
+    workflow: diag-api-health
+    failure_domain: api-services
+    mandatory: false
+    notes: >
+      4xx is usually a caller problem, so this is deliberately less sensitive
+      (4 deviations, 30m) and never customer_impact — it exists to catch broken
+      client releases and auth misconfiguration, not to page.
+
+  api-traffic-anomaly:
+    title: API Traffic Drop Anomaly
+    signal: throughput
+    impact_class: customer_impact
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: service
+    selector: "service_archetype:api"
+    query: "avg(last_30m):anomalies(sum:trace.http.request.hits{__SCOPE__} by {service}.as_rate(), 'agile', 3, direction='below') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [service]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-api-availability
+    runbook: api-traffic-anomaly
+    workflow: diag-api-health
+    failure_domain: api-services
+    mandatory: true
+    notes: >
+      Traffic collapse is frequently the FIRST customer-impact signal when an
+      upstream router, DNS record or auth provider fails — the API itself looks
+      perfectly healthy because nothing reaches it.
+
+  api-dependency-latency:
+    title: API Downstream Dependency Latency
+    signal: latency
+    impact_class: degradation
+    detection: outlier
+    monitor_type: query alert
+    resource_type: service
+    selector: "service_archetype:api"
+    query: "avg(last_30m):outliers(avg:trace.http.client.request.duration{__SCOPE__} by {peer.service}, 'DBSCAN', 3) > 0"
+    thresholds: { critical: 0 }
+    group_by: [peer.service]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-api-latency
+    runbook: api-dependency-latency
+    workflow: diag-dependency
+    failure_domain: api-services
+    mandatory: false
+
+  api-rate-limit-saturation:
+    title: API Rate Limit Saturation
+    signal: saturation
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: service
+    selector: "service_archetype:api"
+    query: "max(next_1d):forecast(sum:api.gateway.requests{__SCOPE__} by {service}.as_rate() / avg:api.gateway.rate_limit{__SCOPE__} by {service}, 'linear', 1, interval='15m', history='2d') > 0.9"
+    thresholds: { critical: 0.9, warning: 0.75 }
+    group_by: [service]
+    evaluation_window: next_1d
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-api-availability
+    runbook: api-rate-limit-saturation
+    workflow: auto-capacity-ticket
+    failure_domain: api-gateway
+    mandatory: false
+
+  api-gateway-backend-unhealthy:
+    title: API Gateway Backend Pool Unhealthy
+    signal: availability
+    impact_class: customer_impact
+    detection: threshold
+    monitor_type: query alert
+    resource_type: api_gateway
+    selector: "resource_type:api_gateway"
+    query: 'min(last_5m):avg:api.gateway.healthy_backend_ratio{__SCOPE__} by {gateway,backend_pool} < 0.5'
+    thresholds: { critical: 0.5, warning: 0.75 }
+    group_by: [gateway, backend_pool]
+    evaluation_window: last_5m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-api-availability
+    runbook: api-gateway-backend-unhealthy
+    workflow: diag-api-health
+    failure_domain: api-gateway
+    mandatory: true
+    rationale_fixed_threshold: >
+      Losing half of a backend pool is a redundancy boundary defined by the
+      load-balancer contract, not a statistical property of traffic.

@@ -1,0 +1,5 @@
+# Copied to <stack>/backend.tf by .github/workflows/deploy.yml before init.
+# Values come from -backend-config=backend.prod.hcl (never committed).
+terraform {
+  backend "azurerm" {}
+}

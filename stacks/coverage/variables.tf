@@ -4,19 +4,26 @@ variable "datadog_api_url" {
 }
 
 variable "datadog_validate" {
-  description = "Validate credentials on provider configure. false enables offline plan/validate in CI stages without secrets."
-  type        = bool
-  default     = true
-}
-
-variable "adopt_existing_slos" {
-  description = "Enable import blocks that adopt the surviving org SLOs into state (migration step M3/M4). Disable only for offline CI plans."
+  description = "Validate credentials and every monitor definition against the Datadog API at plan time. false enables offline CI stages without secrets."
   type        = bool
   default     = true
 }
 
 variable "environments" {
-  description = "Environments to instantiate alerting coverage for."
+  description = <<-EOT
+    Environments to instantiate. The SAME definitions are used for all of them;
+    platform/policy/environments.yaml decides how loud each one is. `dev` is
+    accepted here but produces no monitors — its policy sets alerting: false.
+
+    Promotion is done by narrowing this list, not by copying definitions:
+      stage rollout  →  ["stage"]
+      full           →  ["qa", "stage", "prod"]
+  EOT
   type        = list(string)
-  default     = ["prod", "staging"]
+  default     = ["qa", "stage", "prod"]
+
+  validation {
+    condition     = alltrue([for e in var.environments : contains(["dev", "qa", "stage", "prod"], e)])
+    error_message = "environments must be a subset of dev, qa, stage, prod."
+  }
 }

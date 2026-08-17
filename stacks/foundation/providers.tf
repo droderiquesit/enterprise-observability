@@ -6,7 +6,7 @@ terraform {
       version = ">= 3.60.0, < 4.0.0"
     }
   }
-  backend "local" {}
+  # See stacks/coverage/providers.tf — the backend is injected at deploy time.
 }
 
 provider "datadog" {

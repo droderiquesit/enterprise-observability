@@ -9,25 +9,41 @@ variable "datadog_validate" {
 }
 
 variable "oncall_members" {
-  description = "team handle → Datadog user IDs for the on-call rotation (from IdP sync; kept out of VCS)."
+  description = <<-EOT
+    team handle → Datadog user IDs for the on-call rotation. Fed from the
+    IdP/SCIM sync job, never hand-edited and never committed. An empty map is a
+    valid bootstrap state: teams and routing rules are created, and schedules
+    appear the moment rosters exist.
+  EOT
   type        = map(list(string))
   default     = {}
 }
 
+variable "rotation_days" {
+  description = "Length of the primary on-call rotation in days."
+  type        = number
+  default     = 7
+}
+
+variable "schedule_effective_date" {
+  description = "Fixed anchor for rotation start. Never derived from timestamp() — a plan must not change because a day passed."
+  type        = string
+  default     = "2026-09-01T09:00:00-05:00"
+}
+
 variable "manage_rbac" {
-  description = "Manage roles/service accounts (requires user_access_manage; disable for offline plans since permission resolution needs the API)."
+  description = "Manage roles and service accounts. Requires user_access_manage; disable for offline plans because permission names are resolved against the live API."
   type        = bool
   default     = true
 }
 
-variable "adopt_existing_workflows" {
-  description = "Import the 18 surviving org workflows into state (migration step M5). Disable for offline CI plans."
-  type        = bool
-  default     = false
-}
-
 variable "services" {
-  description = "Service catalog entries (generated/services.auto.tfvars.json from the inventory pipeline)."
+  description = <<-EOT
+    Additional service catalog entries discovered by the inventory pipeline
+    (generated/services.auto.tfvars.json). These MERGE with the registered
+    services in platform/services/ — discovery covers everything, registration
+    adds ownership intent.
+  EOT
   type = map(object({
     team               = string
     owner_email        = string

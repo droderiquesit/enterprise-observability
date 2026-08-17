@@ -1,0 +1,189 @@
+# =============================================================================
+# COMPOSITE MONITOR STRATEGY
+#
+# A composite exists for exactly one reason: to convert a NOISY SYMPTOM into a
+# CONFIRMED IMPACT so that something can page which otherwise could not.
+#
+# THE RULE:
+#   members are demoted to informational (P4, no routing);
+#   the composite carries the page.
+# Without the demotion a composite ADDS an alert instead of replacing several,
+# which is the most common way composite monitors make noise worse.
+#
+# HARD REQUIREMENT (enforced by tools/validate_policy.py and a plan-time
+# precondition): every member of a composite must share an IDENTICAL group_by.
+# Datadog evaluates a composite per group only when the member groupings match;
+# mismatched members degrade to "any group of A and any group of B", which
+# correlates a database in Frankfurt with an API in Virginia and is worse than
+# no composite at all.
+#
+# WHERE COMPOSITES ARE *NOT* WORTH IT:
+#   - when one signal is already unambiguous (host down, cert expired)
+#   - when members fire at different timescales (a 3-day forecast AND a 5-minute
+#     error spike will rarely overlap)
+#   - more than 3 members: nobody can reason about why it fired
+#
+# CROSS-TEAM COMPOSITES are allowed but never implicit. The most valuable
+# composites are exactly the ones that join a cause in one team's domain to a
+# symptom in another's, so instead of banning them the platform forces the
+# ownership question to be answered in the file: `owner_team` is mandatory, and
+# whenever members span teams the other teams must be named in `cc_teams`. An
+# alert with two owners has none; an alert with one owner and named observers
+# is a working escalation path.
+# =============================================================================
+version: 2
+
+composites:
+
+  storage-degradation-with-exhaustion-risk:
+    title: Storage Degrading While Running Out Of Space
+    description: >
+      Either signal alone is routine: volumes get slow under load, and volumes
+      fill up predictably. Together on the SAME device they mean the filesystem
+      is degrading as it approaches its limit, which is how a slow disk becomes
+      a stopped service.
+    owner_team: infrastructure-engineering
+    cc_teams: []
+    members: [storage-latency-anomaly, host-disk-exhaustion-forecast]
+    operator: AND
+    group_by: [host, device]
+    domain: infrastructure
+    impact_class: degradation
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-infra-compute-availability
+    runbook: host-disk-exhaustion-forecast
+    workflow: diag-host
+    failure_domain: storage
+    demote_members: true
+    notes: >
+      The original design for this slot was "host CPU deviation AND application
+      latency degradation". It was rejected by the identical-grouping guardrail:
+      CPU is grouped by host and application latency by service, so Datadog
+      would have correlated any hot host with any slow service. That
+      cause-and-symptom relationship is real, but it belongs to EVENT
+      CORRELATION (topology rules join on env+region), not to a composite
+      monitor. The guardrail is what surfaced the difference.
+
+  redundancy-loss-confirmed:
+    title: Redundancy Loss With Confirmed Availability Impact
+    description: >
+      An instance disappearing is normal in an elastic estate. An instance
+      disappearing while the deployment can no longer serve its declared
+      replica count is a real loss of redundancy.
+    owner_team: cloud-engineering
+    cc_teams: []
+    members: [k8s-deployment-degraded-redundancy, k8s-pod-crashloop]
+    operator: AND
+    group_by: [kube_cluster_name, kube_namespace, kube_deployment]
+    domain: kubernetes
+    impact_class: customer_impact
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-k8s-workload-availability
+    runbook: k8s-deployment-degraded-redundancy
+    workflow: diag-k8s-workload
+    failure_domain: kubernetes-workloads
+    demote_members: false
+    notes: >
+      Members are NOT demoted here: CrashLoopBackOff is independently
+      actionable, so it keeps its own priority. The composite adds the
+      confirmed-impact page on top. Cluster-capacity pressure (pods Pending) is
+      grouped at namespace level and therefore cannot be a member — it reaches
+      the same responder through event correlation instead.
+
+  database-saturation-impacting-application:
+    title: Database Saturation Is Impacting Applications
+    description: >
+      Connection-pool saturation forecasts are P3 capacity work. The same
+      forecast while queries on that instance are already slowing is an outage
+      in progress: the pool is not just filling, it is failing to drain.
+    owner_team: data-engineering
+    cc_teams: []
+    members: [db-connection-saturation, db-query-latency-anomaly]
+    operator: AND
+    group_by: [db_instance]
+    domain: database
+    impact_class: customer_impact
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-database-availability
+    runbook: db-connection-saturation
+    workflow: diag-database
+    failure_domain: databases
+    demote_members: false
+
+  queue-backlog-with-consumer-failure:
+    title: Queue Backlog With Failing Consumer
+    description: >
+      A growing backlog with a healthy consumer is capacity. A growing backlog
+      with a failing consumer is data loss in slow motion.
+    owner_team: cloud-engineering
+    cc_teams: []
+    members: [queue-depth-anomaly, consumer-retry-storm]
+    operator: AND
+    group_by: [namespace, entity]
+    domain: messaging
+    impact_class: customer_impact
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-messaging-delivery
+    runbook: consumer-lag-forecast
+    workflow: diag-messaging
+    failure_domain: messaging-platform
+    demote_members: true
+
+  deploy-induced-degradation:
+    title: Deployment-Induced Customer Impact
+    description: >
+      The single highest-precision page in the framework: an error-rate
+      regression AND a latency regression in the same service within the
+      post-deploy window. Almost never a false positive, and the remediation is
+      known before a human reads the alert (roll back).
+    owner_team: application-development
+    cc_teams: [sre]
+    members: [deployment-regression, api-latency-p99]
+    operator: AND
+    group_by: [service]
+    domain: application
+    impact_class: customer_impact
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-app-availability
+    runbook: deployment-regression
+    workflow: auto-enrich-change
+    failure_domain: application-platform
+    demote_members: false
+    release_gate: true
+
+  data-freshness-with-pipeline-failure:
+    title: Freshness Breach With Confirmed Pipeline Failure
+    description: >
+      Distinguishes "the data is late because upstream is slow" (wait) from
+      "the data is late because the job died" (act now).
+    owner_team: data-engineering
+    cc_teams: []
+    members: [pipeline-output-stale, pipeline-job-failure]
+    operator: AND
+    group_by: [pipeline]
+    domain: data
+    impact_class: customer_impact
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-data-freshness
+    runbook: pipeline-output-stale
+    workflow: remediate-rerun-job
+    failure_domain: data-pipelines
+    demote_members: false
+
+# -----------------------------------------------------------------------------
+# Composite budget. Composites are powerful and expensive to reason about;
+# more than ~12 across the enterprise is a sign the archetypes themselves are
+# badly tuned and should be fixed instead.
+# -----------------------------------------------------------------------------
+budget:
+  max_composites: 12
+  max_members_per_composite: 3
+  require_identical_group_by: true
+  require_explicit_owner_team: true
+  require_cc_teams_when_members_span_teams: true

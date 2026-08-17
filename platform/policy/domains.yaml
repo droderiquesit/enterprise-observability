@@ -1,23 +1,106 @@
-# Domain overlay layer.
-version: 1
+# =============================================================================
+# LAYER 1 — TECHNOLOGY DOMAIN
+# A domain owns a set of archetypes, a default owning team, a platform tag, and
+# a failure-domain vocabulary used for event correlation.
+# =============================================================================
+version: 2
 domains:
-  infrastructure:
-    owner_team: infrastructure-engineering
-    platform_tag: infrastructure
-    failure_domains: [compute, storage, network, backup-platform, identity, virtualization]
-  cloud:
-    owner_team: cloud-engineering
-    platform_tag: azure
-    failure_domains: [azure-landing-zone, kubernetes, messaging-platform, cloud-finops]
+
   application:
+    display: Application
     owner_team: sre
     platform_tag: application
-    failure_domains: [application-platform, web-frontends, integration-services]
+    failure_domains: [application-platform, web-frontends, worker-platform]
+    default_slo: slo-app-availability
+
+  api:
+    display: API
+    owner_team: application-development
+    platform_tag: api
+    failure_domains: [api-gateway, api-services, partner-apis]
+    default_slo: slo-api-availability
+
+  kubernetes:
+    display: Kubernetes / Container Platform
+    owner_team: cloud-engineering
+    platform_tag: kubernetes
+    failure_domains: [kubernetes-control-plane, kubernetes-nodes, kubernetes-workloads]
+    default_slo: slo-k8s-workload-availability
+
+  infrastructure:
+    display: Infrastructure (host / VM / storage)
+    owner_team: infrastructure-engineering
+    platform_tag: infrastructure
+    failure_domains: [compute, storage, backup-platform, identity]
+    default_slo: slo-infra-compute-availability
+
+  vmware:
+    display: VMware / On-Premises Virtualization
+    owner_team: infrastructure-engineering
+    platform_tag: vmware
+    failure_domains: [virtualization, datastore, vmware-cluster]
+    default_slo: slo-vmware-cluster-availability
+
+  cloud:
+    display: Azure / Cloud Platform
+    owner_team: cloud-engineering
+    platform_tag: azure
+    failure_domains: [azure-landing-zone, azure-paas, cloud-quota, cloud-finops]
+    default_slo: slo-cloud-platform-availability
+
+  database:
+    display: Databases
+    owner_team: data-engineering
+    platform_tag: database
+    failure_domains: [databases, database-replication, database-capacity]
+    default_slo: slo-database-availability
+
   data:
+    display: Data Platform
     owner_team: data-engineering
     platform_tag: data
-    failure_domains: [databases, data-pipelines, data-warehouse]
+    failure_domains: [data-pipelines, data-warehouse, data-quality]
+    default_slo: slo-data-freshness
+
+  messaging:
+    display: Messaging / Streaming
+    owner_team: cloud-engineering
+    platform_tag: messaging
+    failure_domains: [messaging-platform, event-streaming]
+    default_slo: slo-messaging-delivery
+
+  network:
+    display: Networking
+    owner_team: infrastructure-engineering
+    platform_tag: network
+    failure_domains: [network-core, network-edge, dns, connectivity]
+    default_slo: slo-network-availability
+
   security:
+    display: Security Operational Signals
     owner_team: security
     platform_tag: security
-    failure_domains: [security-telemetry, security-response, identity-security]
+    failure_domains: [security-telemetry, identity-security, security-controls]
+    default_slo: slo-security-telemetry
+    routing_override_team: security     # security signals route to security regardless of owner
+
+  saas:
+    display: SaaS Dependencies & External Endpoints
+    owner_team: sre
+    platform_tag: saas
+    failure_domains: [saas-dependency, external-endpoint, partner-integration]
+    default_slo: slo-external-dependency
+
+  integration:
+    display: Integration Platforms & Batch
+    owner_team: application-development
+    platform_tag: integration
+    failure_domains: [integration-platform, batch-platform, scheduler]
+    default_slo: slo-integration-delivery
+
+  platform:
+    display: Shared Platform Services
+    owner_team: observability-platform
+    platform_tag: platform
+    failure_domains: [observability-platform, ci-cd, secrets-platform]
+    default_slo: slo-platform-services

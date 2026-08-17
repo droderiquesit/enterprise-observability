@@ -1,38 +1,630 @@
-# Runbook notebook registry. These notebooks EXIST in the org (survivors of
-# the previous platform, verified 2026-08-17) and are adopted by ID. New
-# runbooks are published from templates in platform/runbooks/ by
-# tools/publish_runbooks.py (ADR-006: no Terraform resource for notebooks).
-version: 1
-notebooks:
-  "Runbook: Host Unavailable":                { id: 15214633 }
-  "Runbook: Cpu Anomaly":                     { id: 15214627 }
-  "Runbook: Memory Pressure":                 { id: 15214644 }
-  "Runbook: Disk Capacity Forecast":          { id: 15214632 }
-  "Runbook: Storage Latency Anomaly":         { id: 15214673 }
-  "Runbook: Network Packet Loss":             { id: 15214645 }
-  "Runbook: Backup Failure":                  { id: 15214622 }
-  "Runbook: Certificate Expiration":          { id: 15214623 }
-  "Runbook: Vmware Cluster Degradation":      { id: 15214675 }
-  "Runbook: K8S Workload Unavailable":        { id: 15214635 }
-  "Runbook: K8S Node Pressure":               { id: 15214634 }
-  "Runbook: Cloud Api Throttling":            { id: 15214624 }
-  "Runbook: Queue Backlog":                   { id: 15214665 }
-  "Runbook: Cloud Cost Anomaly":              { id: 15214625 }
-  "Runbook: Provider Integration Stopped Delivering Telemetry": { id: 15214661 }
-  "Runbook: Application Error Rate Anomaly":  { id: 15214612 }
-  "Runbook: Application Latency Degradation": { id: 15214613 }
-  "Runbook: Application Traffic Anomaly":     { id: 15214619 }
-  "Runbook: Application Endpoint Unavailable": { id: 15214611 }
-  "Runbook: Application Dependency Degradation": { id: 15208648 }
-  "Runbook: Deployment Regression":           { id: 15208649 }
-  "Runbook: Application Stopped Logging":     { id: 15214618 }
-  "Runbook: Db Replication Lag":              { id: 15214630 }
-  "Runbook: Db Connection Saturation":        { id: 15214629 }
-  "Runbook: Control-M Batch Automation Failure": { id: 15214626 }
-  "Runbook: Log Volume Anomaly (runaway logger)": { id: 15214642 }
-  "Runbook: Security Log Source Missing":     { id: 15214672 }
-  "Runbook: Log Source Silence":              { id: 15214641 }
-  "Runbook: Authentication Anomaly":          { id: 15214621 }
-  "Runbook: Critical Vulnerability Overdue":  { id: 15214628 }
-  "Runbook: Okta Identity Provider Outage":   { id: 15214653 }
-notebook_base_url: "https://app.datadoghq.com/notebook"
+# =============================================================================
+# RUNBOOK REGISTRY
+#
+# ONE RUNBOOK PER ARCHETYPE — the id is the archetype id. This is not a
+# convention for tidiness: it is what makes "every actionable monitor has a
+# runbook" mechanically checkable instead of aspirational. CI fails if an
+# archetype names a runbook that is not in this registry.
+#
+#   source   markdown template under platform/runbooks/ (authored, PR-reviewed)
+#   id       published Datadog notebook id, reconciled by
+#            tools/publish_runbooks.py (ADR-006: the provider has no notebook
+#            resource, so publishing is API-backed with a content hash)
+#
+# A runbook without `id` links to the repository doc until it is published;
+# the coverage report tracks unpublished runbooks as check C5b.
+# =============================================================================
+version: 2
+
+notebook_base_url: https://app.datadoghq.com/notebook
+docs_base_url: https://github.com/droderiquesit/enterprise-observability/blob/main/platform/runbooks
+
+runbooks:
+  slo-error-budget-burn:
+    title: "SLO Error Budget Burn"
+    domain: platform
+    source: slo-error-budget-burn.md
+  api-4xx-anomaly:
+    title: "API 4xx Client Error Anomaly"
+    domain: api
+    source: api-4xx-anomaly.md
+  api-5xx-anomaly:
+    title: "API 5xx Error Rate Anomaly"
+    domain: api
+    source: api-5xx-anomaly.md
+  api-availability:
+    title: "API Availability"
+    domain: api
+    source: api-availability.md
+  api-dependency-latency:
+    title: "API Downstream Dependency Latency"
+    domain: api
+    source: api-dependency-latency.md
+  api-gateway-backend-unhealthy:
+    title: "API Gateway Backend Pool Unhealthy"
+    domain: api
+    source: api-gateway-backend-unhealthy.md
+  api-latency-p99:
+    title: "API p99 Latency Degradation"
+    domain: api
+    source: api-latency-p99.md
+  api-latency-seasonal:
+    title: "API Latency Seasonal Anomaly"
+    domain: api
+    source: api-latency-seasonal.md
+  api-rate-limit-saturation:
+    title: "API Rate Limit Saturation"
+    domain: api
+    source: api-rate-limit-saturation.md
+  api-traffic-anomaly:
+    title: "API Traffic Drop Anomaly"
+    domain: api
+    source: api-traffic-anomaly.md
+  app-crash-anomaly:
+    title: "Application Crash / Fatal Error Anomaly"
+    domain: application
+    source: app-crash-anomaly.md
+  app-memory-leak-forecast:
+    title: "Application Memory Exhaustion Forecast"
+    domain: application
+    source: app-memory-leak-forecast.md
+  app-saturation-threadpool:
+    title: "Application Runtime Saturation"
+    domain: application
+    source: app-saturation-threadpool.md
+  app-telemetry-loss:
+    title: "Application Stopped Reporting Telemetry"
+    domain: application
+    source: app-telemetry-loss.md
+  audit-log-continuity-gap:
+    title: "Audit Log Continuity Gap"
+    domain: security
+    source: audit-log-continuity-gap.md
+  auth-failure-anomaly:
+    title: "Authentication Failure Anomaly"
+    domain: security
+    source: auth-failure-anomaly.md
+  azure-appgateway-5xx-anomaly:
+    title: "Application Gateway 5xx Anomaly"
+    domain: cloud
+    source: azure-appgateway-5xx-anomaly.md
+  azure-appgateway-backend-unhealthy:
+    title: "Application Gateway Backend Unhealthy"
+    domain: cloud
+    source: azure-appgateway-backend-unhealthy.md
+  azure-appservice-http5xx-anomaly:
+    title: "Azure App Service 5xx Anomaly"
+    domain: cloud
+    source: azure-appservice-http5xx-anomaly.md
+  azure-appservice-plan-saturation:
+    title: "Azure App Service Plan Saturation Forecast"
+    domain: cloud
+    source: azure-appservice-plan-saturation.md
+  azure-appservice-unavailable:
+    title: "Azure App Service Unavailable"
+    domain: cloud
+    source: azure-appservice-unavailable.md
+  azure-cost-anomaly:
+    title: "Cloud Cost Anomaly"
+    domain: cloud
+    source: azure-cost-anomaly.md
+  azure-function-execution-stalled:
+    title: "Azure Function Stopped Executing"
+    domain: cloud
+    source: azure-function-execution-stalled.md
+  azure-function-failure-anomaly:
+    title: "Azure Function Failure Anomaly"
+    domain: cloud
+    source: azure-function-failure-anomaly.md
+  azure-integration-telemetry-gap:
+    title: "Azure Integration Stopped Delivering Metrics"
+    domain: cloud
+    source: azure-integration-telemetry-gap.md
+  azure-keyvault-availability:
+    title: "Key Vault Availability Degraded"
+    domain: cloud
+    source: azure-keyvault-availability.md
+  azure-keyvault-throttling:
+    title: "Key Vault Throttling"
+    domain: cloud
+    source: azure-keyvault-throttling.md
+  azure-loadbalancer-probe-failure:
+    title: "Azure Load Balancer Health Probe Failing"
+    domain: cloud
+    source: azure-loadbalancer-probe-failure.md
+  azure-quota-exhaustion-forecast:
+    title: "Azure Subscription Quota Exhaustion Forecast"
+    domain: cloud
+    source: azure-quota-exhaustion-forecast.md
+  azure-service-health-event:
+    title: "Azure Platform Service Health Event"
+    domain: cloud
+    source: azure-service-health-event.md
+  azure-storage-availability:
+    title: "Azure Storage Account Availability"
+    domain: cloud
+    source: azure-storage-availability.md
+  azure-storage-throttling:
+    title: "Azure Storage Throttling"
+    domain: cloud
+    source: azure-storage-throttling.md
+  azure-vm-unavailable:
+    title: "Azure VM Unavailable"
+    domain: cloud
+    source: azure-vm-unavailable.md
+  azuresql-connection-failures:
+    title: "Azure SQL Connection Failures"
+    domain: database
+    source: azuresql-connection-failures.md
+  azuresql-dtu-saturation:
+    title: "Azure SQL Compute Saturation Forecast"
+    domain: database
+    source: azuresql-dtu-saturation.md
+  backup-age-exceeded:
+    title: "Backup Older Than Policy"
+    domain: infrastructure
+    source: backup-age-exceeded.md
+  batch-backlog-growth:
+    title: "Batch Backlog Growth"
+    domain: integration
+    source: batch-backlog-growth.md
+  batch-duration-anomaly:
+    title: "Batch Job Duration Anomaly"
+    domain: integration
+    source: batch-duration-anomaly.md
+  batch-job-failure:
+    title: "Batch Job Failed"
+    domain: integration
+    source: batch-job-failure.md
+  batch-output-freshness:
+    title: "Batch Output Not Produced In Window"
+    domain: integration
+    source: batch-output-freshness.md
+  broker-namespace-throttling:
+    title: "Messaging Namespace Throttled"
+    domain: messaging
+    source: broker-namespace-throttling.md
+  certificate-expiry:
+    title: "Certificate Approaching Expiry"
+    domain: security
+    source: certificate-expiry.md
+  cicd-pipeline-failure:
+    title: "Platform Deployment Pipeline Failing"
+    domain: platform
+    source: cicd-pipeline-failure.md
+  clickops-monitor-detected:
+    title: "Unmanaged (Click-Ops) Monitor Detected"
+    domain: platform
+    source: clickops-monitor-detected.md
+  consumer-absent:
+    title: "No Active Consumer On Queue"
+    domain: messaging
+    source: consumer-absent.md
+  consumer-dlq-growth:
+    title: "Dead Letter Queue Growth"
+    domain: messaging
+    source: consumer-dlq-growth.md
+  consumer-lag-forecast:
+    title: "Consumer Lag Exhaustion Forecast"
+    domain: messaging
+    source: consumer-lag-forecast.md
+  consumer-retry-storm:
+    title: "Consumer Retry Storm"
+    domain: messaging
+    source: consumer-retry-storm.md
+  cosmos-ru-throttling:
+    title: "Cosmos DB Request Unit Throttling"
+    domain: database
+    source: cosmos-ru-throttling.md
+  data-quality-check-failure:
+    title: "Data Quality Check Failed"
+    domain: data
+    source: data-quality-check-failure.md
+  data-schema-drift:
+    title: "Schema Drift Detected"
+    domain: data
+    source: data-schema-drift.md
+  data-telemetry-loss:
+    title: "Data Platform Stopped Reporting"
+    domain: data
+    source: data-telemetry-loss.md
+  db-availability:
+    title: "Database Instance Unavailable"
+    domain: database
+    source: db-availability.md
+  db-backup-age:
+    title: "Database Backup Older Than RPO"
+    domain: database
+    source: db-backup-age.md
+  db-cache-hit-ratio-degradation:
+    title: "Cache Hit Ratio Degradation"
+    domain: database
+    source: db-cache-hit-ratio-degradation.md
+  db-connection-saturation:
+    title: "Database Connection Pool Saturation Forecast"
+    domain: database
+    source: db-connection-saturation.md
+  db-deadlock-anomaly:
+    title: "Database Deadlock Anomaly"
+    domain: database
+    source: db-deadlock-anomaly.md
+  db-long-running-query:
+    title: "Long-Running Query Blocking Workload"
+    domain: database
+    source: db-long-running-query.md
+  db-query-latency-anomaly:
+    title: "Database Query Latency Anomaly"
+    domain: database
+    source: db-query-latency-anomaly.md
+  db-replication-lag:
+    title: "Database Replication Lag Beyond Limit"
+    domain: database
+    source: db-replication-lag.md
+  db-storage-forecast:
+    title: "Database Storage Exhaustion Forecast"
+    domain: database
+    source: db-storage-forecast.md
+  db-telemetry-loss:
+    title: "Database Stopped Reporting Telemetry"
+    domain: database
+    source: db-telemetry-loss.md
+  dependency-error-anomaly:
+    title: "Outbound Dependency Failure"
+    domain: application
+    source: dependency-error-anomaly.md
+  dependency-latency-degradation:
+    title: "Outbound Dependency Latency Degradation"
+    domain: application
+    source: dependency-latency-degradation.md
+  deployment-error-spike:
+    title: "Post-Deployment Error Spike"
+    domain: application
+    source: deployment-error-spike.md
+  deployment-regression:
+    title: "Deployment Regression"
+    domain: application
+    source: deployment-regression.md
+  dns-resolution-failure:
+    title: "DNS Resolution Failing"
+    domain: network
+    source: dns-resolution-failure.md
+  exception-expired:
+    title: "Approved Exception Has Expired"
+    domain: platform
+    source: exception-expired.md
+  host-agent-unhealthy:
+    title: "Datadog Agent Unhealthy"
+    domain: infrastructure
+    source: host-agent-unhealthy.md
+  host-clock-drift:
+    title: "Host Clock Drift"
+    domain: infrastructure
+    source: host-clock-drift.md
+  host-cpu-baseline-deviation:
+    title: "Host CPU Baseline Deviation"
+    domain: infrastructure
+    source: host-cpu-baseline-deviation.md
+  host-disk-exhaustion-forecast:
+    title: "Disk Exhaustion Forecast"
+    domain: infrastructure
+    source: host-disk-exhaustion-forecast.md
+  host-filesystem-readonly:
+    title: "Filesystem Read-Only or Failing"
+    domain: infrastructure
+    source: host-filesystem-readonly.md
+  host-inode-exhaustion-forecast:
+    title: "Inode Exhaustion Forecast"
+    domain: infrastructure
+    source: host-inode-exhaustion-forecast.md
+  host-memory-pressure:
+    title: "Host Memory Pressure"
+    domain: infrastructure
+    source: host-memory-pressure.md
+  host-process-down:
+    title: "Required Process Not Running"
+    domain: infrastructure
+    source: host-process-down.md
+  host-unavailable:
+    title: "Host Unavailable"
+    domain: infrastructure
+    source: host-unavailable.md
+  ingest-pipeline-degraded:
+    title: "Telemetry Ingest Pipeline Degraded"
+    domain: platform
+    source: ingest-pipeline-degraded.md
+  integration-delivery-latency:
+    title: "Integration Delivery Latency"
+    domain: integration
+    source: integration-delivery-latency.md
+  integration-flow-failure:
+    title: "Integration Flow Failure Rate"
+    domain: integration
+    source: integration-flow-failure.md
+  integration-transformation-errors:
+    title: "Message Transformation Errors"
+    domain: integration
+    source: integration-transformation-errors.md
+  k8s-cluster-capacity-forecast:
+    title: "Cluster Capacity Exhaustion Forecast"
+    domain: kubernetes
+    source: k8s-cluster-capacity-forecast.md
+  k8s-control-plane-latency:
+    title: "Kubernetes API Server Latency Degradation"
+    domain: kubernetes
+    source: k8s-control-plane-latency.md
+  k8s-cpu-throttling:
+    title: "Workload CPU Throttling"
+    domain: kubernetes
+    source: k8s-cpu-throttling.md
+  k8s-cronjob-failure:
+    title: "Kubernetes CronJob Failing"
+    domain: kubernetes
+    source: k8s-cronjob-failure.md
+  k8s-deployment-degraded-redundancy:
+    title: "Kubernetes Deployment Redundancy Degraded"
+    domain: kubernetes
+    source: k8s-deployment-degraded-redundancy.md
+  k8s-deployment-unavailable:
+    title: "Kubernetes Deployment Has No Available Replicas"
+    domain: kubernetes
+    source: k8s-deployment-unavailable.md
+  k8s-hpa-at-max:
+    title: "Horizontal Pod Autoscaler Pinned At Maximum"
+    domain: kubernetes
+    source: k8s-hpa-at-max.md
+  k8s-memory-saturation-forecast:
+    title: "Workload Memory Saturation Forecast"
+    domain: kubernetes
+    source: k8s-memory-saturation-forecast.md
+  k8s-node-not-ready:
+    title: "Kubernetes Node Not Ready"
+    domain: kubernetes
+    source: k8s-node-not-ready.md
+  k8s-node-pressure:
+    title: "Node Resource Pressure"
+    domain: kubernetes
+    source: k8s-node-pressure.md
+  k8s-oomkill:
+    title: "Container OOMKilled"
+    domain: kubernetes
+    source: k8s-oomkill.md
+  k8s-pod-crashloop:
+    title: "Pods in CrashLoopBackOff"
+    domain: kubernetes
+    source: k8s-pod-crashloop.md
+  k8s-pods-pending:
+    title: "Pods Cannot Be Scheduled"
+    domain: kubernetes
+    source: k8s-pods-pending.md
+  k8s-pvc-capacity-forecast:
+    title: "Persistent Volume Exhaustion Forecast"
+    domain: kubernetes
+    source: k8s-pvc-capacity-forecast.md
+  k8s-restart-anomaly:
+    title: "Container Restart Anomaly"
+    domain: kubernetes
+    source: k8s-restart-anomaly.md
+  k8s-telemetry-loss:
+    title: "Kubernetes Cluster Stopped Reporting"
+    domain: kubernetes
+    source: k8s-telemetry-loss.md
+  loadbalancer-pool-degraded:
+    title: "Load Balancer Pool Redundancy Degraded"
+    domain: network
+    source: loadbalancer-pool-degraded.md
+  messaging-client-disconnect:
+    title: "Messaging Client Disconnect Storm"
+    domain: messaging
+    source: messaging-client-disconnect.md
+  messaging-publish-failure:
+    title: "Message Publish Failures"
+    domain: messaging
+    source: messaging-publish-failure.md
+  monitor-estate-budget-exceeded:
+    title: "Managed Monitor Budget Exceeded"
+    domain: platform
+    source: monitor-estate-budget-exceeded.md
+  network-config-change:
+    title: "Unplanned Network Configuration Change"
+    domain: network
+    source: network-config-change.md
+  network-device-unreachable:
+    title: "Network Device Unreachable"
+    domain: network
+    source: network-device-unreachable.md
+  network-interface-errors:
+    title: "Interface Error Rate Rising"
+    domain: network
+    source: network-interface-errors.md
+  network-interface-saturation-forecast:
+    title: "Link Saturation Forecast"
+    domain: network
+    source: network-interface-saturation-forecast.md
+  network-packet-loss:
+    title: "Network Path Packet Loss"
+    domain: network
+    source: network-packet-loss.md
+  network-path-latency-degradation:
+    title: "Network Path Latency Degradation"
+    domain: network
+    source: network-path-latency-degradation.md
+  partner-file-delivery-missed:
+    title: "Partner File Delivery Missed"
+    domain: integration
+    source: partner-file-delivery-missed.md
+  pipeline-duration-anomaly:
+    title: "Pipeline Duration Anomaly"
+    domain: data
+    source: pipeline-duration-anomaly.md
+  pipeline-job-failure:
+    title: "Data Pipeline Job Failure"
+    domain: data
+    source: pipeline-job-failure.md
+  pipeline-output-stale:
+    title: "Data Product Freshness Breach"
+    domain: data
+    source: pipeline-output-stale.md
+  pipeline-volume-anomaly:
+    title: "Data Volume Anomaly"
+    domain: data
+    source: pipeline-volume-anomaly.md
+  platform-service-unavailable:
+    title: "Shared Platform Service Unavailable"
+    domain: platform
+    source: platform-service-unavailable.md
+  privileged-action-anomaly:
+    title: "Privileged Action Volume Anomaly"
+    domain: security
+    source: privileged-action-anomaly.md
+  queue-depth-anomaly:
+    title: "Queue Depth Anomaly"
+    domain: messaging
+    source: queue-depth-anomaly.md
+  saas-availability:
+    title: "SaaS Dependency Unavailable"
+    domain: saas
+    source: saas-availability.md
+  saas-error-anomaly:
+    title: "SaaS Dependency Error Anomaly"
+    domain: saas
+    source: saas-error-anomaly.md
+  saas-latency-degradation:
+    title: "SaaS Dependency Latency Degradation"
+    domain: saas
+    source: saas-latency-degradation.md
+  saas-quota-forecast:
+    title: "SaaS API Quota Exhaustion Forecast"
+    domain: saas
+    source: saas-quota-forecast.md
+  schedule-job-failure:
+    title: "Scheduled Job Failed"
+    domain: integration
+    source: schedule-job-failure.md
+  schedule-missed-run:
+    title: "Scheduled Job Did Not Run"
+    domain: integration
+    source: schedule-missed-run.md
+  schedule-overrun:
+    title: "Scheduled Job Overran Its Window"
+    domain: integration
+    source: schedule-overrun.md
+  secret-rotation-overdue:
+    title: "Secret / Key Rotation Overdue"
+    domain: security
+    source: secret-rotation-overdue.md
+  security-agent-coverage-gap:
+    title: "Security Agent Coverage Gap"
+    domain: security
+    source: security-agent-coverage-gap.md
+  security-control-failure:
+    title: "Security Control Reporting Failure"
+    domain: security
+    source: security-control-failure.md
+  security-log-source-missing:
+    title: "Security Log Source Stopped Delivering"
+    domain: security
+    source: security-log-source-missing.md
+  security-telemetry-volume-drop:
+    title: "Security Telemetry Volume Drop"
+    domain: security
+    source: security-telemetry-volume-drop.md
+  storage-latency-anomaly:
+    title: "Storage Latency Anomaly"
+    domain: infrastructure
+    source: storage-latency-anomaly.md
+  stream-partition-skew:
+    title: "Stream Partition Skew"
+    domain: messaging
+    source: stream-partition-skew.md
+  streaming-consumer-lag-forecast:
+    title: "Streaming Consumer Lag Forecast"
+    domain: data
+    source: streaming-consumer-lag-forecast.md
+  synthetic-certificate-expiry:
+    title: "Endpoint TLS Certificate Approaching Expiry"
+    domain: saas
+    source: synthetic-certificate-expiry.md
+  synthetic-endpoint-down:
+    title: "External Endpoint Unavailable"
+    domain: saas
+    source: synthetic-endpoint-down.md
+  synthetic-latency-degradation:
+    title: "External Endpoint Latency Degradation"
+    domain: saas
+    source: synthetic-latency-degradation.md
+  unowned-resource-backlog:
+    title: "Unowned Resource Backlog"
+    domain: platform
+    source: unowned-resource-backlog.md
+  vmware-cluster-ha-degraded:
+    title: "vSphere Cluster HA Capacity Degraded"
+    domain: vmware
+    source: vmware-cluster-ha-degraded.md
+  vmware-cpu-ready-contention:
+    title: "VM CPU Ready Contention"
+    domain: vmware
+    source: vmware-cpu-ready-contention.md
+  vmware-datastore-capacity-forecast:
+    title: "Datastore Capacity Exhaustion Forecast"
+    domain: vmware
+    source: vmware-datastore-capacity-forecast.md
+  vmware-datastore-latency:
+    title: "Datastore Latency Degradation"
+    domain: vmware
+    source: vmware-datastore-latency.md
+  vmware-host-disconnected:
+    title: "ESXi Host Disconnected From vCenter"
+    domain: vmware
+    source: vmware-host-disconnected.md
+  vmware-memory-ballooning:
+    title: "Memory Ballooning / Swapping On Host"
+    domain: vmware
+    source: vmware-memory-ballooning.md
+  vmware-snapshot-age:
+    title: "VM Snapshot Older Than Policy"
+    domain: vmware
+    source: vmware-snapshot-age.md
+  vmware-vm-powered-off-unexpectedly:
+    title: "VM Powered Off Unexpectedly"
+    domain: vmware
+    source: vmware-vm-powered-off-unexpectedly.md
+  vpn-tunnel-down:
+    title: "VPN / ExpressRoute Tunnel Down"
+    domain: network
+    source: vpn-tunnel-down.md
+  warehouse-queue-saturation:
+    title: "Warehouse Query Queue Saturation"
+    domain: data
+    source: warehouse-queue-saturation.md
+  web-js-error-anomaly:
+    title: "Browser Error Rate Anomaly"
+    domain: application
+    source: web-js-error-anomaly.md
+  web-origin-5xx-anomaly:
+    title: "Web Origin 5xx Anomaly"
+    domain: application
+    source: web-origin-5xx-anomaly.md
+  web-page-load-degradation:
+    title: "Web Page Load Degradation"
+    domain: application
+    source: web-page-load-degradation.md
+  web-synthetic-availability:
+    title: "Web Application Unavailable"
+    domain: application
+    source: web-synthetic-availability.md
+  worker-error-anomaly:
+    title: "Worker Error Rate Anomaly"
+    domain: application
+    source: worker-error-anomaly.md
+  worker-processing-latency:
+    title: "Worker Processing Latency Degradation"
+    domain: application
+    source: worker-processing-latency.md
+  worker-stalled:
+    title: "Worker Stopped Processing"
+    domain: application
+    source: worker-stalled.md
+  worker-throughput-anomaly:
+    title: "Worker Throughput Anomaly"
+    domain: application
+    source: worker-throughput-anomaly.md
