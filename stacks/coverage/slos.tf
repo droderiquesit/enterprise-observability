@@ -93,7 +93,14 @@ locals {
   # --- burn-rate monitor instances -----------------------------------------
   # One monitor per (SLO × window). Windows come from global.yaml and are
   # selected per SLO, which is how tier0 gets fast burn and tier2 does not.
-  burn_source = merge(
+  #
+  # The manages_prod restriction is applied HERE, on the iteration source —
+  # not on the built result. The monitor bodies below interpolate
+  # module.slos.slo_datadog_ids[slo_id], and in a non-prod apply that map is
+  # empty: indexing it errors even for entries a later filter would discard,
+  # because HCL builds the whole source collection before any filter runs.
+  # An empty source means the bodies are never evaluated at all.
+  burn_source = { for k, v in merge(
     { for id, s in local.slo_catalog : id => {
       name      = s.name, service = s.service, team = s.team, domain = s.domain,
       timeframe = s.timeframe, windows = try(s.burn_alerts, [])
@@ -102,11 +109,9 @@ locals {
       name      = s.name, service = s.service, team = s.team, domain = s.domain,
       timeframe = s.timeframe, windows = local.slo_doc.tier0_slo_template.burn_alerts
     } },
-  )
+  ) : k => v if local.manages_prod }
 
-  burn_instances = { for k, v in local.burn_instances_all : k => v if local.manages_prod }
-
-  burn_instances_all = merge([
+  burn_instances = merge([
     for slo_id, s in local.burn_source : {
       for w in s.windows : "burn.prod.${slo_id}.${w}" => {
         archetype = "slo-burn-${w}"
