@@ -7,17 +7,15 @@ terraform {
     }
   }
 
-  # NO backend block is committed.
+  # NO backend block — state is git-backed (ADR-016).
   #
-  # Deployments inject one: CI copies stacks/backend.azurerm.tf.example to
-  # backend.tf and runs `terraform init -backend-config=backend.prod.hcl`.
-  # Offline CI stages (fmt, validate, plan without credentials) then work with
-  # the default local state and no secrets at all.
-  #
-  # Committing `backend "local" {}` and passing remote backend settings to it
-  # is a common and silent misconfiguration — init accepts the flags and the
-  # state still lands on the runner's disk. Keeping the block out of the repo
-  # makes the intended backend explicit at deploy time.
+  # Terraform always runs on the default local backend. Around every
+  # credentialed plan/apply, tools/tfstate-git.sh restores/persists this
+  # stack's state from the orphan branch `tfstate` of this repository, one
+  # file per environment (coverage/{qa,stage,prod}.tfstate). Locking is the
+  # workflows' shared `concurrency: tfstate` group; versioning is the
+  # branch's git history. Offline CI stages (fmt, validate, plan without
+  # credentials) run with no state and no secrets at all.
 }
 
 # Credentials come exclusively from DD_API_KEY / DD_APP_KEY, injected by CI

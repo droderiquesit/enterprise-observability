@@ -218,3 +218,37 @@ offline plan. Every one was caught by the vendor's own validator.
 
 **Consequence.** Offline CI stages stay fast and secret-free; the credentialed
 stage is the last gate before merge and is not optional.
+
+---
+
+## ADR-016 — Git-backed Terraform state on a `tfstate` branch
+
+**Decision.** Terraform state lives on the orphan branch `tfstate` of this
+repository — one file per stack × environment
+(`coverage/qa.tfstate`, `coverage/stage.tfstate`, `coverage/prod.tfstate`,
+`foundation/prod.tfstate`) — moved in and out by `tools/tfstate-git.sh`
+around every credentialed plan/apply. Terraform always runs on the default
+local backend. Directed by the platform owner: GitHub is the system of
+record for this platform, including state; no cloud storage account is
+introduced for it.
+
+**How each remote-backend guarantee is met.**
+
+| Guarantee | Mechanism |
+|---|---|
+| Locking | the `concurrency: tfstate` group shared by deploy.yml and governance.yml — GitHub serialises every state-touching run; persist additionally refuses non-fast-forward pushes and rebase-retries, so a lost race cannot overwrite another run's commit |
+| Versioning & recovery | every apply is one commit on `tfstate`; recovery is `git checkout` |
+| Encryption | GitHub encrypts content at rest; the repository is private |
+| Per-environment separation | one state file per environment; the deploy workflow applies exactly one environment per state file, so promotion can never plan a destroy against another environment's resources |
+
+**Why not the previous azurerm design.** It required a storage account,
+Azure AD federation, and three more secrets — none of which serve any other
+purpose here — and its example wiring pointed both stacks at one state key
+(a real defect this ADR's per-env files also fix). The state contains no
+secrets (Datadog credentials live only in env vars), which is the
+precondition that makes repository-hosted state acceptable.
+
+**Consequence.** The `tfstate` branch is written only by CI (and by an
+operator running the script deliberately); branch protection should exclude
+it from required reviews. `.gitignore` keeps `*.tfstate*` out of every
+OTHER branch, so state can never ride along in a feature PR.

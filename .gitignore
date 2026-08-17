@@ -28,3 +28,4 @@ generated/
 *.pem
 *.key
 .env
+.tfstate-worktree/

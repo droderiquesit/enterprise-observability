@@ -149,14 +149,16 @@ check "composite_members_resolved" { ... }
 
 Growth in any of these is a reviewed decision in `global.yaml`, never a drift.
 
-### No backend block is committed
+### State is git-backed — no backend block anywhere (ADR-016)
 
-CI copies `stacks/backend.azurerm.tf.example` to `<stack>/backend.tf` and runs
-`terraform init -backend-config=backend.prod.hcl`. Committing
-`backend "local" {}` and passing remote settings to it is a common and silent
-misconfiguration: `init` accepts the flags and the state still lands on the
-runner's disk. Keeping the block out of the repository makes the intended
-backend explicit at deploy time, and lets offline CI stages run with no secrets.
+Terraform always runs on the default local backend. Around every credentialed
+plan/apply, `tools/tfstate-git.sh` restores/persists the stack's state from the
+orphan branch `tfstate` of this repository — one file per stack × environment
+(`coverage/{qa,stage,prod}.tfstate`, `foundation/prod.tfstate`). Locking is the
+`concurrency: tfstate` group shared by the deploy and governance workflows;
+versioning and recovery are the branch's git history; per-environment files
+mean promotion can never plan a destroy against another environment. Offline
+CI stages run with no state and no secrets at all.
 
 ---
 

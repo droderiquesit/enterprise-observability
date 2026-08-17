@@ -16,6 +16,10 @@ permissions:
   contents: read
   issues: write
 
+# Shares the state lock with deploy.yml: drift must never read state that an
+# in-flight apply is about to rewrite.
+concurrency: tfstate
+
 jobs:
   drift:
     name: drift detection
@@ -23,24 +27,28 @@ jobs:
     environment: datadog-plan
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: hashicorp/setup-terraform@v3
         with: { terraform_version: "1.9.8" }
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
       - run: pip install -r tools/requirements.txt
-      - run: |
-          cp stacks/backend.azurerm.tf.example stacks/foundation/backend.tf
-          cp stacks/backend.azurerm.tf.example stacks/coverage/backend.tf
 
-      - name: Terraform drift — click-ops edits and deletions
+      - name: Terraform drift — click-ops edits and deletions, every environment
         env:
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
           DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
         run: |
           set +e; rc=0
-          for d in stacks/foundation stacks/coverage; do
-            (cd $d && terraform init -input=false -backend-config=../backend.prod.hcl >/dev/null \
-              && terraform plan -input=false -detailed-exitcode)
+          (cd stacks/foundation \
+            && ../../tools/tfstate-git.sh restore foundation prod \
+            && terraform init -input=false >/dev/null \
+            && terraform plan -input=false -detailed-exitcode)
+          [ $? -eq 2 ] && rc=2
+          cd stacks/coverage && terraform init -input=false >/dev/null
+          for env in qa stage prod; do
+            ../../tools/tfstate-git.sh restore coverage "$env" \
+              && terraform plan -input=false -var "environments=[\"$env\"]" -detailed-exitcode
             [ $? -eq 2 ] && rc=2
           done
           exit $rc

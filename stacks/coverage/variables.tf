@@ -18,6 +18,11 @@ variable "environments" {
     Promotion is done by narrowing this list, not by copying definitions:
       stage rollout  →  ["stage"]
       full           →  ["qa", "stage", "prod"]
+
+    Under per-environment state files (ADR-016) the deploy workflow applies
+    exactly ONE environment per state file. Environment-agnostic objects —
+    SLOs and their burn-rate monitors — are owned by the apply whose list
+    contains "prod", so they exist exactly once.
   EOT
   type        = list(string)
   default     = ["qa", "stage", "prod"]

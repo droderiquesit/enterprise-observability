@@ -64,9 +64,12 @@ inventory:         ## rebuild the inventory and reassign profiles
 	cd tools && $(PY) build_inventory.py --live && $(PY) profile_engine.py
 coverage:          ## coverage & compliance report against the live org
 	cd tools && $(PY) coverage_report.py --live
-drift:
-	cd stacks/foundation && $(TF) plan -input=false -detailed-exitcode
-	cd stacks/coverage   && $(TF) plan -input=false -detailed-exitcode
+drift:              ## per-environment drift, matching governance.yml
+	cd stacks/foundation && ../../tools/tfstate-git.sh restore foundation prod && \
+		$(TF) plan -input=false -detailed-exitcode
+	cd stacks/coverage && for e in qa stage prod; do \
+		../../tools/tfstate-git.sh restore coverage $$e && \
+		$(TF) plan -input=false -var "environments=[\"$$e\"]" -detailed-exitcode || exit $$?; done
 	cd tools && $(PY) publish_runbooks.py --check
 
 clean:

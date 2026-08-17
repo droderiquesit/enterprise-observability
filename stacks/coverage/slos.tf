@@ -81,7 +81,14 @@ locals {
     infrastructure_resource = "infrastructure"
   }
 
-  all_slos = merge(local.domain_slos, local.tier0_slos)
+  # SLOs and their burn monitors are prod-scoped objects (`burn.prod.*` — an
+  # error budget is only measured against production). Under per-environment
+  # state files (ADR-016) exactly one environment's apply must own them, or a
+  # qa apply and a prod apply would each create their own copy. That owner is
+  # the prod apply. (Filtered comprehension, not a ternary: `cond ? map : {}`
+  # trips inconsistent-conditional-type unification on object maps.)
+  manages_prod = contains(var.environments, "prod")
+  all_slos     = { for k, v in merge(local.domain_slos, local.tier0_slos) : k => v if local.manages_prod }
 
   # --- burn-rate monitor instances -----------------------------------------
   # One monitor per (SLO × window). Windows come from global.yaml and are
@@ -97,7 +104,9 @@ locals {
     } },
   )
 
-  burn_instances = merge([
+  burn_instances = { for k, v in local.burn_instances_all : k => v if local.manages_prod }
+
+  burn_instances_all = merge([
     for slo_id, s in local.burn_source : {
       for w in s.windows : "burn.prod.${slo_id}.${w}" => {
         archetype = "slo-burn-${w}"

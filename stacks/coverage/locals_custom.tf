@@ -20,10 +20,12 @@ locals {
   }
 
   # (file × env) — one monitor per declared environment, from ONE definition.
+  # Restricted to the environments THIS apply manages, so each monitor lands
+  # in exactly one environment's state file (ADR-016).
   custom_candidates = flatten([
     for id, m in local.custom_docs : [
       for env in m.env : { id = id, env = env, m = m }
-      if local.env_policy[env].alerting
+      if local.env_policy[env].alerting && contains(var.environments, env)
     ]
   ])
 

@@ -91,6 +91,54 @@ def remote_hash(notebook: dict) -> str | None:
     return None
 
 
+def fetch_remote_runbooks(requests, site: str, headers: dict) -> dict[str, list[dict]]:
+    """All runbook-type notebooks in the org, keyed by exact name.
+
+    The org can contain notebooks published before this registry existed
+    (same "Runbook: <title>" convention, no id recorded here). Publishing
+    without looking would create same-name duplicates; instead, an exact
+    name match is adopted and updated in place.
+    """
+    by_name: dict[str, list[dict]] = {}
+    start, count = 0, 100
+    while True:
+        r = requests.get(f"{site}/api/v1/notebooks", headers=headers, timeout=60,
+                         params={"start": start, "count": count,
+                                 "include_cells": "false", "type": "runbook"})
+        r.raise_for_status()
+        page = r.json().get("data", [])
+        for nb in page:
+            attrs = nb.get("attributes", {})
+            if (attrs.get("metadata") or {}).get("type") != "runbook":
+                continue
+            by_name.setdefault(attrs.get("name", ""), []).append(
+                {"id": nb["id"], "modified": attrs.get("modified", "")})
+        if len(page) < count:
+            return by_name
+        start += count
+
+
+def write_registry_ids(assigned: dict[str, int]) -> int:
+    """Record published notebook ids in runbooks.yaml without disturbing
+    comments or formatting: insert/replace the `id:` line of each entry."""
+    path = oc.PLATFORM_DIR / "policy" / "runbooks.yaml"
+    lines = path.read_text().splitlines(keepends=True)
+    out, current, done = [], None, set()
+    for line in lines:
+        m = re.match(r"^  ([a-z0-9-]+):\s*$", line)
+        if m:
+            current = m.group(1)
+        if current in assigned and re.match(r"^    id:", line):
+            continue  # replaced by the line inserted after source:
+        out.append(line)
+        if current in assigned and current not in done \
+                and re.match(r"^    source:", line):
+            out.append(f"    id: {assigned[current]}\n")
+            done.add(current)
+    path.write_text("".join(out))
+    return len(done)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
@@ -98,6 +146,9 @@ def main() -> int:
     ap.add_argument("--allow-unfinished", action="store_true", default=True,
                     help="publish drafts that still contain TODO(owner) markers "
                          "(they are tracked as a backlog, not a blocker)")
+    ap.add_argument("--write-registry", action="store_true",
+                    help="record created/adopted notebook ids back into "
+                         "platform/policy/runbooks.yaml (comment-preserving)")
     args = ap.parse_args()
 
     src_dir = oc.PLATFORM_DIR / "runbooks"
@@ -138,29 +189,42 @@ def main() -> int:
     import requests
     headers = oc.dd_headers()
     site = oc.dd_site()
-    drift = []
+    remote = fetch_remote_runbooks(requests, site, headers)
+    drift, assigned = [], {}
+    target_names = set()
 
     for p in sources:
         text = p.read_text()
         rid = p.stem
         entry = registry.get(rid, {})
         name = f"Runbook: {entry.get('title', rid)}"
+        target_names.add(name)
         want = content_hash(text)
         nb_id = entry.get("id")
         payload = {"data": {"type": "notebooks", "attributes": {
             "name": name, "cells": render_cells(text), "status": "published",
             "time": {"live_span": "1h"}, "metadata": {"type": "runbook"}}}}
 
+        # Adopt a pre-existing same-name notebook instead of creating a
+        # duplicate: newest wins, the rest are reported as stale below.
+        adopted = False
+        if not nb_id and name in remote:
+            nb_id = max(remote[name], key=lambda n: n["modified"])["id"]
+            adopted = True
+
         if nb_id:
             r = requests.get(f"{site}/api/v1/notebooks/{nb_id}", headers=headers, timeout=60)
             if r.status_code == 200 and remote_hash(r.json()) == want:
+                if adopted:
+                    assigned[rid] = int(nb_id)
                 continue
             drift.append(name)
             if args.check:
                 continue
             requests.put(f"{site}/api/v1/notebooks/{nb_id}", headers=headers,
                          data=json.dumps(payload), timeout=60).raise_for_status()
-            print(f"updated: {name} (#{nb_id})")
+            assigned[rid] = int(nb_id)
+            print(f"{'adopted' if adopted else 'updated'}: {name} (#{nb_id})")
         else:
             drift.append(name)
             if args.check:
@@ -168,8 +232,28 @@ def main() -> int:
             r = requests.post(f"{site}/api/v1/notebooks", headers=headers,
                               data=json.dumps(payload), timeout=60)
             r.raise_for_status()
-            print(f"created: {name} (#{r.json()['data']['id']}) — record the id in "
-                  "platform/policy/runbooks.yaml")
+            assigned[rid] = int(r.json()["data"]["id"])
+            print(f"created: {name} (#{assigned[rid]})")
+
+    # Stale = runbook-type notebooks the registry does not claim. Reported
+    # for deliberate retirement (migration M4) — NEVER deleted from here.
+    stale = sorted(n["id"] for name, nbs in remote.items()
+                   for n in nbs if name not in target_names)
+    extra_dupes = sorted(n["id"] for name, nbs in remote.items() if name in target_names
+                         for n in sorted(nbs, key=lambda n: n["modified"])[:-1])
+    if stale or extra_dupes:
+        print(f"stale runbook notebooks (retire via migration checklist, not "
+              f"deleted here): {len(stale)} unclaimed, {len(extra_dupes)} "
+              f"superseded duplicates — ids {', '.join(map(str, stale + extra_dupes))}")
+
+    if args.write_registry and assigned and not args.check:
+        n = write_registry_ids(assigned)
+        print(f"registry: recorded {n} notebook ids in platform/policy/runbooks.yaml")
+    elif assigned and not args.check:
+        missing = [r for r in assigned if not registry.get(r, {}).get("id")]
+        if missing:
+            print(f"note: {len(missing)} ids not yet in runbooks.yaml — re-run "
+                  "with --write-registry to record them")
 
     if args.check and drift:
         print(f"DRIFT: {len(drift)} runbooks out of sync with the org")
