@@ -58,12 +58,17 @@ jobs:
           git config user.email "observability-deploy@users.noreply.github.com"
           cd stacks/coverage
           terraform init -input=false >/dev/null
+          # State is persisted even when apply FAILS: a partial apply has
+          # already created real resources, and losing the state that tracks
+          # them with the runner turns a red apply into an orphan fleet.
           for env in qa stage; do
             ../../tools/tfstate-git.sh restore coverage "$env"
             terraform plan  -input=false -var "environments=[\"$env\"]" -out=tfplan
-            terraform apply -input=false tfplan
-            ../../tools/tfstate-git.sh persist coverage "$env"
+            rc=0; terraform apply -input=false tfplan || rc=$?
+            [ -f terraform.tfstate ] && ../../tools/tfstate-git.sh persist coverage "$env"
+            [ "$rc" -ne 0 ] && exit "$rc"
           done
+          exit 0
 
   # ---------------------------------------------------------------------------
   production:
@@ -95,8 +100,10 @@ jobs:
           ../../tools/tfstate-git.sh restore foundation prod
           terraform init -input=false >/dev/null
           terraform plan  -input=false -out=tfplan
-          terraform apply -input=false tfplan
-          ../../tools/tfstate-git.sh persist foundation prod
+          rc=0; terraform apply -input=false tfplan || rc=$?
+          # Persist even on failure — see the nonprod job's comment.
+          [ -f terraform.tfstate ] && ../../tools/tfstate-git.sh persist foundation prod
+          exit "$rc"
 
       - name: "2 · Runbooks — publish (API-backed, hash-drift aware; ADR-006)"
         env:
@@ -113,8 +120,10 @@ jobs:
           ../../tools/tfstate-git.sh restore coverage prod
           terraform init -input=false >/dev/null
           terraform plan  -input=false -var 'environments=["prod"]' -out=tfplan
-          terraform apply -input=false tfplan
-          ../../tools/tfstate-git.sh persist coverage prod
+          rc=0; terraform apply -input=false tfplan || rc=$?
+          # Persist even on failure — see the nonprod job's comment.
+          [ -f terraform.tfstate ] && ../../tools/tfstate-git.sh persist coverage prod
+          exit "$rc"
 
       # ---- post-deployment validation ----------------------------------------
       - name: "4 · Idempotency — a second plan must be empty"
