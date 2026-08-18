@@ -146,11 +146,16 @@ jobs:
         env:
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
           DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        # --gate deploy: this step blocks on platform-integrity findings only
+        # (coverage gaps, contract violations on managed monitors/SLOs). The
+        # full report — estate hygiene included — is still generated and
+        # uploaded; the NIGHTLY governance run gates on everything and opens
+        # issues, so estate findings are chased without holding deploys red.
         run: |
           cd tools
           python build_inventory.py --live
           python profile_engine.py
-          python coverage_report.py --live
+          python coverage_report.py --live --gate deploy
 
       - name: "6 · Quality scorecard against the deployed estate"
         run: cd tools && python monitor_scorecard.py

@@ -261,7 +261,7 @@ second source of truth.
 | `validate_live.py` | submits every planned monitor to Datadog's validation API concurrently, grouped by cause |
 | `build_inventory.py` | authoritative inventory (live / fixtures / synthetic at 1.2M) |
 | `profile_engine.py` | owner, tier, profile, **alert band** — zero-touch onboarding |
-| `coverage_report.py` | C1–C15 governance checks, exit 1 on any finding |
+| `coverage_report.py` | C1–C15 governance checks; `--gate governance` (nightly, blocks on everything) or `--gate deploy` (blocks on platform-integrity findings only — estate hygiene stays reported, chased by the nightly loop) |
 | `monitor_scorecard.py` | quality score per monitor, team and domain |
 | `generate_matrix.py` | the coverage matrix (generated, CI-checked for staleness) |
 | `generate_runbooks.py` | 151 runbook drafts from the catalog, human sections preserved |
