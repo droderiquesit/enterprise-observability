@@ -1,11 +1,17 @@
 {
-  "title": "On-Call — Active Pages & Correlation",
+  "title": "On-Call \u2014 Active Pages & Correlation",
   "description": "Managed by Terraform (stacks/foundation). Everything a responder needs during a page: active alerts, correlated events, recent changes, workflow runs.",
   "layout_type": "ordered",
   "reflow_type": "auto",
-  "tags": ["team:observability-platform"],
+  "tags": [
+    "team:observability-platform"
+  ],
   "template_variables": [
-    { "name": "team", "prefix": "team", "default": "*" }
+    {
+      "name": "team",
+      "prefix": "team",
+      "default": "*"
+    }
   ],
   "widgets": [
     {
@@ -40,9 +46,8 @@
     },
     {
       "definition": {
-        "title": "Responder crib sheet",
         "type": "note",
-        "content": "1. Ack the page (5/10 min SLA by severity).\n2. Open the **runbook** linked in the alert — diagnostics workflow output is attached to the event.\n3. Check *Recent changes* above: most pages resolve to a deployment.\n4. Escalation: ack timeout auto-escalates via the team escalation policy; manual escalation handles are in the runbook.\n5. Sev1: incident is auto-created — join the incident channel.",
+        "content": "## Responder crib sheet\n\n1. Ack the page (5/10 min SLA by severity).\n2. Open the **runbook** linked in the alert \u2014 diagnostics workflow output is attached to the event.\n3. Check *Recent changes* above: most pages resolve to a deployment.\n4. Escalation: ack timeout auto-escalates via the team escalation policy; manual escalation handles are in the runbook.\n5. Sev1: incident is auto-created \u2014 join the incident channel.",
         "background_color": "yellow",
         "font_size": "14",
         "text_align": "left",
