@@ -32,10 +32,21 @@ locals {
       # instances of their declared member archetypes. Membership is therefore
       # rebuilt automatically whenever the catalog changes — an SLO can never
       # end up pointing at monitors that no longer exist.
+      #
+      # When the SLO carries burn-rate alerts, membership is further
+      # restricted to METRIC monitors ("query alert"): Datadog rejects a
+      # burn_rate() alert on a monitor-based SLO containing any non-metric
+      # member ("Alerting on monitor based SLOs currently supports metric
+      # monitors" — found by live plan validation; service-check members
+      # tripped it). Non-metric members still alert in their own right —
+      # they just cannot participate in a burn-alerted SLI. An SLO with no
+      # burn alerts keeps its full membership, service checks included
+      # (slo-infra-compute-availability is exactly that: all members are
+      # service checks, so it sets burn_alerts: [] in the catalog).
       monitor_ids = s.type == "monitor" ? [
         for k, inst in local.archetype_instances :
         tonumber(module.coverage_monitors.monitor_ids[k])
-        if inst.env == "prod" && inst.band == "critical" && contains(try(s.member_archetypes, []), inst.archetype)
+        if inst.env == "prod" && inst.band == "critical" && contains(try(s.member_archetypes, []), inst.archetype) && (length(try(s.burn_alerts, [])) == 0 || inst.monitor_type == "query alert")
       ] : []
       tags = ["scope:domain", "domain:${s.domain}", "platform:${local.domains[s.domain].platform_tag}"]
     }
