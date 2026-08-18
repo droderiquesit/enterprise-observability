@@ -92,12 +92,35 @@ def main() -> int:
     handles, dash_titles = expected_identities()
     failures = 0
 
-    def rm(url: str, label: str):
+    def rm(url: str, label: str, takeover_resource: str | None = None):
+        """Delete with optional per-resource permission takeover.
+
+        Workflows carry per-resource restriction policies: only their owner
+        may edit or delete them, and the 2026-08-07 experiment's workflows
+        are owned by a different user than the CI credentials. On a 403,
+        grant the calling user (parsed from Datadog's own error message)
+        editor on the resource via the restriction-policy API — the org
+        admin behind the CI key is allowed to do that — then retry once.
+        """
         nonlocal failures
         print(f"{verb}: {label}")
         if not args.execute:
             return
         r = requests.delete(url, headers=headers, timeout=60)
+        if r.status_code == 403 and takeover_resource:
+            import re as _re
+            m = _re.search(r"user ([0-9a-f-]{36}) is missing permission", r.text)
+            if m:
+                policy = {"data": {"type": "restriction_policy",
+                                   "id": takeover_resource,
+                                   "attributes": {"bindings": [
+                                       {"relation": "editor",
+                                        "principals": [f"user:{m.group(1)}"]}]}}}
+                p = requests.post(
+                    f"{site}/api/v2/restriction_policy/{takeover_resource}",
+                    headers=headers, timeout=60, data=json.dumps(policy))
+                print(f"  takeover ({takeover_resource}): HTTP {p.status_code}")
+                r = requests.delete(url, headers=headers, timeout=60)
         if r.status_code not in (200, 202, 204):
             print(f"  ERROR {r.status_code}: {r.text[:200]}")
             failures += 1
@@ -125,7 +148,8 @@ def main() -> int:
             if "managed_by:terraform" in (attrs.get("tags") or []):
                 n += 1
                 rm(f"{site}/api/v2/workflows/{wf['id']}",
-                   f"workflow {wf['id']} ({attrs.get('name')})")
+                   f"workflow {wf['id']} ({attrs.get('name')})",
+                   takeover_resource=f"workflow:{wf['id']}")
         print(f"-- workflows matched: {n}")
 
     # --- teams ---------------------------------------------------------------

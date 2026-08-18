@@ -31,6 +31,22 @@ variable "schedule_effective_date" {
   default     = "2026-09-01T09:00:00-05:00"
 }
 
+variable "workflow_budget" {
+  description = <<-EOT
+    Maximum Workflow Automation workflows to instantiate, selected in the
+    explicit priority order in main.tf. 0 = no budget (all). Exists because
+    the org's Datadog plan caps total workflows; raise or zero this when the
+    plan allows the full catalog.
+  EOT
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = var.workflow_budget >= 0
+    error_message = "workflow_budget must be >= 0 (0 = unlimited)."
+  }
+}
+
 variable "manage_rbac" {
   description = "Manage roles and service accounts. Requires user_access_manage; disable for offline plans because permission names are resolved against the live API."
   type        = bool
