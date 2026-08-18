@@ -3,7 +3,7 @@
   "description": "Managed by Terraform (stacks/foundation). One row per domain; drill into the domain dashboards for detail.",
   "layout_type": "ordered",
   "reflow_type": "auto",
-  "tags": ["managed_by:terraform", "team:observability-platform"],
+  "tags": ["team:observability-platform"],
   "template_variables": [
     { "name": "env", "prefix": "env", "available_values": ["prod", "staging"], "default": "prod" }
   ],
