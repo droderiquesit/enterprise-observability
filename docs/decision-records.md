@@ -172,13 +172,13 @@ changes.
 
 ---
 
-## ADR-013 — No backend block is committed
+## ADR-013 — No backend block is committed *(superseded by ADR-016)*
 
-CI injects `backend.tf` at deploy time. Committing `backend "local" {}` and
-passing remote settings to `init -backend-config` is a silent misconfiguration:
-init accepts the flags and state still lands on the runner's disk. Keeping the
-block out of the repository makes the intended backend explicit and lets offline
-CI stages run with no secrets at all.
+**Superseded:** nothing injects a backend any more — under ADR-016 Terraform
+always runs on the default local backend and `tools/tfstate-git.sh` moves the
+state files to/from the `tfstate` branch around each credentialed step. What
+survives from this ADR: no backend block is committed, and offline CI stages
+run with no secrets at all.
 
 ---
 
@@ -252,3 +252,22 @@ precondition that makes repository-hosted state acceptable.
 operator running the script deliberately); branch protection should exclude
 it from required reviews. `.gitignore` keeps `*.tfstate*` out of every
 OTHER branch, so state can never ride along in a feature PR.
+
+---
+
+## ADR-017 — Workflow automations deploy under an explicit budget
+
+The Datadog org caps workflow automations (~20 per org), and most of the quota
+is held by legacy workflows owned by a different login. Workflow ownership is
+per-resource: the CI service account gets a 403 deleting them even after a
+restriction-policy grant, so CI cannot reclaim the quota itself.
+
+Rather than let the foundation apply fail at the quota mid-run, the catalog
+deploys under a committed budget (`stacks/foundation/budget.auto.tfvars`,
+`workflow_budget`) against an explicit priority list in
+`stacks/foundation/main.tf`, with a `check` block asserting the list stays
+complete as the catalog grows. When the legacy workflows are deleted in the UI
+by their owner, raising the budget deploys the rest in priority order — no
+other change needed. Until then, monitors that reference not-yet-deployed
+workflows page correctly; only the automated enrichment is pending.
+

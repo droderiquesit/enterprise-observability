@@ -15,9 +15,11 @@
 
 ## Cadences
 
-- **Every PR** — 23 CI stages, including the live Datadog validation gate.
-- **On merge to main** — promote to qa + stage automatically; production behind
-  the `datadog-production` approval environment, concurrency-locked.
+- **Every PR** — the full CI gate (schema, tests, terraform, security), including live Datadog monitor validation on non-fork PRs.
+- **On merge to main** — promote to qa + stage automatically. Production is
+  NEVER promoted by a push: it requires an explicit `deploy.yml` dispatch with
+  target `production`, behind the `datadog-production` approval environment,
+  concurrency-locked (see docs/deployment.md).
 - **Daily 06:00 UTC** — drift detection (Terraform + runbook content hash).
 - **Weekdays 07:00 UTC** — coverage & compliance report + quality scorecard. A
   red run opens a governance issue automatically.

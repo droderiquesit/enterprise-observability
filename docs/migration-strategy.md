@@ -133,52 +133,24 @@ conversion is one YAML file and one PR.
 
 ---
 
-## Part 2 — This org, verified live on 2026-08-17
+## Part 2 — This org: what remains after the first deployment
 
-Read-only API inspection with the supplied credentials:
+The platform deployed end-to-end on 2026-08-18 (deploy run #24, green): 657
+managed resources across foundation, qa, stage and prod, 152 published runbook
+notebooks, idempotent second plan, coverage 100% of the alertable estate. The
+pre-deployment snapshot of this org lives in
+[docs/archive/2026-08-17-live-estate-reconciliation.md](archive/2026-08-17-live-estate-reconciliation.md).
 
-| Asset | Count | Implication |
+What is still open, and who can do it:
+
+| Item | Action | Who |
 |---|---|---|
-| **Monitors** | **0** | Nothing to migrate. The entire alerting layer is greenfield |
-| SLOs | 1 | One survivor to adopt or supersede |
-| Notebooks | 50 | Reconcile against the 152 generated runbooks in M6 |
-| Dashboards (manual lists) | 0 | Foundation creates all 18 |
-| Service catalog | 22 services | All `api` archetype, all inferred tier2 |
-| Reporting hosts | 0 | No agent or cloud-integration telemetry flowing |
+| ~18 legacy workflow automations (2026-08-07 experiment) hold the org's workflow quota | Delete in the Datadog UI, then raise `workflow_budget` in `stacks/foundation/budget.auto.tfvars` (ADR-017) | Their owning login — CI gets 403 |
+| 58 stale legacy notebooks (unclaimed by the registry; reported by `publish_runbooks.py` on every publish) | Review, migrate any content worth keeping into `platform/runbooks/*.md`, then retire | Platform team |
+| 5 legacy hand-made dashboards | Retire once the 18 platform dashboards are reviewed | Platform team |
+| Notebook IDs not yet recorded in `platform/policy/runbooks.yaml` | Run `publish_runbooks.py --write-registry` with credentials; commit | Platform team |
+| Estate tagging: the org's demo services lack the five owner-applied tags (coverage check C3; the nightly governance run opens issues for this) | The tagging campaign — M2 below, still the project | Service owners |
+| Backup-success SLO telemetry (`acme.backup.jobs` custom metric, C13) | Deploy the metric producer | Infrastructure team |
 
-### What the live coverage report says right now
-
-```
-resources_total     22        C1  unmonitored resources ....... 21
-resources_alertable 21        C3  missing/invalid tags ........ 22
-resources_covered    0        C13 SLO telemetry gaps .......... 1
-coverage_pct       0.0%       PASS ......................... false
-```
-
-This is the correct reading, and worth dwelling on: the framework **refuses to
-claim coverage it cannot demonstrate**. Every one of the 22 services is missing
-the five owner-applied tags, so the profile engine infers what it can (`tier2`,
-`api`, `standard` band) and records a violation for each inference rather than
-presenting a guess as a fact.
-
-One exception already matches real data: `EXC-2026-001` scopes
-`efront_bts_int` to `observe_only`, and that service exists in this org — so the
-one resource excluded from alerting is excluded **by an approved, expiring,
-attributed decision**.
-
-### The sequence for this org
-
-Because there are no monitors, M0's classification step is empty and M4's
-comparison week has nothing to compare against. The path collapses to:
-
-1. **M1 — Foundation.** Apply now. 178 objects, all new, nothing at risk.
-2. **M2 — Tagging.** The whole job. 22 services × 5 tags, plus whatever
-   infrastructure begins reporting. This is the only thing standing between the
-   org and full coverage.
-3. **M3 — Shadow.** Apply coverage muted for 48h; watch group counts.
-4. **M5 — SLO adoption.** One SLO to adopt.
-5. **M6 — Runbooks.** Reconcile the 50 existing notebooks against the generated
-   set; migrate content into the markdown sources newest-first.
-6. **M7 — Lock the door.**
-
-Steps 3–7 are each a day's work. **Step 2 is the project.**
+The M-sequence for whatever estate migrates next (a real org onboarding real
+services) is Part 1 above, unchanged: tagging (M2) is always the project.

@@ -91,14 +91,16 @@ is rejected rather than silently mislabelled.
 modules/
   monitor_factory/       renders every alerting monitor from a resolved instance
   composite_monitor/     confirmed-impact composites, with member demotion
-  slo_with_burn/         SLOs (domain + tier0) and their IDs
+  slo/                   SLOs (domain + tier0) and their IDs
   notification_rules/    tag → destination routing matrix
   team_oncall/           Teams, schedules, escalation policies, routing rules
   workflow_automation/   workflows, classified and guarded by blast radius
-  dashboard/             dashboard JSON
   rbac/                  roles and service accounts, resolved by permission NAME
   service_catalog/       service definitions (v2.2) from the registry + inventory
   downtime/              recurring, tag-scoped maintenance windows
+
+(Dashboards are a single resource declared directly in
+stacks/foundation/dashboards.tf — a module added nothing.)
 
 stacks/
   foundation/            applied FIRST — everything an alert needs to reach a human
@@ -141,9 +143,9 @@ generation of this org.
 ### Plan-time budget assertions
 
 ```hcl
-check "monitor_budget"   { ... 476 ≤ 1500 ... }
-check "paging_budget"    { ... 69 ≤ 90 ...   }   # the burnout metric
-check "p1_budget"        { ... 62 ≤ 70 ...   }
+check "monitor_budget"   { ... 474 ≤ 1500 ... }
+check "paging_budget"    { ... 67 ≤ 90 ...   }   # the burnout metric
+check "p1_budget"        { ... 66 ≤ 70 ...   }
 check "composite_members_resolved" { ... }
 ```
 
@@ -189,11 +191,11 @@ platform/                         ← everything a human edits
   events/correlation-rules.yaml   correlation policy
   schemas/*.json                  JSON Schema for the two hand-written formats
 
-modules/                          reusable Terraform (10)
+modules/                          reusable Terraform (9)
 stacks/                           foundation, coverage
-tools/                            11 Python tools (see §24)
-tests/                            85 tests including a 1.2M-resource scale test
-docs/                             this documentation + the GENERATED matrix
+tools/                            the Python/shell tooling (see §24)
+tests/                            pytest suite including a 1.2M-resource scale test
+docs/                             this documentation + the GENERATED matrix + archive/
 .github/workflows/                ci · deploy · governance
 ```
 
@@ -213,36 +215,36 @@ docs/                             this documentation + the GENERATED matrix
 
 ## 23. CI/CD Pipeline
 
-`.github/workflows/ci.yml` — 23 numbered stages, every one a guardrail:
+`.github/workflows/ci.yml` — four jobs, every stage a guardrail. The
+per-tool checks (policy lint, manifests, runbook registry sync, generated-doc
+staleness, scorecard thresholds) are asserted INSIDE the pytest suite, so they
+run once, not twice:
 
-| # | Stage | Fails when |
+| Job | Stage | Fails when |
 |---|---|---|
-| 1 | YAML syntax | any policy file is unparseable |
-| 2 | JSON schema | a manifest or registration violates its schema |
-| 3–10 | **Policy lint** (`validate_policy.py`) | any of 12 rule families: SCHEMA, REFERENCE, SCOPE, CARDINALITY, DETECTION, PRIORITY, COMPOSITE, PACKS, SLO, EXCEPTION, AUTOMATION, BUDGET |
-| 11 | Self-service manifests | including **duplicate-monitor detection** |
-| 12 | Runbook completeness & registry sync | a monitor names a runbook that does not exist |
-| 13 | Generated docs not stale | the coverage matrix or runbook drafts drifted from the catalog |
-| 14 | Monitor quality scorecard | fleet average < 85, or any monitor grades F |
-| 15 | Unit, governance & scale tests | 85 tests, including 1.2M resources |
-| 16 | `terraform fmt -check` | |
-| 17 | `terraform validate` (10 modules + 2 stacks) | |
-| 18 | Offline plan | any precondition, budget or cardinality gate |
-| 19 | **Determinism** | two consecutive plans differ |
-| 20 | Estate report → PR summary | (informational) |
-| 21 | tfsec | IaC security finding |
-| 22 | gitleaks | a secret in the diff |
-| 23 | **Credentialed plan** | any monitor is rejected by Datadog's validation API |
+| validate | YAML syntax | any policy file is unparseable |
+| validate | JSON schema | a manifest or registration violates its schema |
+| validate | pytest | policy lint (12 rule families), self-service manifests incl. duplicate detection, runbook completeness & registry sync, generated-doc staleness, scorecard (fleet ≥ 85, zero F), governance checks, the 1.2M-resource scale path |
+| terraform | `terraform fmt -check` / `validate` | 9 modules + 2 stacks |
+| terraform | Offline plan | any precondition, budget or cardinality gate |
+| terraform | **Determinism** | two consecutive plans differ |
+| terraform | Estate report → PR summary | (informational) |
+| security | Trivy | HIGH/CRITICAL IaC misconfiguration |
+| security | gitleaks | a secret in the diff |
+| credentialed-plan | plan + `validate_live.py` | any planned monitor is rejected by Datadog's validation API (non-fork PRs) |
 
 `deploy.yml` — controlled promotion. The **same definitions** move:
 
 ```
-qa + stage   (datadog-nonprod)
+push to main ──► qa + stage        (datadog-nonprod, automatic)
+
+dispatch target=production ──► qa + stage, then prod
+    (datadog-production — explicit dispatch + approval, concurrency-locked)
      ↓
-   prod      (datadog-production — manual approval, concurrency-locked)
-     ↓
-foundation → runbooks → coverage → idempotency → coverage report → scorecard
+foundation → runbooks → coverage → idempotency → coverage report (--gate deploy) → scorecard
 ```
+
+Full detail: [deployment.md](deployment.md).
 
 `governance.yml` — nightly drift (Terraform + runbook hash), weekday coverage
 and quality runs, and it **opens a governance issue** when the report is red.
@@ -251,15 +253,16 @@ and quality runs, and it **opens a governance issue** when the report is red.
 
 ## 24. Policy-as-Code Validation
 
-Eleven tools, all reading the same policy files Terraform reads. There is no
-second source of truth.
+All tools read the same policy files Terraform reads — there is no second
+source of truth. Shared helpers (policy loading, priority/paging resolution,
+tag parsing, the rate-limit-aware `dd_request`) live in `obs_common.py`.
 
 | Tool | Role |
 |---|---|
 | `validate_policy.py` | 12 rule families over the whole catalog |
 | `validate_monitors.py` | self-service manifests, with explanations |
 | `validate_live.py` | submits every planned monitor to Datadog's validation API concurrently, grouped by cause |
-| `build_inventory.py` | authoritative inventory (live / fixtures / synthetic at 1.2M) |
+| `build_inventory.py` | authoritative inventory (live, or synthetic at 1.2M for scale tests) |
 | `profile_engine.py` | owner, tier, profile, **alert band** — zero-touch onboarding |
 | `coverage_report.py` | C1–C15 governance checks; `--gate governance` (nightly, blocks on everything) or `--gate deploy` (blocks on platform-integrity findings only — estate hygiene stays reported, chased by the nightly loop) |
 | `monitor_scorecard.py` | quality score per monitor, team and domain |
@@ -267,6 +270,8 @@ second source of truth.
 | `generate_runbooks.py` | 151 runbook drafts from the catalog, human sections preserved |
 | `publish_runbooks.py` | notebook publishing with content-hash drift control |
 | `correlate_events.py` | executable specification of the correlation rules |
+| `refresh_fixtures.py` | regenerates `tests/fixtures/monitors_planned.json` from an offline plan (`make fixtures`) |
+| `tfstate-git.sh` | moves per-stack×env state to/from the `tfstate` branch (ADR-016) |
 
 ### Guardrails, and where each is enforced
 
