@@ -143,7 +143,7 @@ jobs:
       # Trivy is tfsec's maintained successor — tfsec is frozen and its parser
       # rejects Terraform `check` blocks, which this repo uses.
       - name: "IaC misconfiguration scan"
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: config
           scan-ref: .
