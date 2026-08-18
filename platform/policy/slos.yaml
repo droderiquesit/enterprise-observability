@@ -126,7 +126,14 @@ slos:
     target: 99.9
     timeframe: 30d
     member_archetypes: [host-unavailable, host-filesystem-readonly]
-    burn_alerts: [fast, slow]
+    # No burn-rate alerts: Datadog only supports burn_rate() on monitor-based
+    # SLOs whose members are METRIC monitors, and both members here are
+    # service checks (found by live plan validation: "Alerting on monitor
+    # based SLOs currently supports metric monitors"). The SLO still tracks
+    # the error budget; paging for compute comes from the members themselves
+    # (host-unavailable is P1). Revisit if the SLO gains metric members or
+    # the vendor lifts the constraint.
+    burn_alerts: []
 
   slo-infra-backup-success:
     name: Backup success rate
