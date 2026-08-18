@@ -44,8 +44,12 @@ locals {
 resource "datadog_monitor_notification_rule" "this" {
   for_each = local.rules
 
-  name       = "route-${each.value.profile}-${each.value.priority}-${each.value.pages ? "page" : "nopage"}-${each.value.team}"
-  recipients = each.value.recipients
+  name = "route-${each.value.profile}-${each.value.priority}-${each.value.pages ? "page" : "nopage"}-${each.value.team}"
+  # Recipients use the monitor-message mention form ("@handle") throughout
+  # the policy; the notification-rule API wants the bare handle and rejects
+  # a leading '@' ("Recipient handle should not start with '@'" — found by
+  # the first live foundation apply).
+  recipients = [for r in each.value.recipients : trimprefix(r, "@")]
 
   filter {
     tags = [
