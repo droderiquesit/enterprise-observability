@@ -27,7 +27,15 @@ locals {
   )
 }
 
-module "dashboards" {
-  source     = "../../modules/dashboard"
-  dashboards = local.dashboards
+# The resource lives directly in the stack: a module wrapping a single
+# argument-for-argument resource is indirection without behavior. The moved
+# block keeps the existing state addresses so the inlining is a no-op apply.
+resource "datadog_dashboard_json" "this" {
+  for_each  = local.dashboards
+  dashboard = each.value
+}
+
+moved {
+  from = module.dashboards.datadog_dashboard_json.this
+  to   = datadog_dashboard_json.this
 }

@@ -2,12 +2,15 @@ name: ci
 # =============================================================================
 # VALIDATION PIPELINE — every stage is a guardrail that can fail the build.
 #
-#   YAML → schema → policy → tags → naming → SLO → runbook → routing →
-#   duplicates → cardinality → fmt → validate → plan → security → cost/budget →
-#   determinism → credentialed plan (live monitor validation)
+#   YAML → schema → tests (policy lint, manifests, runbooks, generated docs,
+#   scorecard, governance & scale) → fmt → validate → offline plan →
+#   determinism → security → credentialed plan + live monitor validation
 #
-# Nothing merges that violates a standard, and every standard is checked by a
-# command anyone can run locally with `make validate`.
+# The per-tool checks (validate_policy, validate_monitors, runbook registry
+# sync, matrix/runbook staleness, scorecard thresholds) all run INSIDE the
+# pytest suite — tests/ asserts each one — so they are not repeated as
+# separate stages here. Anyone can run the same gate locally with
+# `make validate`.
 # =============================================================================
 on:
   pull_request:
@@ -34,9 +37,9 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
       - name: Install tooling
-        run: pip install -r tools/requirements.txt
+        run: pip install -r tools/requirements-dev.txt
 
-      - name: "1 · YAML syntax"
+      - name: "YAML syntax"
         run: |
           python - <<'PY'
           import sys, yaml, pathlib
@@ -51,9 +54,8 @@ jobs:
           sys.exit(1 if bad else 0)
           PY
 
-      - name: "2 · JSON schema — service registrations & monitor manifests"
+      - name: "JSON schema — service registrations & monitor manifests"
         run: |
-          pip install --quiet jsonschema
           python - <<'PY'
           import json, sys, pathlib, yaml, jsonschema
           fails = 0
@@ -69,29 +71,7 @@ jobs:
           sys.exit(1 if fails else 0)
           PY
 
-      # Stages 3–10 are all implemented by validate_policy.py, which reports
-      # them as tagged sections so a failure names the standard it violated:
-      # SCHEMA / REFERENCE / SCOPE / CARDINALITY / DETECTION / PRIORITY /
-      # COMPOSITE / PACKS / SLO / EXCEPTION / AUTOMATION / BUDGET.
-      - name: "3-10 · Policy, tags, naming, SLO, runbook, routing, cardinality, budget"
-        run: cd tools && python validate_policy.py
-
-      - name: "11 · Self-service manifests (incl. duplicate-monitor detection)"
-        run: cd tools && python validate_monitors.py
-
-      - name: "12 · Runbook completeness & registry sync"
-        run: cd tools && python publish_runbooks.py --dry-run
-
-      - name: "13 · Generated docs are not stale"
-        run: |
-          cd tools
-          python generate_matrix.py --check
-          python generate_runbooks.py --check
-
-      - name: "14 · Monitor quality scorecard"
-        run: cd tools && python monitor_scorecard.py --min-fleet-score 85 --max-failing 0
-
-      - name: "15 · Unit, governance & scale tests"
+      - name: "Policy, manifests, runbooks, generated docs, scorecard, scale — pytest"
         run: python -m pytest tests/ -q
 
       - uses: actions/upload-artifact@v4
@@ -99,6 +79,7 @@ jobs:
         with:
           name: quality-reports
           path: generated/
+          if-no-files-found: ignore
 
   # ---------------------------------------------------------------------------
   terraform:
@@ -110,28 +91,28 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
-      - name: "16 · terraform fmt"
+      - name: "terraform fmt"
         run: terraform fmt -recursive -check
 
-      - name: "17 · terraform validate (all modules and stacks)"
+      - name: "terraform validate (all modules and stacks)"
         run: |
           for d in modules/* stacks/coverage stacks/foundation; do
             echo "== $d"
             (cd "$d" && terraform init -backend=false -input=false >/dev/null && terraform validate)
           done
 
-      - name: "18 · Offline plan — preconditions, budgets, cardinality gates"
+      - name: "Offline plan — preconditions, budgets, cardinality gates"
+        # The stacks were initialized by the validate loop above; no backend
+        # exists (ADR-016), so no re-init is needed.
         run: |
           cd stacks/coverage
-          terraform init -input=false >/dev/null
           DD_API_KEY=offline DD_APP_KEY=offline terraform plan -input=false \
             -var datadog_validate=false -out=plan.out
           cd ../foundation
-          terraform init -input=false >/dev/null
           DD_API_KEY=offline DD_APP_KEY=offline terraform plan -input=false \
-            -var datadog_validate=false -var manage_rbac=false -out=plan.out
+            -var datadog_validate=false -var manage_rbac=false
 
-      - name: "19 · Determinism — a second plan must equal the first"
+      - name: "Determinism — a second plan must equal the first"
         run: |
           cd stacks/coverage
           terraform show -json plan.out | jq -S '.resource_changes | map({address, actions: .change.actions})' > p1.json
@@ -140,16 +121,17 @@ jobs:
           terraform show -json plan2.out | jq -S '.resource_changes | map({address, actions: .change.actions})' > p2.json
           diff p1.json p2.json
 
-      - name: "20 · Estate report on the PR"
+      - name: "Estate report on the PR"
         run: |
           cd stacks/coverage
           echo '### Planned monitoring estate' >> $GITHUB_STEP_SUMMARY
-          terraform show -json plan.out \
-            | jq -r '.output_changes | {
-                monitors: .monitor_count.after,
-                per_env: .instances_by_env.after,
-                per_priority: .instances_by_priority.after,
-                paging: (.paging_monitors.after | length)
+          terraform show -json plan.out | jq -r '
+            [.resource_changes[] | select(.type == "datadog_monitor")] as $m
+            | {
+                monitors: ($m | length),
+                per_env: ($m | map(.change.after.tags[]? | select(startswith("env:")) | sub("env:";""))
+                             | group_by(.) | map({(.[0]): length}) | add),
+                slos: ([.resource_changes[] | select(.type == "datadog_service_level_objective")] | length)
               }' >> $GITHUB_STEP_SUMMARY
 
   # ---------------------------------------------------------------------------
@@ -157,12 +139,21 @@ jobs:
     name: security scan
     runs-on: ubuntu-latest
     steps:
+      # Full history: gitleaks scans the PR's commit RANGE and cannot resolve
+      # it from a shallow clone (this was latent for months — the old tfsec
+      # step crashed first, so gitleaks never actually ran).
       - uses: actions/checkout@v4
-      - name: "21 · IaC security scan"
-        uses: aquasecurity/tfsec-action@v1.0.3
+        with: { fetch-depth: 0 }
+      # Trivy is tfsec's maintained successor — tfsec is frozen and its parser
+      # rejects Terraform `check` blocks, which this repo uses.
+      - name: "IaC misconfiguration scan"
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
-          soft_fail: false
-      - name: "22 · Secret scan"
+          scan-type: config
+          scan-ref: .
+          exit-code: "1"
+          severity: HIGH,CRITICAL
+      - name: "Secret scan"
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -171,7 +162,7 @@ jobs:
   credentialed-plan:
     name: live monitor validation
     # Runs only where the CI service-account secrets exist (never on forks).
-    # Every monitor definition is checked against Datadog's own validation API
+    # Every planned monitor is checked against Datadog's own validation API
     # before merge, so a syntactically invalid query cannot reach production.
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
     runs-on: ubuntu-latest
@@ -181,7 +172,11 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
-      - name: "23 · Plan with live API validation"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install -r tools/requirements.txt
+      - name: "Plan, then validate every planned monitor against the live API"
         env:
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
           DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
@@ -189,4 +184,7 @@ jobs:
           if [ -z "$DD_API_KEY" ]; then echo "no secrets in this context — skipping"; exit 0; fi
           cd stacks/coverage
           terraform init -input=false >/dev/null
-          terraform plan -input=false
+          terraform plan -input=false -var datadog_validate=false -out=plan.out
+          terraform show -json plan.out > plan.json
+          cd ../../tools
+          python validate_live.py ../stacks/coverage/plan.json

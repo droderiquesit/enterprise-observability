@@ -49,7 +49,7 @@ jobs:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
       - uses: hashicorp/setup-terraform@v3
-        with: { terraform_version: "1.9.8" }
+        with: { terraform_version: "${{ env.TF_VERSION }}" }
 
       - name: Plan & apply, one environment at a time — qa first, stage only if qa applied
         env:
@@ -67,8 +67,8 @@ jobs:
             ../../tools/tfstate-git.sh restore coverage "$env"
             terraform plan  -input=false -var "environments=[\"$env\"]" -out=tfplan
             rc=0; terraform apply -input=false tfplan || rc=$?
-            [ -f terraform.tfstate ] && ../../tools/tfstate-git.sh persist coverage "$env"
-            [ "$rc" -ne 0 ] && exit "$rc"
+            if [ -f terraform.tfstate ]; then ../../tools/tfstate-git.sh persist coverage "$env"; fi
+            if [ "$rc" -ne 0 ]; then exit "$rc"; fi
           done
           exit 0
 
@@ -86,9 +86,9 @@ jobs:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
       - uses: hashicorp/setup-terraform@v3
-        with: { terraform_version: "1.9.8" }
+        with: { terraform_version: "${{ env.TF_VERSION }}" }
       - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
+        with: { python-version: "${{ env.PYTHON_VERSION }}" }
       - run: pip install -r tools/requirements.txt
       - name: Configure state-branch committer
         run: |
@@ -110,7 +110,7 @@ jobs:
           terraform plan  -input=false -out=tfplan
           rc=0; terraform apply -input=false tfplan || rc=$?
           # Persist even on failure — see the nonprod job's comment.
-          [ -f terraform.tfstate ] && ../../tools/tfstate-git.sh persist foundation prod
+          if [ -f terraform.tfstate ]; then ../../tools/tfstate-git.sh persist foundation prod; fi
           exit "$rc"
 
       - name: "2 · Runbooks — publish (API-backed, hash-drift aware; ADR-006)"
@@ -130,7 +130,7 @@ jobs:
           terraform plan  -input=false -var 'environments=["prod"]' -out=tfplan
           rc=0; terraform apply -input=false tfplan || rc=$?
           # Persist even on failure — see the nonprod job's comment.
-          [ -f terraform.tfstate ] && ../../tools/tfstate-git.sh persist coverage prod
+          if [ -f terraform.tfstate ]; then ../../tools/tfstate-git.sh persist coverage prod; fi
           exit "$rc"
 
       # ---- post-deployment validation ----------------------------------------
@@ -157,8 +157,8 @@ jobs:
           python profile_engine.py
           python coverage_report.py --live --gate deploy
 
-      - name: "6 · Quality scorecard against the deployed estate"
-        run: cd tools && python monitor_scorecard.py
+      - name: "6 · Quality scorecard against the catalog"
+        run: cd tools && python monitor_scorecard.py --min-fleet-score 85 --max-failing 0
 
       - uses: actions/upload-artifact@v4
         if: always()

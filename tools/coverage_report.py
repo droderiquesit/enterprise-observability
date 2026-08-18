@@ -96,14 +96,12 @@ def _deploy_blocking(cid: str, items: list) -> int:
 
 
 def fetch_live():
-    import requests
-
     headers = oc.dd_headers()
     site = oc.dd_site()
     monitors, page = [], 0
     while True:
-        r = requests.get(f"{site}/api/v1/monitor", headers=headers,
-                         params={"page": page, "page_size": 200}, timeout=60)
+        r = oc.dd_request("GET", f"{site}/api/v1/monitor", headers=headers,
+                          params={"page": page, "page_size": 200})
         r.raise_for_status()
         batch = r.json()
         monitors.extend(batch)
@@ -112,8 +110,8 @@ def fetch_live():
         page += 1
     slos, offset = [], 0
     while True:
-        r = requests.get(f"{site}/api/v1/slo", headers=headers,
-                         params={"limit": 100, "offset": offset}, timeout=60)
+        r = oc.dd_request("GET", f"{site}/api/v1/slo", headers=headers,
+                          params={"limit": 100, "offset": offset})
         r.raise_for_status()
         batch = r.json().get("data", [])
         slos.extend(batch)
@@ -121,15 +119,6 @@ def fetch_live():
             break
         offset += 100
     return monitors, slos
-
-
-def tags_map(tag_list) -> dict:
-    out: dict[str, str] = {}
-    for t in tag_list or []:
-        if ":" in t:
-            k, v = t.split(":", 1)
-            out.setdefault(k, v)
-    return out
 
 
 def _covering_archetypes(policy: dict, service_archetype: str) -> set[str]:
@@ -154,7 +143,7 @@ def run_checks(inventory, assignments, monitors, slos, policy) -> dict:
     g = policy["global"]
     checks: dict[str, list] = {f"C{i}": [] for i in range(1, 16)}
 
-    monitor_tags = {m["id"]: tags_map(m.get("tags")) for m in monitors}
+    monitor_tags = {m["id"]: oc.tags_to_map(m.get("tags")) for m in monitors}
     managed = {mid for mid, t in monitor_tags.items() if t.get("managed_by") == "terraform"}
 
     # Which (archetype, env, band) combinations are actually deployed.
@@ -166,7 +155,7 @@ def run_checks(inventory, assignments, monitors, slos, policy) -> dict:
     slo_ids_seen = set()
     slo_services = set()
     for s in slos:
-        st = tags_map(s.get("tags", [])) if isinstance(s.get("tags"), list) else {}
+        st = oc.tags_to_map(s.get("tags", [])) if isinstance(s.get("tags"), list) else {}
         if st.get("slo_id"):
             slo_ids_seen.add(st["slo_id"])
         for svc in s.get("service_tags") or ([st["service"]] if "service" in st else []):
@@ -270,19 +259,25 @@ def run_checks(inventory, assignments, monitors, slos, policy) -> dict:
                 checks["C11"].append({"name": name, "banned_group_keys": banned})
 
         # C14 — paging discipline. The `priority` tag is lowercase because
-        # Datadog reserves that tag key and only accepts p1..p4.
+        # Datadog reserves that tag key and only accepts p1..p4. The archetype
+        # tag encodes the paging SOURCE: `composite`, `slo-burn-*` (the tag
+        # form of policy's `slo_burn`), or a plain symptom archetype.
         prio = (t.get("priority") or "").upper()
         paging = t.get("pages") == "true"
+        p2_allowed = policy["priorities"]["paging_rule"]["p2_pages_only_from"]
+        arch = str(t.get("archetype", ""))
+        source = ("slo_burn" if arch.startswith("slo-burn")
+                  else "composite" if arch == "composite" else "archetype")
         if paging:
             if t.get("env") != "prod":
                 checks["C14"].append({"name": name, "problem": f"pages in {t.get('env')}"})
             elif t.get("alert_band") != "critical":
                 checks["C14"].append({"name": name, "problem": f"pages on band {t.get('alert_band')}"})
-            elif prio == "P2" and t.get("archetype") not in ("composite",) \
-                    and not str(t.get("archetype", "")).startswith("slo-burn"):
+            elif prio == "P2" and source not in p2_allowed:
                 checks["C14"].append({
                     "name": name,
-                    "problem": "P2 symptom monitor pages; only SLO burn and composites may",
+                    "problem": "P2 symptom monitor pages; policy allows P2 paging only "
+                               f"from {', '.join(p2_allowed)}",
                 })
             elif prio in ("P3", "P4"):
                 checks["C14"].append({"name": name, "problem": f"{prio} must never page"})
@@ -396,7 +391,9 @@ def main() -> int:
     if args.live:
         monitors, slos = fetch_live()
     else:
-        monitors = json.loads((args.fixtures / "monitors.json").read_text())
+        # tests/fixtures is the one fixture set in the repo; monitors_planned
+        # is the terraform-plan-derived estate (see tools/refresh_fixtures.py).
+        monitors = json.loads((args.fixtures / "monitors_planned.json").read_text())
         slos = json.loads((args.fixtures / "slos.json").read_text())
 
     policy = oc.load_policy()

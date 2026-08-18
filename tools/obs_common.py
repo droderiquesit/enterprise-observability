@@ -90,6 +90,13 @@ def load_custom_monitors() -> dict:
 PRIORITY_RANK = {"P1": 1, "P2": 2, "P3": 3, "P4": 4}
 RANK_PRIORITY = {v: k for k, v in PRIORITY_RANK.items()}
 
+# The predictive-detection function list comes from policy (global.yaml →
+# detection_policy.predictive_functions) so the validator, the scorecard and
+# the manifest checker cannot each carry their own copy.
+PREDICTIVE_FUNCS = tuple(
+    _yaml(POLICY_DIR / "global.yaml")["detection_policy"]["predictive_functions"]
+)
+
 
 def resolve_priority(policy: dict, impact_class: str, band: str, env: str) -> str:
     """priority = clamp(matrix[impact_class][band], environment ceiling).
@@ -177,6 +184,49 @@ def expand_instances(policy: dict, environments: list[str] | None = None) -> lis
                     }
                 )
     return out
+
+
+def tags_to_map(tags: list[str] | None) -> dict:
+    """`["k:v", ...]` → `{k: v}`, first value wins for a repeated key."""
+    out: dict[str, str] = {}
+    for t in tags or []:
+        if ":" in t:
+            k, v = t.split(":", 1)
+            out.setdefault(k, v)
+    return out
+
+
+def dd_request(method: str, url: str, *, headers: dict, attempts: int = 6,
+               session=None, **kwargs):
+    """One Datadog call with rate-limit-aware retry.
+
+    Bulk callers exceed Datadog's per-endpoint rate limits in practice
+    (publishing 152 notebooks 429'd on a real run). Honour the wait the API
+    states in Retry-After (or X-RateLimit-Reset), fall back to exponential
+    backoff, retry 5xx the same way; everything else returns as-is for the
+    caller to inspect.
+    """
+    import time
+
+    import requests
+    delay = 2.0
+    for attempt in range(attempts):
+        r = (session or requests).request(method, url, headers=headers,
+                                          timeout=60, **kwargs)
+        if r.status_code != 429 and r.status_code < 500:
+            return r
+        if attempt == attempts - 1:
+            return r
+        wait = r.headers.get("Retry-After") or r.headers.get("X-RateLimit-Reset")
+        try:
+            sleep_for = float(wait)
+        except (TypeError, ValueError):
+            sleep_for = delay
+            delay *= 2
+        print(f"  rate-limited ({r.status_code}) on {method} {url.rsplit('/', 1)[-1]}"
+              f" — waiting {sleep_for:.0f}s")
+        time.sleep(min(sleep_for, 60.0))
+    return r
 
 
 def utcnow() -> dt.datetime:

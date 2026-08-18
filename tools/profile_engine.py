@@ -21,8 +21,8 @@ that nobody knows about is the failure this whole platform exists to prevent.
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import json
+import sys
 from collections import Counter
 from pathlib import Path
 
@@ -234,7 +234,7 @@ def service_catalog_tfvars(result: dict, policy: dict, limit: int | None = None)
     return {"services": services}
 
 
-def main() -> None:
+def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--inventory", type=Path, default=oc.GENERATED_DIR / "inventory.json")
     ap.add_argument("--out", type=Path, default=oc.GENERATED_DIR / "assignments.json")
@@ -251,7 +251,8 @@ def main() -> None:
     oc.write_json(args.out, result)
     oc.write_json(args.tfvars_out, service_catalog_tfvars(result, policy, args.catalog_limit))
     print(json.dumps(result["summary"], indent=2))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

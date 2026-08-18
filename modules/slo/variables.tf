@@ -1,9 +1,7 @@
 variable "slos" {
   description = <<-EOT
-    SLO catalog entries to CREATE (entries with an existing datadog_id are
-    adopted, not recreated — pass them in `adopted_slos` instead). Metric and
-    monitor types are supported; monitor member IDs come from the monitor
-    factory's archetype output.
+    SLO catalog entries to create. Metric and monitor types are supported;
+    monitor member IDs come from the monitor factory's monitor_ids output.
   EOT
   type = map(object({
     name        = string
@@ -39,7 +37,3 @@ variable "adopted_slos" {
   default     = {}
 }
 
-variable "managed_by" {
-  type    = string
-  default = "terraform"
-}

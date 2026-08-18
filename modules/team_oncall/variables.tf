@@ -11,7 +11,6 @@ variable "teams" {
     members                    = optional(list(string), [])
     time_zone                  = optional(string, "America/New_York")
     rotation_days              = optional(number, 7)
-    handoff_time               = optional(string, "09:00:00")
     ack_timeout_minutes        = optional(number, 10)
     escalation_timeout_minutes = optional(number, 20)
     business_hours_only        = optional(bool, false)
@@ -19,12 +18,7 @@ variable "teams" {
 }
 
 variable "schedule_effective_date" {
-  description = "Fixed anchor for rotation start (stable across plans; never use timestamp())."
+  description = "Fixed anchor for rotation start (stable across plans; never use timestamp()). The value lives in stacks/foundation/variables.tf — declared required here so there is exactly one source."
   type        = string
-  default     = "2026-09-01T09:00:00-05:00"
 }
 
-variable "managed_by" {
-  type    = string
-  default = "terraform"
-}

@@ -60,7 +60,7 @@ resource "datadog_monitor" "this" {
     "resource_type:composite",
     "monitoring_profile:${each.value.monitoring_profile}",
     "alert_band:${each.value.band}",
-    "managed_by:${var.managed_by}",
+    "managed_by:terraform",
     "slo_id:${each.value.slo_id}",
     "monitor_id:${each.key}",
     "archetype:composite",

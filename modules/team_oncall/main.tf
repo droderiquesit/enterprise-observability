@@ -6,7 +6,7 @@ resource "datadog_team" "this" {
   for_each    = var.teams
   handle      = each.key
   name        = each.value.name
-  description = "${each.value.description} (managed_by:${var.managed_by})"
+  description = "${each.value.description} (managed_by:terraform)"
 }
 
 locals {

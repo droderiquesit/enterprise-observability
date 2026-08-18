@@ -1,3 +1,10 @@
+> **ARCHIVED SNAPSHOT (2026-08-17).** This described the live org BEFORE the
+> first deployment. Its central claims — no runners, no credentials, nothing
+> deployed — were all resolved on 2026-08-18 by deploy run #24 (green end to
+> end). Kept as dated evidence; current deployment truth lives in
+> [docs/deployment.md](../deployment.md), and the remaining retirement work
+> in [docs/migration-strategy.md](../migration-strategy.md).
+
 # Live Estate Reconciliation & Deployment Readiness
 
 Snapshot taken **2026-08-17** (read-only, via the Datadog API). This is the

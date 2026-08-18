@@ -53,7 +53,7 @@ resource "datadog_monitor_notification_rule" "this" {
 
   filter {
     tags = [
-      "managed_by:${var.managed_by}",
+      "managed_by:terraform",
       "notification_profile:${each.value.profile}",
       "priority:${lower(each.value.priority)}",
       # `pages` is part of the filter because priority alone does not decide

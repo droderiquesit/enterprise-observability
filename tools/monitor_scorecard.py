@@ -43,7 +43,6 @@ WEIGHTS = {
     "paging": 10,
     "metadata": 5,
 }
-PREDICTIVE = ("anomalies(", "forecast(", "outliers(", "pct_change(")
 
 
 def grade(score: float) -> str:
@@ -94,7 +93,7 @@ def score_instance(policy: dict, inst: dict, arch: dict) -> dict:
     # --- detection -----------------------------------------------------------
     pts = 0
     behavioral = arch["signal"] in policy["global"]["detection_policy"]["behavioral_signals"]
-    predictive = any(fn in arch["query"] for fn in PREDICTIVE)
+    predictive = any(fn in arch["query"] for fn in oc.PREDICTIVE_FUNCS)
     if predictive:
         pts = 15
     elif not behavioral:
@@ -215,7 +214,7 @@ def score_custom(policy: dict, name: str, m: dict, services: dict) -> dict:
     s["ownership"] = pts
 
     query = m.get("query") or base.get("query", "")
-    predictive = any(fn in query for fn in PREDICTIVE)
+    predictive = any(fn in query for fn in oc.PREDICTIVE_FUNCS)
     if predictive:
         s["detection"] = 15
     elif m.get("justification"):

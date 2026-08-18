@@ -1,3 +1,11 @@
+> **ARCHIVED SNAPSHOT (2026-08-17).** A point-in-time audit written before
+> the first deployment; its blocker rows are resolved and its explanatory
+> sections were superseded by the maintained docs
+> ([reference-architecture](../reference-architecture.md),
+> [implementation-guide](../implementation-guide.md),
+> [deployment](../deployment.md), [decision-records](../decision-records.md)).
+> Kept as dated evidence of what was verified and found at the time.
+
 # Repository Audit — How the Platform Works, What Was Verified, and How It Deploys
 
 Audit date **2026-08-17**, on branch `claude/datadog-observability-platform-nbhn52`.

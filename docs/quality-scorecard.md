@@ -27,23 +27,21 @@ made numeric:
 **Grades:** A ≥ 90 · B ≥ 80 · C ≥ 70 · D ≥ 60 · F below.
 
 **CI gate:** fleet average ≥ 85 and zero F. Both are enforced on every pull
-request (stage 14), so quality cannot erode one merge at a time.
+request (asserted by the CI test suite), so quality cannot erode one merge at a time.
 
 ---
 
 ## Current state
 
-| | |
-|---|---|
-| Monitors scored | 422 (419 catalog instances + 3 self-service) |
-| Fleet average | **96.5 (A)** |
-| Distribution | A: 422 · B–F: 0 |
-| Below C | 0 |
-| Failing | 0 |
+The current numbers live in the generated artifact, not here: run
+`cd tools && python monitor_scorecard.py` and read
+`generated/scorecard.md`, or open the `post-deploy-evidence` artifact on the
+latest green deploy run. (This file used to hand-copy the numbers; they went
+stale the moment the catalog changed.)
 
-### Reading that number honestly
+### Reading the fleet average honestly
 
-A fleet average of 96.5 is **not** evidence that the scorecard is demanding.
+A high fleet average is **not** evidence that the scorecard is demanding.
 The catalog was authored against exactly the policy the scorecard checks, so it
 grades well by construction. The score has two real jobs, and neither is
 self-congratulation:

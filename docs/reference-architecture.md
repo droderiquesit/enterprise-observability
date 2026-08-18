@@ -20,15 +20,15 @@ The naive enterprise model is `services × environments × signals`. At the scal
 this framework targets that is 100,000 × 4 × 20 = **8,000,000 monitors** — an
 estate nobody can review, tune, cost, or trust.
 
-This framework produces **476 monitors** for the same coverage:
+This framework produces **474 monitors** for the same coverage:
 
 | Layer | Count | Grows with |
 |---|---|---|
 | Archetype packs | 419 | monitoring decisions (archetype × env × band) |
-| SLO burn-rate | 46 | number of objectives, not services |
+| SLO burn-rate | 44 | number of objectives, not services |
 | Composites | 7 | confirmed-impact patterns |
 | Self-service | 4 | genuinely unique team requirements |
-| **Total** | **476** | **never with resource count** |
+| **Total** | **474** | **never with resource count** |
 
 Adding 50,000 services adds **zero** Datadog objects. Resources are *groups*
 inside grouped multi-alert monitors, selected by tag.
@@ -180,7 +180,7 @@ notification, and **does not wake anyone**. An SLO burn-rate alert is a
 independent conditions*. A lone symptom has established neither.
 
 This one rule takes the paging estate from **96 patterns to 39**, plus 23
-burn-rate monitors and 7 composites — **69 of 476 monitors (14%)** can page.
+burn-rate monitors and 7 composites — **69 of 474 monitors (14%)** can page.
 Both numbers are asserted at plan time (`max_paging_monitors`, `max_p1_monitors`
 in `global.yaml`) so growth is a reviewed decision, never a drift.
 
@@ -214,7 +214,7 @@ never changes *what* is detected; it changes *how loud the result is*.
 | Teams | no | `<team>-nonprod` | `<team>-nonprod` | `<team>` |
 | SLO impact | no | no | **no** | yes |
 | Recovery notifications | no | yes | yes | yes |
-| Threshold tolerance | — | ×1.5 | ×1.2 | ×1.0 |
+| Threshold tolerance | — | recorded only | recorded only | ×1.0 |
 | Evaluation window | — | ×2 | ×1.5 | ×1.0 |
 | Escalation | none | none | none | full |
 | Business hours only | — | yes | no | no |
@@ -234,18 +234,13 @@ environment. This is asserted as a property test over the whole matrix.
 becomes `last_30m` in stage and QA via a lookup table. Non-production is noisier
 and less important, so it waits longer before believing a signal.
 
-**Threshold scaling is deliberately narrow.** The `sensitivity_multiplier`
-applies *only* to positive absolute thresholds on `threshold` detections. It is
-never applied to:
-
-- **anomaly / outlier** — the threshold is a *deviation count*; scaling it
-  silently changes the algorithm rather than the sensitivity
-- **forecast** — the threshold is a *saturation ratio*; scaling it moves the
-  breach point, not the tolerance
-- **negative values** — scaling `< -20` makes it *more* sensitive
-
-Getting this wrong is exactly how "make staging quieter" turns into "staging
-alerts earlier than production".
+**Thresholds are never rewritten — anywhere (ADR-014).** The
+`sensitivity_multiplier` values in `environments.yaml` are *recorded intent*,
+not applied math: scaling an anomaly threshold silently changes the algorithm
+(it is a deviation count), scaling a forecast threshold moves the breach point
+(it is a saturation ratio), and scaling a negative threshold makes it *more*
+sensitive. Non-production gets quieter through wider evaluation windows and
+priority ceilings only.
 
 **The one sanctioned exception: the release gate.** A tier0 release-gate
 archetype in stage may reach P2 and notify the release channel during an active
@@ -639,7 +634,7 @@ almost never page on their own.
 | **Domain** | 21 | tier1 and tier2 across the whole estate | A grouped SLI query covers every service in the domain |
 | **Per service** | one per tier0 service | tier0 only | A mission-critical service deserves its own error budget; an internal reporting tool does not |
 
-Total today: **23 SLOs** (21 domain + 2 tier0) → **46 burn-rate monitors**.
+Total today: **23 SLOs** (21 domain + 2 tier0) → **44 burn-rate monitors**.
 
 ### Multi-window burn rates
 
@@ -918,8 +913,8 @@ time, so a typo fails the plan instead of silently granting nothing.
      │        ↓             │                  │   profile · ALERT BAND │
      │ stacks/coverage      │                  │          ↓             │
      │   monitor_factory ───┼──► 419 packs     │ coverage_report.py     │
-     │   slo_with_burn   ───┼──► 23 SLOs       │   C1–C15 governance    │
-     │                      │    46 burn       │ monitor_scorecard.py   │
+     │   slo            ───┼──► 23 SLOs       │   C1–C15 governance    │
+     │                      │    44 burn       │ monitor_scorecard.py   │
      │   composite_monitor ─┼──► 7 composites  │   quality per team     │
      │   + 4 self-service   │                  │ generate_matrix.py     │
      └──────────┬───────────┘                  │ generate_runbooks.py   │
@@ -927,7 +922,7 @@ time, so a typo fails the plan instead of silently granting nothing.
                 ▼                              └───────────┬────────────┘
         ┌───────────────────────────────────────────────────▼──────────┐
         │  DATADOG                                                     │
-        │  476 monitors · 23 SLOs · 118 notification rules ·            │
+        │  474 monitors · 23 SLOs · 118 notification rules ·            │
         │  27 workflows · 18 dashboards · 8 teams · on-call · catalog   │
         └───────────────────────────────────────────────────────────────┘
                 │                                          ▲
@@ -943,22 +938,24 @@ time, so a typo fails the plan instead of silently granting nothing.
 
 ### The three control loops
 
-1. **Delivery (PR-driven).** Policy change → 23 CI stages → approval → apply →
+1. **Delivery (PR-driven).** Policy change → CI gate (schema, tests,
+   terraform, security, live monitor validation) → approval → apply →
    post-deploy idempotency + coverage + scorecard.
 2. **Discovery (scheduled).** Inventory rebuild → profile assignment → catalog
    convergence. New resources are covered by existing monitors *immediately*;
    the loop only updates ownership records and coverage accounting.
 3. **Governance (scheduled).** Coverage report (C1–C15) + Terraform drift +
-   runbook drift + quality scorecard. Any finding turns CI red and pages the
-   observability-platform team.
+   runbook drift + quality scorecard. The nightly governance gate blocks on
+   every finding and opens an issue; the deploy gate blocks only on
+   platform-integrity findings (see docs/deployment.md).
 
 ### The numbers
 
 | | |
 |---|---|
-| Monitors for a 100k-service estate | **476** (naive model: ~8,000,000) |
+| Monitors for a 100k-service estate | **474** (naive model: ~8,000,000) |
 | Monitors created by adding 50,000 services | **0** |
-| Monitors that can page a human | **69 (14%)** |
+| Monitors that can page a human | **67 (14%)** |
 | Instances using predictive detection | **36%** |
 | Fixed thresholds without a written rationale | **0** (CI-enforced) |
 | Monitors without runbook + SLO + automation + routing | **0** (contract-enforced) |

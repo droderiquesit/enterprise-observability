@@ -1,3 +1,10 @@
+> **ARCHIVED SNAPSHOT (2026-08-17).** Read-only validation evidence cited by
+> ADR-014/ADR-015. Counts predate the burn-alert membership fix (the estate
+> is 474 monitors / 44 burn monitors since) and the deployment itself —
+> current evidence is the post-deploy-evidence artifact on the latest green
+> deploy run. The defect classes and method described here remain accurate
+> history.
+
 # Live Validation Evidence
 
 Executed **2026-08-17** against the live Datadog organisation using

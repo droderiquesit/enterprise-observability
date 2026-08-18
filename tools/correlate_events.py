@@ -20,13 +20,11 @@ policy; this module is their reference behaviour.
 from __future__ import annotations
 
 import json
-from collections import defaultdict
 
 import obs_common as oc
+from obs_common import PRIORITY_RANK, RANK_PRIORITY
 
 RULES = None
-PRIORITY_RANK = {"P1": 1, "P2": 2, "P3": 3, "P4": 4}
-RANK_PRIORITY = {v: k for k, v in PRIORITY_RANK.items()}
 
 
 def load_rules() -> dict:
@@ -165,14 +163,15 @@ def correlate(events: list[dict], pack_service_counts: dict | None = None) -> li
 
     # --- 5. scope uplift: breadth is business impact -------------------------
     uplift = _rule(rules, "scope-uplift")
+    max_rank = PRIORITY_RANK[uplift["max_priority"]]
     for g in result:
         pack = g["parent"].get("pack")
         total = pack_service_counts.get(pack)
         if total:
             distinct = len({c.get("service") for c in g["children"] if c.get("service")}
                            | {g["parent"].get("service")})
-            if distinct / total > 0.25:
-                new_rank = max(1, PRIORITY_RANK[g["priority"]] - 1)
+            if distinct / total > uplift["threshold"]:
+                new_rank = max(max_rank, PRIORITY_RANK[g["priority"]] - 1)
                 g["priority"] = RANK_PRIORITY[new_rank]
                 g["uplifted"] = True
 

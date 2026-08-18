@@ -57,15 +57,12 @@ resource "datadog_service_level_objective" "this" {
     "team:${each.value.team}",
     "owner:${each.value.team}",
     "domain:${each.value.domain}",
-    "managed_by:${var.managed_by}",
+    "managed_by:terraform",
     "monitor_type:slo",
   ], each.value.tags)
 }
 
 locals {
-  # slo_id → Datadog SLO ID for burn-rate monitors: created ∪ adopted.
-  slo_datadog_ids = merge(
-    var.adopted_slos,
-    { for k, s in datadog_service_level_objective.this : k => s.id }
-  )
+  # slo_id → Datadog SLO ID, for burn-rate monitor queries.
+  slo_datadog_ids = { for k, s in datadog_service_level_objective.this : k => s.id }
 }

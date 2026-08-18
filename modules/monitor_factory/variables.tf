@@ -142,10 +142,6 @@ variable "cardinality" {
   })
 }
 
-variable "managed_by" {
-  type    = string
-  default = "terraform"
-}
 
 variable "api_validate" {
   description = "Validate every monitor against the Datadog monitor-validation API at plan time. Disable only for offline CI plans without credentials."
@@ -153,8 +149,3 @@ variable "api_validate" {
   default     = true
 }
 
-variable "restricted_roles" {
-  description = "Role IDs permitted to edit these monitors in-app. Normally null: Terraform is the only writer."
-  type        = list(string)
-  default     = null
-}

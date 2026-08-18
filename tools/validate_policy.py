@@ -23,12 +23,10 @@ Checks, in the order the CI pipeline reports them:
 from __future__ import annotations
 
 import datetime as dt
-import re
 import sys
 
 import obs_common as oc
 
-PREDICTIVE_FUNCS = ("anomalies(", "forecast(", "outliers(", "pct_change(")
 REQUIRED_ARCHETYPE_FIELDS = [
     "title", "signal", "impact_class", "detection", "monitor_type",
     "resource_type", "query", "thresholds", "envs", "bands",
@@ -116,10 +114,10 @@ def lint() -> list[str]:
                     "every fixed-threshold archetype must record "
                     "`rationale_fixed_threshold` — the number has to mean something")
         elif a["detection"] in ("anomaly", "seasonal_anomaly", "forecast", "outlier", "rate_of_change"):
-            if not any(fn in a["query"] for fn in PREDICTIVE_FUNCS):
+            if not any(fn in a["query"] for fn in oc.PREDICTIVE_FUNCS):
                 err("DETECTION", where,
                     f"detection={a['detection']} but the query uses no predictive function "
-                    f"({', '.join(PREDICTIVE_FUNCS)})")
+                    f"({', '.join(oc.PREDICTIVE_FUNCS)})")
         if a["detection"] == "seasonal_anomaly" and "seasonality=" not in a["query"]:
             err("DETECTION", where, "seasonal_anomaly must declare seasonality= in the query")
 

@@ -11,7 +11,6 @@ corresponding mistake is common, expensive, and invisible until an incident.
 """
 from __future__ import annotations
 
-import json
 import re
 import sys
 from pathlib import Path
@@ -20,10 +19,8 @@ import yaml
 
 import obs_common as oc
 
-SCHEMA_PATH = oc.PLATFORM_DIR / "schemas" / "monitor.schema.json"
 REQUIRED = ["name", "archetype", "service", "team", "env", "slo", "runbook", "workflow"]
 CUSTOM_REQUIRED = ["query", "monitor_type", "detection", "impact_class", "domain", "justification"]
-PREDICTIVE_FUNCS = ("anomalies(", "forecast(", "outliers(", "pct_change(")
 
 
 def validate(path: Path, policy: dict, services: dict) -> list[str]:
@@ -176,7 +173,7 @@ def validate(path: Path, policy: dict, services: dict) -> list[str]:
         errors.append(f"predictive.forecast: true but the resolved detection is {detection!r}")
 
     behavioral = any(s in str(query) for s in ("duration", "latency", "hits", "errors", "count"))
-    uses_predictive = any(fn in str(query) for fn in PREDICTIVE_FUNCS)
+    uses_predictive = any(fn in str(query) for fn in oc.PREDICTIVE_FUNCS)
     if behavioral and not uses_predictive and not m.get("justification"):
         errors.append(
             "fixed threshold on a behavioral signal requires a `justification`. This platform "
