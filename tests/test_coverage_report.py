@@ -138,3 +138,47 @@ def test_markdown_renders():
     md = cr.to_markdown(_run())
     assert "# Coverage & Compliance Report" in md
     assert "C9 Unmanaged (click-ops) monitors" in md
+
+
+# --- gate split: estate hygiene is advisory for deploy, blocking for nightly -
+
+def test_clickops_monitor_fails_governance_but_not_the_deploy_gate():
+    rogue = {"id": 999008, "name": "temporary CPU check", "type": "metric alert",
+             "query": "avg(last_5m):avg:system.cpu.user{*} > 91", "tags": [], "message": ""}
+    s = _run(MONITORS + [rogue])["summary"]
+    assert s["check_counts"]["C9"] == 1
+    assert s["deploy_blocking_counts"]["C9"] == 0
+    assert s["pass"] is False
+
+
+def test_declared_telemetry_dependency_is_advisory_for_deploy():
+    """slos.yaml really declares one (slo-infra-backup-success) — the producer
+    is deployed outside this platform, so it must not block the deploy gate."""
+    s = _run()["summary"]
+    assert s["check_counts"]["C13"] >= 1
+    assert s["deploy_blocking_counts"]["C13"] == 0
+
+
+def test_live_slo_status_error_blocks_the_deploy_gate():
+    broken = copy.deepcopy(SLOS[0]) if SLOS else {"name": "broken slo", "tags": []}
+    broken["name"] = "slo with a broken query"
+    broken["overall_status"] = [{"error": "metric not found"}]
+    s = _run(slos=SLOS + [broken])["summary"]
+    assert s["deploy_blocking_counts"]["C13"] >= 1
+    assert s["deploy_pass"] is False
+
+
+def test_managed_monitor_missing_required_tag_blocks_the_deploy_gate():
+    bad = copy.deepcopy(MONITORS[0])
+    bad.update(id=999009, name="undertagged managed monitor", query="unique-undertagged-query")
+    bad["tags"] = [t for t in bad["tags"] if not t.startswith(("service:", "dedup_key:"))]
+    s = _run(MONITORS + [bad])["summary"]
+    assert s["deploy_blocking_counts"]["C3"] >= 1
+    assert s["deploy_pass"] is False
+
+
+def test_deploy_pass_is_consistent_with_blocking_counts():
+    s = _run()["summary"]
+    assert s["deploy_pass"] == all(v == 0 for v in s["deploy_blocking_counts"].values())
+    for cid, n in s["deploy_blocking_counts"].items():
+        assert 0 <= n <= s["check_counts"][cid]

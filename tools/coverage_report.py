@@ -26,7 +26,21 @@ incident for the observability-platform team, not a warning.
   C14  paging discipline: anything paging that policy says should not
   C15  monitors with no actionable response (no impact statement / no runbook)
 
-Modes: --live (Datadog API) or --fixtures DIR. Exit code 1 on any finding.
+Modes: --live (Datadog API) or --fixtures DIR.
+
+TWO GATES read this one report (--gate, default governance):
+
+  governance   blocks on EVERY finding. The nightly loop runs this; a red run
+               opens a governance issue. Estate hygiene — unowned resources,
+               click-ops monitors, missing tags on somebody else's service —
+               is chased HERE, because here is where a human is on the hook.
+
+  deploy       blocks only on defects in what the deploy pipeline itself owns:
+               coverage of the alertable estate and the contract on the
+               Terraform-managed monitors and SLOs it just applied. A deploy
+               must not go permanently red because a resource outside the
+               platform's control is missing a tag — that would train everyone
+               to ignore the deploy gate, which is how real regressions ship.
 """
 from __future__ import annotations
 
@@ -56,6 +70,29 @@ CHECK_TITLES = {
     "C14": "Paging discipline violations",
     "C15": "Monitors with no actionable response",
 }
+
+# Checks whose findings describe the ESTATE rather than the platform: content
+# the pipeline reports on but does not own (resource tagging, click-ops
+# monitors, profile assignments, exception dates). Advisory for the deploy
+# gate, blocking for governance. Two checks carry findings of BOTH kinds and
+# are split per entry in _deploy_blocking below:
+#   C3   `monitor:*` entries are managed monitors missing required tags — a
+#        platform defect; resource entries are estate hygiene.
+#   C13  a live SLO status error is a platform defect; a declared
+#        `telemetry_dependency` is an estate note (the producer is deployed
+#        outside this platform) and must not hold the deploy red forever.
+ESTATE_CHECKS = {"C2", "C4", "C9", "C10", "C12"}
+
+
+def _deploy_blocking(cid: str, items: list) -> int:
+    """How many of a check's findings block the DEPLOY gate."""
+    if cid in ESTATE_CHECKS:
+        return 0
+    if cid == "C3":
+        return sum(1 for it in items if str(it.get("id", "")).startswith("monitor:"))
+    if cid == "C13":
+        return sum(1 for it in items if "slo_id" not in it)
+    return len(items)
 
 
 def fetch_live():
@@ -274,6 +311,7 @@ def run_checks(inventory, assignments, monitors, slos, policy) -> dict:
             checks["C13"].append({"slo": s.get("name"), "problem": status["error"]})
 
     counts = {k: len(v) for k, v in checks.items()}
+    blocking = {k: _deploy_blocking(k, v) for k, v in checks.items()}
     total = assignments["summary"]["total"]
     alertable = assignments["summary"]["alertable"]
     covered = alertable - len(checks["C1"])
@@ -289,7 +327,9 @@ def run_checks(inventory, assignments, monitors, slos, policy) -> dict:
             "monitors_managed": len(managed),
             "monitors_paging": sum(1 for t in monitor_tags.values() if t.get("pages") == "true"),
             "check_counts": counts,
+            "deploy_blocking_counts": blocking,
             "pass": all(v == 0 for v in counts.values()),
+            "deploy_pass": all(v == 0 for v in blocking.values()),
         },
         "checks": {k: v[:200] for k, v in checks.items()},
         "observe_only_sample": observe_only[:50],
@@ -307,15 +347,25 @@ def to_markdown(report: dict) -> str:
         f"({s['resources_covered']}/{s['resources_alertable']})",
         f"- Monitors: {s['monitors_total']} total, {s['monitors_managed']} Terraform-managed, "
         f"{s['monitors_paging']} able to page",
-        f"- Overall: **{'PASS' if s['pass'] else 'FAIL'}**",
+        f"- Governance gate (all checks): **{'PASS' if s['pass'] else 'FAIL'}**",
+        f"- Deploy gate (platform-integrity checks only): "
+        f"**{'PASS' if s.get('deploy_pass', s['pass']) else 'FAIL'}**",
         "",
-        "| Check | Findings |",
-        "|---|---|",
+        "| Check | Findings | Deploy gate |",
+        "|---|---|---|",
     ]
+    blocking = s.get("deploy_blocking_counts", {})
     for cid, title in CHECK_TITLES.items():
         n = s["check_counts"].get(cid, 0)
         mark = "" if n == 0 else " ⚠️"
-        lines.append(f"| {cid} {title} | {n}{mark} |")
+        b = blocking.get(cid, n)
+        if cid in ESTATE_CHECKS:
+            gate = "estate hygiene — advisory"
+        elif cid in ("C3", "C13"):
+            gate = f"split — {b} blocking"
+        else:
+            gate = "blocks"
+        lines.append(f"| {cid} {title} | {n}{mark} | {gate} |")
     lines.append("")
     for cid, items in report["checks"].items():
         if not items:
@@ -336,6 +386,9 @@ def main() -> int:
     ap.add_argument("--assignments", type=Path, default=oc.GENERATED_DIR / "assignments.json")
     ap.add_argument("--out-json", type=Path, default=oc.GENERATED_DIR / "coverage_report.json")
     ap.add_argument("--out-md", type=Path, default=oc.GENERATED_DIR / "coverage_report.md")
+    ap.add_argument("--gate", choices=["deploy", "governance"], default="governance",
+                    help="which gate decides the exit code (see module docstring); "
+                         "the report itself always contains every finding")
     args = ap.parse_args()
 
     inventory = json.loads(args.inventory.read_text())
@@ -352,7 +405,9 @@ def main() -> int:
     args.out_md.parent.mkdir(parents=True, exist_ok=True)
     args.out_md.write_text(to_markdown(report))
     print(json.dumps(report["summary"], indent=2))
-    return 0 if report["summary"]["pass"] else 1
+    ok = (report["summary"]["deploy_pass"] if args.gate == "deploy"
+          else report["summary"]["pass"])
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
