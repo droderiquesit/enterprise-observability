@@ -22,6 +22,11 @@ resource "datadog_downtime_schedule" "this" {
     timezone = each.value.timezone
   }
 
+  # The API requires the display timezone to equal the recurrence timezone
+  # ("timezone must match display_timezone" — found by the first live apply;
+  # display_timezone otherwise defaults to UTC).
+  display_timezone = each.value.timezone
+
   notify_end_states = ["alert", "warn"]
   notify_end_types  = ["canceled", "expired"]
 }

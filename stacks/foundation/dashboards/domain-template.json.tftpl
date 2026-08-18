@@ -37,7 +37,12 @@
       "definition": {
         "title": "Error budget status — ${display_name}",
         "type": "slo_list",
-        "query": { "query_string": "domain:${domain}", "limit": 25, "sort": [{ "column": "status.sli", "order": "asc" }] }
+        "requests": [
+          {
+            "request_type": "slo_list",
+            "query": { "query_string": "domain:${domain}", "limit": 25, "sort": [{ "column": "status.sli", "order": "asc" }] }
+          }
+        ]
       }
     },
     {
