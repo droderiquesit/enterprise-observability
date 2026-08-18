@@ -17,9 +17,10 @@ locals {
   # --- domain SLOs ----------------------------------------------------------
   domain_slos = {
     for id, s in local.slo_catalog : id => {
-      name        = s.name
-      type        = s.type
-      description = "Domain SLO for ${s.domain}. Owner: ${s.team}. Managed by Terraform (slo_id:${id})."
+      name = s.name
+      type = s.type
+      # Ownership/provenance suffix is appended by modules/slo_with_burn.
+      description = "Domain SLO for ${s.domain}."
       domain      = s.domain
       service     = s.service
       team        = s.team
@@ -50,7 +51,7 @@ locals {
     for name, s in local.tier0_services : "slo-svc-${name}" => {
       name        = "${name} availability (tier0)"
       type        = "metric"
-      description = "Tier0 per-service SLO. Owner: ${s.team}. Mission-critical services carry their own error budget."
+      description = "Tier0 per-service SLO. Mission-critical services carry their own error budget."
       domain      = local.service_archetype_domain[s.service_archetype]
       service     = name
       team        = s.team
