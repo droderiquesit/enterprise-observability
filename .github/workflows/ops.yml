@@ -39,6 +39,9 @@ jobs:
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
           DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
         run: |
+          # pipefail: without it, `| tee` swallows the tool's exit code and a
+          # red reconciliation reports green (it did, once).
+          set -o pipefail
           cd tools
           if [ "${{ inputs.action }}" = "reconcile-execute" ]; then
             python reconcile_org.py --execute | tee ../reconcile-report.txt

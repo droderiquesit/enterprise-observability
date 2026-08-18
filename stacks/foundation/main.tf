@@ -123,10 +123,54 @@ module "notification_rules" {
 # fully_automatic requires a bounded, reversible blast radius; anything that
 # can lose data or replay business messages requires change-board approval.
 # =============================================================================
+# The org's plan caps the number of Workflow Automation workflows (observed:
+# ~20). workflow_budget instantiates only the first N of this explicit
+# priority order — diagnostics attached to alert messages first, then
+# incident and change automation; remediation workflows (manual-approval
+# gated anyway, per the safety contract) and secondary ticket workflows
+# defer until the plan allows. 0 = no budget, instantiate everything.
+locals {
+  workflow_priority = [
+    # monitors reference these in their AUTOMATED DIAGNOSTICS message line
+    "diag-api-health", "diag-app-health", "diag-azure-resource",
+    "diag-batch-job", "diag-data-pipeline", "diag-database",
+    "diag-dependency", "diag-external-endpoint", "diag-host",
+    "diag-k8s-workload", "diag-messaging", "diag-network",
+    "diag-security-control", "diag-vmware",
+    # incident + change automation
+    "auto-major-incident", "auto-enrich-change", "auto-ticket-sustained",
+    "auto-capacity-ticket",
+    # deferred under a tight budget
+    "auto-cert-renewal-ticket", "auto-compliance-ticket", "auto-drift-ticket",
+    "auto-finops-review",
+    "remediate-clear-dlq", "remediate-recycle-app-pool", "remediate-rerun-job",
+    "remediate-restart-workload", "remediate-scale-workload",
+  ]
+
+  # Single comprehension, not `budget == 0 ? all : {...}` — a ternary between
+  # a yamldecode object and a map trips inconsistent-conditional-type errors.
+  workflow_selected_refs = slice(local.workflow_priority, 0,
+  min(var.workflow_budget, length(local.workflow_priority)))
+
+  workflows_selected = {
+    for ref, w in local.workflows : ref => w
+    if var.workflow_budget == 0 || contains(local.workflow_selected_refs, ref)
+  }
+}
+
+# Every catalog workflow must appear in the priority order, or a budget would
+# silently orphan it from selection.
+check "workflow_priority_is_complete" {
+  assert {
+    condition     = toset(local.workflow_priority) == toset(keys(local.workflows))
+    error_message = "workflow_priority must list exactly the keys of platform/policy/workflows.yaml."
+  }
+}
+
 module "workflows" {
   source = "../../modules/workflow_automation"
   workflows = {
-    for ref, w in local.workflows : ref => {
+    for ref, w in local.workflows_selected : ref => {
       name                 = w.name
       description          = "${w.class} automation attached to monitors via automation_ref:${ref}. Actions: ${join(", ", w.actions)}."
       kind                 = w.class

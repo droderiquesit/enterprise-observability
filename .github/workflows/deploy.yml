@@ -105,6 +105,8 @@ jobs:
           cd stacks/foundation
           ../../tools/tfstate-git.sh restore foundation prod
           terraform init -input=false >/dev/null
+          # workflow_budget comes from the committed budget.auto.tfvars so the
+          # idempotency gate and nightly drift agree on the same selection.
           terraform plan  -input=false -out=tfplan
           rc=0; terraform apply -input=false tfplan || rc=$?
           # Persist even on failure — see the nonprod job's comment.
