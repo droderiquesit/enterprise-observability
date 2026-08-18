@@ -12,13 +12,20 @@
 locals {
   policy_dir = "${path.module}/../../platform"
 
-  teams_db   = yamldecode(file("${local.policy_dir}/policy/teams.yaml"))
-  teams      = local.teams_db.teams
-  prio       = yamldecode(file("${local.policy_dir}/policy/priorities.yaml"))
-  notif      = yamldecode(file("${local.policy_dir}/policy/notification_profiles.yaml"))
-  workflows  = yamldecode(file("${local.policy_dir}/policy/workflows.yaml")).workflows
-  env_policy = yamldecode(file("${local.policy_dir}/policy/environments.yaml")).environments
-  domains    = yamldecode(file("${local.policy_dir}/policy/domains.yaml")).domains
+  teams_db  = yamldecode(file("${local.policy_dir}/policy/teams.yaml"))
+  teams     = local.teams_db.teams
+  prio      = yamldecode(file("${local.policy_dir}/policy/priorities.yaml"))
+  notif     = yamldecode(file("${local.policy_dir}/policy/notification_profiles.yaml"))
+  workflows = yamldecode(file("${local.policy_dir}/policy/workflows.yaml")).workflows
+  domains   = yamldecode(file("${local.policy_dir}/policy/domains.yaml")).domains
+  tiers     = yamldecode(file("${local.policy_dir}/policy/tiers.yaml")).tiers
+
+  # service_archetype → domain, straight from the service-archetype catalog
+  # (previously re-typed by hand here and in stacks/coverage).
+  service_archetype_domain = {
+    for k, v in yamldecode(file("${local.policy_dir}/policy/service_archetypes.yaml")).service_archetypes :
+    k => v.domain
+  }
 
   service_docs = {
     for f in fileset("${local.policy_dir}/services", "*.yaml") :
@@ -295,8 +302,8 @@ module "service_catalog" {
         owner_email        = local.teams[s.team].email
         description        = s.description
         tier               = s.tier
-        domain             = local.domains[try(local.archetype_domain_for[s.service_archetype], "application")].platform_tag
-        monitoring_profile = local.tier_profile[s.tier]
+        domain             = local.domains[try(local.service_archetype_domain[s.service_archetype], "application")].platform_tag
+        monitoring_profile = local.tiers[s.tier].monitoring_profile
         env                = "prod"
         links              = try(s.links, [])
       }
@@ -305,25 +312,3 @@ module "service_catalog" {
   )
 }
 
-locals {
-  tier_profile = {
-    tier0 = "critical"
-    tier1 = "critical"
-    tier2 = "standard"
-    tier3 = "observe_only"
-  }
-  archetype_domain_for = {
-    api                     = "api"
-    web                     = "application"
-    worker                  = "application"
-    event_consumer          = "messaging"
-    batch_job               = "integration"
-    scheduled_job           = "integration"
-    integration_flow        = "integration"
-    saas_dependency         = "saas"
-    external_endpoint       = "saas"
-    platform_service        = "platform"
-    datastore               = "database"
-    infrastructure_resource = "infrastructure"
-  }
-}

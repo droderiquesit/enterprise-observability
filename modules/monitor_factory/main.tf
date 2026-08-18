@@ -35,7 +35,7 @@ locals {
       "resource_type:${m.resource_type}",
       "monitoring_profile:${m.monitoring_profile}",
       "alert_band:${m.band}",
-      "managed_by:${var.managed_by}",
+      "managed_by:terraform",
       "slo_id:${m.slo_id}",
       # -- governance --
       "monitor_id:${k}",
@@ -139,7 +139,6 @@ resource "datadog_monitor" "this" {
   timeout_h            = coalesce(each.value.timeout_h, var.defaults.timeout_h)
   notify_audit         = var.defaults.notify_audit
   include_tags         = var.defaults.include_tags
-  restricted_roles     = var.restricted_roles
   validate             = var.api_validate
 
   # Storm control: evaluate per group, notify per collapse key.

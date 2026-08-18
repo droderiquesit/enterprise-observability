@@ -32,7 +32,3 @@ variable "routes" {
   }
 }
 
-variable "managed_by" {
-  type    = string
-  default = "terraform"
-}

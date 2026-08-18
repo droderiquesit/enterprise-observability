@@ -4,8 +4,9 @@ variable "datadog_api_url" {
 }
 
 variable "datadog_validate" {
-  type    = bool
-  default = true
+  description = "Set false for offline CI stages (fmt/validate/plan without credentials) so the provider skips its API credential check."
+  type        = bool
+  default     = true
 }
 
 variable "oncall_members" {

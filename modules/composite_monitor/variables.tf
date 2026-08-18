@@ -53,10 +53,6 @@ variable "max_members" {
   default     = 3
 }
 
-variable "managed_by" {
-  type    = string
-  default = "terraform"
-}
 
 variable "api_validate" {
   type    = bool

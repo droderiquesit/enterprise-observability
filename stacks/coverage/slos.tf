@@ -19,7 +19,7 @@ locals {
     for id, s in local.slo_catalog : id => {
       name = s.name
       type = s.type
-      # Ownership/provenance suffix is appended by modules/slo_with_burn.
+      # Ownership/provenance suffix is appended by modules/slo.
       description = "Domain SLO for ${s.domain}."
       domain      = s.domain
       service     = s.service
@@ -76,21 +76,6 @@ locals {
       monitor_ids = []
       tags        = ["scope:service", "tier:tier0", "service:${name}"]
     }
-  }
-
-  service_archetype_domain = {
-    api                     = "api"
-    web                     = "application"
-    worker                  = "application"
-    event_consumer          = "messaging"
-    batch_job               = "integration"
-    scheduled_job           = "integration"
-    integration_flow        = "integration"
-    saas_dependency         = "saas"
-    external_endpoint       = "saas"
-    platform_service        = "platform"
-    datastore               = "database"
-    infrastructure_resource = "infrastructure"
   }
 
   # SLOs and their burn monitors are prod-scoped objects (`burn.prod.*` — an
@@ -188,6 +173,6 @@ locals {
 }
 
 module "slos" {
-  source = "../../modules/slo_with_burn"
+  source = "../../modules/slo"
   slos   = local.all_slos
 }

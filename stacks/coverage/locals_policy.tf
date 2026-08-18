@@ -9,22 +9,29 @@ locals {
   policy_dir = "${path.module}/../../platform"
 
   # --- the configuration hierarchy, loaded verbatim -------------------------
+  # Only the files THIS stack decides from are loaded. Foundation concerns
+  # (teams, notification profiles, workflow catalog) are loaded by the
+  # foundation stack; loading them here too would just be a plan-time cost
+  # and a second place for a reader to look.
   global      = yamldecode(file("${local.policy_dir}/policy/global.yaml"))
   domains     = yamldecode(file("${local.policy_dir}/policy/domains.yaml")).domains
-  profiles_db = yamldecode(file("${local.policy_dir}/policy/profiles.yaml"))
   env_policy  = yamldecode(file("${local.policy_dir}/policy/environments.yaml")).environments
-  tiers       = yamldecode(file("${local.policy_dir}/policy/tiers.yaml")).tiers
   tier_maps   = yamldecode(file("${local.policy_dir}/policy/tiers.yaml"))
+  tiers       = local.tier_maps.tiers
   prio        = yamldecode(file("${local.policy_dir}/policy/priorities.yaml"))
-  teams       = yamldecode(file("${local.policy_dir}/policy/teams.yaml")).teams
-  notif       = yamldecode(file("${local.policy_dir}/policy/notification_profiles.yaml"))
-  slo_catalog = yamldecode(file("${local.policy_dir}/policy/slos.yaml")).slos
   slo_doc     = yamldecode(file("${local.policy_dir}/policy/slos.yaml"))
+  slo_catalog = local.slo_doc.slos
   exceptions  = yamldecode(file("${local.policy_dir}/policy/exceptions.yaml")).exceptions
   runbooks    = yamldecode(file("${local.policy_dir}/policy/runbooks.yaml"))
-  workflows   = yamldecode(file("${local.policy_dir}/policy/workflows.yaml")).workflows
-  grouping    = yamldecode(file("${local.policy_dir}/policy/grouping.yaml"))
   composites  = yamldecode(file("${local.policy_dir}/policy/composites.yaml")).composites
+
+  # service_archetype → domain, straight from the service-archetype catalog.
+  # (Previously re-typed by hand here AND in the foundation stack — a policy
+  # decision living in HCL, which this file's header forbids.)
+  service_archetype_domain = {
+    for k, v in yamldecode(file("${local.policy_dir}/policy/service_archetypes.yaml")).service_archetypes :
+    k => v.domain
+  }
 
   # --- archetype catalog: every file in policy/archetypes/ ------------------
   archetype_docs = {
@@ -77,10 +84,8 @@ locals {
   #   3. archetype exception-expired — runtime alert to the platform team
   # An expired exception therefore cannot survive a merge, let alone an apply.
   # ---------------------------------------------------------------------------
-  active_exceptions = local.exceptions
-
   priority_exceptions = {
-    for e in local.active_exceptions :
+    for e in local.exceptions :
     "${lookup(e.scope, "archetype", "*")}.${lookup(e.scope, "env", "*")}" => e.value
     if e.control == "priority"
   }

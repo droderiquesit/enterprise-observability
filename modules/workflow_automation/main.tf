@@ -14,6 +14,6 @@ resource "datadog_workflow_automation" "this" {
     "read_only:${each.value.read_only}",
     "reversible:${try(each.value.reversible, true)}",
     "rate_cap_per_hour:${try(each.value.max_actions_per_hour, 0)}",
-    "managed_by:${var.managed_by}",
+    "managed_by:terraform",
   ]
 }

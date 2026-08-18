@@ -3,6 +3,3 @@ output "slo_datadog_ids" {
   value       = local.slo_datadog_ids
 }
 
-output "created_slo_ids" {
-  value = { for k, s in datadog_service_level_objective.this : k => s.id }
-}
