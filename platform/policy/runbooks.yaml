@@ -12,7 +12,7 @@
 #            resource, so publishing is API-backed with a content hash)
 #
 # A runbook without `id` links to the repository doc until it is published;
-# the coverage report tracks unpublished runbooks as check C5b.
+# the coverage report tracks monitors without a runbook as check C5.
 # =============================================================================
 version: 2
 

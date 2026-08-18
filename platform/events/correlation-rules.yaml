@@ -71,7 +71,8 @@ rules:
       If a correlation group's children span more than 25% of the services in
       the affected pack, the parent's priority is raised one level (max P1).
       Breadth is business impact.
-    condition: "distinct_child_services / pack_service_count > 0.25"
+    condition: "distinct_child_services / pack_service_count > threshold"
+    threshold: 0.25
     behavior: raise_priority
     max_priority: P1
 

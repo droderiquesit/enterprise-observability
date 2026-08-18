@@ -21,6 +21,7 @@ import argparse
 import hashlib
 import json
 import random
+import sys
 from pathlib import Path
 
 import obs_common as oc
@@ -40,8 +41,6 @@ KINDS = [
 
 
 def fetch_live() -> list[dict]:
-    import requests
-
     headers = oc.dd_headers()
     site = oc.dd_site()
     resources: list[dict] = []
@@ -49,12 +48,12 @@ def fetch_live() -> list[dict]:
     # --- hosts ---------------------------------------------------------------
     start, page = 0, 1000
     while True:
-        r = requests.get(f"{site}/api/v1/hosts", headers=headers,
-                         params={"start": start, "count": page}, timeout=60)
+        r = oc.dd_request("GET", f"{site}/api/v1/hosts", headers=headers,
+                          params={"start": start, "count": page})
         r.raise_for_status()
         hosts = r.json().get("host_list", [])
         for h in hosts:
-            tags = _tags_to_map(sum(h.get("tags_by_source", {}).values(), []))
+            tags = oc.tags_to_map(sum(h.get("tags_by_source", {}).values(), []))
             resources.append({
                 "id": f"host:{h['name']}",
                 "kind": "host",
@@ -71,24 +70,31 @@ def fetch_live() -> list[dict]:
         start += page
 
     # --- service catalog -----------------------------------------------------
-    r = requests.get(f"{site}/api/v2/services/definitions", headers=headers,
-                     params={"page[size]": 100}, timeout=60)
-    r.raise_for_status()
-    for svc in r.json().get("data", []):
-        schema = svc.get("attributes", {}).get("schema", {})
-        name = schema.get("dd-service") or svc.get("id")
-        tags = _tags_to_map(schema.get("tags", []))
-        resources.append({
-            "id": f"service:{name}",
-            "kind": "service",
-            "name": name,
-            "env": tags.get("env", "prod"),
-            "region": tags.get("region", "global"),
-            "service": name,
-            "team": schema.get("team") or tags.get("team"),
-            "tags": tags,
-            "source": "service_catalog",
-        })
+    page_number = 0
+    while True:
+        r = oc.dd_request("GET", f"{site}/api/v2/services/definitions",
+                          headers=headers,
+                          params={"page[size]": 100, "page[number]": page_number})
+        r.raise_for_status()
+        batch = r.json().get("data", [])
+        for svc in batch:
+            schema = svc.get("attributes", {}).get("schema", {})
+            name = schema.get("dd-service") or svc.get("id")
+            tags = oc.tags_to_map(schema.get("tags", []))
+            resources.append({
+                "id": f"service:{name}",
+                "kind": "service",
+                "name": name,
+                "env": tags.get("env", "prod"),
+                "region": tags.get("region", "global"),
+                "service": name,
+                "team": schema.get("team") or tags.get("team"),
+                "tags": tags,
+                "source": "service_catalog",
+            })
+        if len(batch) < 100:
+            break
+        page_number += 1
 
     # --- additional exports (CMDB, cloud inventory, Kubernetes) --------------
     src_dir = oc.PLATFORM_DIR / "inventory-sources"
@@ -96,15 +102,6 @@ def fetch_live() -> list[dict]:
         for f in sorted(src_dir.glob("*.json")):
             resources.extend(json.loads(f.read_text()))
     return resources
-
-
-def _tags_to_map(tags: list[str]) -> dict:
-    out: dict[str, str] = {}
-    for t in tags:
-        if ":" in t:
-            k, v = t.split(":", 1)
-            out.setdefault(k, v)
-    return out
 
 
 def synthesize(n_resources: int, seed: int = 7) -> list[dict]:
@@ -153,21 +150,15 @@ def synthesize(n_resources: int, seed: int = 7) -> list[dict]:
     return resources
 
 
-def main() -> None:
+def main() -> int:
     ap = argparse.ArgumentParser()
     mode = ap.add_mutually_exclusive_group(required=True)
     mode.add_argument("--live", action="store_true")
-    mode.add_argument("--fixtures", type=Path)
     mode.add_argument("--synthetic", type=int, metavar="N")
     ap.add_argument("--out", type=Path, default=oc.GENERATED_DIR / "inventory.json")
     args = ap.parse_args()
 
-    if args.live:
-        resources = fetch_live()
-    elif args.fixtures:
-        resources = json.loads((args.fixtures / "inventory.json").read_text())["resources"]
-    else:
-        resources = synthesize(args.synthetic)
+    resources = fetch_live() if args.live else synthesize(args.synthetic)
 
     inventory = {
         "generated_at": oc.utcnow().isoformat(),
@@ -178,7 +169,8 @@ def main() -> None:
     oc.write_json(args.out, inventory)
     print(f"inventory: {inventory['resource_count']} resources, "
           f"{inventory['service_count']} services -> {args.out}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
