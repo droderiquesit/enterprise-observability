@@ -91,6 +91,36 @@ def remote_hash(notebook: dict) -> str | None:
     return None
 
 
+def dd_request(requests, method: str, url: str, *, headers: dict, attempts: int = 6,
+               **kwargs):
+    """One Datadog call with rate-limit-aware retry.
+
+    Publishing 152 notebooks back-to-back exceeds the notebooks endpoint's
+    rate limit (429 on a real run). Datadog returns the wait in Retry-After
+    (or X-RateLimit-Reset); honour it, then fall back to exponential
+    backoff. 5xx is retried the same way; everything else returns as-is for
+    the caller to inspect.
+    """
+    import time
+    delay = 2.0
+    for attempt in range(attempts):
+        r = requests.request(method, url, headers=headers, timeout=60, **kwargs)
+        if r.status_code != 429 and r.status_code < 500:
+            return r
+        if attempt == attempts - 1:
+            return r
+        wait = r.headers.get("Retry-After") or r.headers.get("X-RateLimit-Reset")
+        try:
+            sleep_for = float(wait)
+        except (TypeError, ValueError):
+            sleep_for = delay
+            delay *= 2
+        print(f"  rate-limited ({r.status_code}) on {method} {url.rsplit('/', 1)[-1]}"
+              f" — waiting {sleep_for:.0f}s")
+        time.sleep(min(sleep_for, 60.0))
+    return r
+
+
 def fetch_remote_runbooks(requests, site: str, headers: dict) -> dict[str, list[dict]]:
     """All runbook-type notebooks in the org, keyed by exact name.
 
@@ -102,9 +132,9 @@ def fetch_remote_runbooks(requests, site: str, headers: dict) -> dict[str, list[
     by_name: dict[str, list[dict]] = {}
     start, count = 0, 100
     while True:
-        r = requests.get(f"{site}/api/v1/notebooks", headers=headers, timeout=60,
-                         params={"start": start, "count": count,
-                                 "include_cells": "false", "type": "runbook"})
+        r = dd_request(requests, "GET", f"{site}/api/v1/notebooks", headers=headers,
+                       params={"start": start, "count": count,
+                               "include_cells": "false", "type": "runbook"})
         r.raise_for_status()
         page = r.json().get("data", [])
         for nb in page:
@@ -213,7 +243,8 @@ def main() -> int:
             adopted = True
 
         if nb_id:
-            r = requests.get(f"{site}/api/v1/notebooks/{nb_id}", headers=headers, timeout=60)
+            r = dd_request(requests, "GET", f"{site}/api/v1/notebooks/{nb_id}",
+                           headers=headers)
             if r.status_code == 200 and remote_hash(r.json()) == want:
                 if adopted:
                     assigned[rid] = int(nb_id)
@@ -221,16 +252,16 @@ def main() -> int:
             drift.append(name)
             if args.check:
                 continue
-            requests.put(f"{site}/api/v1/notebooks/{nb_id}", headers=headers,
-                         data=json.dumps(payload), timeout=60).raise_for_status()
+            dd_request(requests, "PUT", f"{site}/api/v1/notebooks/{nb_id}",
+                       headers=headers, data=json.dumps(payload)).raise_for_status()
             assigned[rid] = int(nb_id)
             print(f"{'adopted' if adopted else 'updated'}: {name} (#{nb_id})")
         else:
             drift.append(name)
             if args.check:
                 continue
-            r = requests.post(f"{site}/api/v1/notebooks", headers=headers,
-                              data=json.dumps(payload), timeout=60)
+            r = dd_request(requests, "POST", f"{site}/api/v1/notebooks",
+                           headers=headers, data=json.dumps(payload))
             r.raise_for_status()
             assigned[rid] = int(r.json()["data"]["id"])
             print(f"created: {name} (#{assigned[rid]})")
