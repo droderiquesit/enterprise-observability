@@ -86,6 +86,8 @@ make coverage         # coverage & compliance report against the live org
 | — | Decision records | [decision-records.md](docs/decision-records.md) |
 | — | Operating model | [operating-model.md](docs/operating-model.md) |
 | — | **Live validation evidence** | [live-validation-evidence.md](docs/live-validation-evidence.md) |
+| — | **Live estate reconciliation & deployment readiness** | [live-estate-reconciliation.md](docs/live-estate-reconciliation.md) |
+| — | **Repository audit — how it works, what was verified, how it deploys** | [repository-audit.md](docs/repository-audit.md) |
 
 ---
 

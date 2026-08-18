@@ -81,12 +81,26 @@ locals {
     infrastructure_resource = "infrastructure"
   }
 
-  all_slos = merge(local.domain_slos, local.tier0_slos)
+  # SLOs and their burn monitors are prod-scoped objects (`burn.prod.*` — an
+  # error budget is only measured against production). Under per-environment
+  # state files (ADR-016) exactly one environment's apply must own them, or a
+  # qa apply and a prod apply would each create their own copy. That owner is
+  # the prod apply. (Filtered comprehension, not a ternary: `cond ? map : {}`
+  # trips inconsistent-conditional-type unification on object maps.)
+  manages_prod = contains(var.environments, "prod")
+  all_slos     = { for k, v in merge(local.domain_slos, local.tier0_slos) : k => v if local.manages_prod }
 
   # --- burn-rate monitor instances -----------------------------------------
   # One monitor per (SLO × window). Windows come from global.yaml and are
   # selected per SLO, which is how tier0 gets fast burn and tier2 does not.
-  burn_source = merge(
+  #
+  # The manages_prod restriction is applied HERE, on the iteration source —
+  # not on the built result. The monitor bodies below interpolate
+  # module.slos.slo_datadog_ids[slo_id], and in a non-prod apply that map is
+  # empty: indexing it errors even for entries a later filter would discard,
+  # because HCL builds the whole source collection before any filter runs.
+  # An empty source means the bodies are never evaluated at all.
+  burn_source = { for k, v in merge(
     { for id, s in local.slo_catalog : id => {
       name      = s.name, service = s.service, team = s.team, domain = s.domain,
       timeframe = s.timeframe, windows = try(s.burn_alerts, [])
@@ -95,7 +109,7 @@ locals {
       name      = s.name, service = s.service, team = s.team, domain = s.domain,
       timeframe = s.timeframe, windows = local.slo_doc.tier0_slo_template.burn_alerts
     } },
-  )
+  ) : k => v if local.manages_prod }
 
   burn_instances = merge([
     for slo_id, s in local.burn_source : {

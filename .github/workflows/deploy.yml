@@ -2,12 +2,18 @@ name: deploy
 # =============================================================================
 # CONTROLLED PROMOTION — the SAME definitions move through every environment.
 #
-#   qa → stage → prod
+#   dev (0 monitors, by policy) → qa → stage → prod
 #
 # Nothing is copied between environments. Promotion narrows the `environments`
-# variable; platform/policy/environments.yaml decides how loud each one is.
+# variable to exactly one environment per apply, each with ITS OWN state file,
+# so promoting one environment can never rewrite another's resources.
 # Production requires a manual approval on the `datadog-production` GitHub
-# environment and holds a concurrency lock so two applies can never overlap.
+# environment.
+#
+# STATE (ADR-016): git-backed on the orphan branch `tfstate` of this repo,
+# moved in/out by tools/tfstate-git.sh. The `concurrency: tfstate` group —
+# shared with governance.yml — is the lock: no two state-touching runs
+# overlap anywhere in the repository.
 # =============================================================================
 on:
   workflow_dispatch:
@@ -22,9 +28,9 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write   # push state commits to the tfstate branch
 
-concurrency: deploy-datadog
+concurrency: tfstate
 
 env:
   TF_VERSION: "1.9.8"
@@ -33,44 +39,61 @@ env:
 jobs:
   # ---------------------------------------------------------------------------
   nonprod:
-    name: "promote → qa + stage"
+    name: "promote → qa, then stage"
     runs-on: ubuntu-latest
     environment: datadog-nonprod
-    if: github.event_name == 'push' || inputs.target == 'nonprod'
+    # Runs on every push to main and on both dispatch targets — a production
+    # promotion re-applies qa and stage first, preserving promotion order.
+    if: github.event_name == 'push' || inputs.target == 'nonprod' || inputs.target == 'production'
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: hashicorp/setup-terraform@v3
         with: { terraform_version: "1.9.8" }
-      - name: Inject the remote backend
-        run: cp stacks/backend.azurerm.tf.example stacks/coverage/backend.tf
-      - name: Plan & apply — non-production only
+
+      - name: Plan & apply, one environment at a time — qa first, stage only if qa applied
         env:
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
           DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
         run: |
+          git config user.name  "observability-deploy[bot]"
+          git config user.email "observability-deploy@users.noreply.github.com"
           cd stacks/coverage
-          terraform init -input=false -backend-config=../backend.prod.hcl
-          terraform plan  -input=false -var 'environments=["qa","stage"]' -out=tfplan
-          terraform apply -input=false tfplan
+          terraform init -input=false >/dev/null
+          # State is persisted even when apply FAILS: a partial apply has
+          # already created real resources, and losing the state that tracks
+          # them with the runner turns a red apply into an orphan fleet.
+          for env in qa stage; do
+            ../../tools/tfstate-git.sh restore coverage "$env"
+            terraform plan  -input=false -var "environments=[\"$env\"]" -out=tfplan
+            rc=0; terraform apply -input=false tfplan || rc=$?
+            [ -f terraform.tfstate ] && ../../tools/tfstate-git.sh persist coverage "$env"
+            [ "$rc" -ne 0 ] && exit "$rc"
+          done
+          exit 0
 
   # ---------------------------------------------------------------------------
   production:
     name: "promote → prod"
     runs-on: ubuntu-latest
     needs: [nonprod]
+    # Production NEVER deploys from a bare push — only an explicit
+    # workflow_dispatch with target=production. The datadog-production
+    # environment adds a reviewer gate wherever one is configured.
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'production'
     environment: datadog-production      # approval gate + scoped secrets
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: hashicorp/setup-terraform@v3
         with: { terraform_version: "1.9.8" }
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
       - run: pip install -r tools/requirements.txt
-
-      - name: Inject the remote backend
+      - name: Configure state-branch committer
         run: |
-          cp stacks/backend.azurerm.tf.example stacks/foundation/backend.tf
-          cp stacks/backend.azurerm.tf.example stacks/coverage/backend.tf
+          git config user.name  "observability-deploy[bot]"
+          git config user.email "observability-deploy@users.noreply.github.com"
 
       # Foundation first: an alert that fires into a routing void is worse than
       # no alert, because it creates the appearance of coverage.
@@ -80,9 +103,13 @@ jobs:
           DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
         run: |
           cd stacks/foundation
-          terraform init -input=false -backend-config=../backend.prod.hcl
+          ../../tools/tfstate-git.sh restore foundation prod
+          terraform init -input=false >/dev/null
           terraform plan  -input=false -out=tfplan
-          terraform apply -input=false tfplan
+          rc=0; terraform apply -input=false tfplan || rc=$?
+          # Persist even on failure — see the nonprod job's comment.
+          [ -f terraform.tfstate ] && ../../tools/tfstate-git.sh persist foundation prod
+          exit "$rc"
 
       - name: "2 · Runbooks — publish (API-backed, hash-drift aware; ADR-006)"
         env:
@@ -96,9 +123,13 @@ jobs:
           DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
         run: |
           cd stacks/coverage
-          terraform init -input=false -backend-config=../backend.prod.hcl
-          terraform plan  -input=false -out=tfplan
-          terraform apply -input=false tfplan
+          ../../tools/tfstate-git.sh restore coverage prod
+          terraform init -input=false >/dev/null
+          terraform plan  -input=false -var 'environments=["prod"]' -out=tfplan
+          rc=0; terraform apply -input=false tfplan || rc=$?
+          # Persist even on failure — see the nonprod job's comment.
+          [ -f terraform.tfstate ] && ../../tools/tfstate-git.sh persist coverage prod
+          exit "$rc"
 
       # ---- post-deployment validation ----------------------------------------
       - name: "4 · Idempotency — a second plan must be empty"
@@ -107,7 +138,7 @@ jobs:
           DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
         run: |
           cd stacks/foundation && terraform plan -input=false -detailed-exitcode
-          cd ../coverage      && terraform plan -input=false -detailed-exitcode
+          cd ../coverage && terraform plan -input=false -var 'environments=["prod"]' -detailed-exitcode
 
       - name: "5 · Coverage & compliance report against the live org"
         env:

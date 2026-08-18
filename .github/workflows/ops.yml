@@ -1,0 +1,53 @@
+name: ops
+# =============================================================================
+# OPERATOR ACTIONS that need the Datadog credentials CI holds.
+#
+# reconcile: tools/reconcile_org.py — retires the two generations of
+# state-untracked platform objects (2026-08-07 experiment + the 2026-08-17
+# partial foundation apply) so a clean apply can proceed. Dry-run by default;
+# `execute` deletes. Scoped by exact identity — see the tool's docstring.
+# =============================================================================
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Operator action"
+        required: true
+        default: reconcile-dry-run
+        type: choice
+        options: [reconcile-dry-run, reconcile-execute]
+
+permissions:
+  contents: read
+
+concurrency: tfstate   # never reconcile while an apply is in flight
+
+jobs:
+  reconcile:
+    name: "org reconciliation (${{ inputs.action }})"
+    runs-on: ubuntu-latest
+    environment: datadog-plan
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r tools/requirements.txt
+      - name: Compile check
+        run: python -m py_compile tools/reconcile_org.py
+      - name: Run reconciliation
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        run: |
+          cd tools
+          if [ "${{ inputs.action }}" = "reconcile-execute" ]; then
+            python reconcile_org.py --execute | tee ../reconcile-report.txt
+          else
+            python reconcile_org.py | tee ../reconcile-report.txt
+          fi
+          cat ../reconcile-report.txt >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reconcile-report-${{ github.run_id }}
+          path: reconcile-report.txt
