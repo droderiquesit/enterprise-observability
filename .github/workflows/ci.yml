@@ -139,7 +139,11 @@ jobs:
     name: security scan
     runs-on: ubuntu-latest
     steps:
+      # Full history: gitleaks scans the PR's commit RANGE and cannot resolve
+      # it from a shallow clone (this was latent for months — the old tfsec
+      # step crashed first, so gitleaks never actually ran).
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       # Trivy is tfsec's maintained successor — tfsec is frozen and its parser
       # rejects Terraform `check` blocks, which this repo uses.
       - name: "IaC misconfiguration scan"
