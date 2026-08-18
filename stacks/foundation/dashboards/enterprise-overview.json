@@ -3,7 +3,7 @@
   "description": "Managed by Terraform (stacks/foundation). SLO health, error-budget risk, active incidents, coverage and ownership gaps.",
   "layout_type": "ordered",
   "reflow_type": "auto",
-  "tags": ["managed_by:terraform", "team:observability-platform"],
+  "tags": ["team:observability-platform"],
   "widgets": [
     {
       "definition": {

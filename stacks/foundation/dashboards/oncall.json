@@ -3,7 +3,7 @@
   "description": "Managed by Terraform (stacks/foundation). Everything a responder needs during a page: active alerts, correlated events, recent changes, workflow runs.",
   "layout_type": "ordered",
   "reflow_type": "auto",
-  "tags": ["managed_by:terraform", "team:observability-platform"],
+  "tags": ["team:observability-platform"],
   "template_variables": [
     { "name": "team", "prefix": "team", "default": "*" }
   ],
