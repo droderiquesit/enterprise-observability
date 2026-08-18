@@ -34,6 +34,18 @@ jobs:
       - run: pip install -r tools/requirements.txt
       - name: Compile check
         run: python -m py_compile tools/reconcile_org.py
+      # Reconciliation matches objects by identity and cannot tell an orphan
+      # from a state-tracked resource. Once foundation state exists, its
+      # resources are Terraform's to manage — deleting them here just forces
+      # a recreate on the next apply (and once did exactly that).
+      - name: Refuse to execute over tracked foundation state
+        if: inputs.action == 'reconcile-execute'
+        run: |
+          git fetch origin tfstate 2>/dev/null || exit 0
+          if git cat-file -e origin/tfstate:foundation/prod.tfstate 2>/dev/null; then
+            echo "::error::foundation/prod.tfstate exists on the tfstate branch — its resources are Terraform-managed. Reconciliation execute is for pre-state cleanup only."
+            exit 1
+          fi
       - name: Run reconciliation
         env:
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
