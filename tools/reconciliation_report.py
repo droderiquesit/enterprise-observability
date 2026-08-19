@@ -61,10 +61,17 @@ def build(monitors: list[dict], policy: dict) -> list[dict]:
         msg = m.get("message", "")
         pages = t.get("pages") == "true"
         team = t.get("team", "")
+        # Datadog's "automatically resolve from a triggered state after N
+        # hours". Its default is 0 — never — and a monitor stuck in `Alert`
+        # does not fire again for the next occurrence, so this column is a
+        # paging-integrity column, not a hygiene one.
+        timeout_h = (m.get("options") or {}).get("timeout_h")
 
         problems = []
         if not notebook:
             problems.append("no runbook attached")
+        if not timeout_h:
+            problems.append("no auto-resolve")
         if "http://" in msg or "https://" in msg:
             problems.append("URL in message")
         if not t.get("slo_id"):
@@ -90,6 +97,7 @@ def build(monitors: list[dict], policy: dict) -> list[dict]:
             "runbook": entry.get("title", rb_id),
             "notebook_id": notebook or "—",
             "attachment": "ATTACHED" if notebook else "MISSING",
+            "auto_resolve": f"{timeout_h}h" if timeout_h else "NONE",
             "slo": t.get("slo_id", ""),
             "workflow": t.get("automation_ref", ""),
             "status": "PASS" if not problems else "FAIL: " + "; ".join(problems),
@@ -112,6 +120,8 @@ def to_markdown(rows: list[dict]) -> str:
         f"- Runbook URLs embedded in an alert body: "
         f"**{sum(1 for r in rows if 'URL in message' in r['status'])}**",
         f"- Paging monitors (each with a team escalation policy): **{paging}**",
+        f"- With an auto-resolve condition (`timeout_h`): "
+        f"**{sum(1 for r in rows if r['auto_resolve'] != 'NONE')}/{len(rows)}**",
         f"- Final validation: **{ok}/{len(rows)} PASS**",
         "",
         "> `ID` is the live Datadog monitor id when generated with `--live` (the",
@@ -120,14 +130,15 @@ def to_markdown(rows: list[dict]) -> str:
         "> it is applied.",
         "",
         "| Monitor | ID | Service / env | Owner | Sev | Route | Escalation policy "
-        "| Runbook | Notebook ID | Attach | SLO | Workflow | Status |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| Runbook | Notebook ID | Attach | Auto-resolve | SLO | Workflow | Status |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in rows:
         out.append(
             f"| {r['name']} | {r['id']} | {r['service']} / {r['env']} | {r['owner']} "
             f"| {r['priority']} | {r['route']} | {r['escalation_policy']} "
-            f"| {r['runbook']} | {r['notebook_id']} | {r['attachment']} | {r['slo']} "
+            f"| {r['runbook']} | {r['notebook_id']} | {r['attachment']} "
+            f"| {r['auto_resolve']} | {r['slo']} "
             f"| {r['workflow']} | {r['status']} |")
     out.append("")
     return "\n".join(out)
@@ -174,6 +185,7 @@ def main() -> int:
         "unattached": sum(1 for r in rows if r["attachment"] == "MISSING"),
         "urls_in_messages": sum(1 for r in rows if "URL in message" in r["status"]),
         "paging": sum(1 for r in rows if r["pages"]),
+        "no_auto_resolve": sum(1 for r in rows if r["auto_resolve"] == "NONE"),
         "pass": len(rows) - len(failing),
         "fail": len(failing),
     }, indent=2))

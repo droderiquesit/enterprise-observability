@@ -161,7 +161,14 @@ locals {
         no_data_timeframe   = null
         renotify_interval   = 30
         require_full_window = null
-        timeout_h           = null
+
+        # AUTO-RESOLVE by priority. A burn-rate query reports for as long as the
+        # SLO has any traffic, so this window only ever closes a burn alert on
+        # an objective that has gone completely silent — which is a different
+        # alert's job (telemetry_health), not this one's to hold open forever.
+        timeout_h = local.auto_resolve.by_priority[
+          local.prio.matrix[local.burn_windows[w].impact_class]["critical"]
+        ]
 
         compliance       = false
         compliance_scope = "sox"

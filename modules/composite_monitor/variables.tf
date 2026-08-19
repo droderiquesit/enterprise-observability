@@ -37,7 +37,11 @@ variable "composites" {
     next_action          = string
 
     renotify_interval = optional(number, 60)
-    extra_tags        = optional(list(string), [])
+    # Auto-resolve window in hours. Optional in the type, mandatory in
+    # behaviour: the module falls back to the org default and the precondition
+    # below refuses a composite that would never resolve.
+    timeout_h  = optional(number)
+    extra_tags = optional(list(string), [])
   }))
 
   validation {
@@ -71,11 +75,13 @@ variable "defaults" {
     monitor factory does.
   EOT
   type = object({
-    renotify_statuses    = list(string)
-    renotify_occurrences = number
-    require_full_window  = bool
-    notify_audit         = bool
-    include_tags         = bool
-    timeout_h            = number
+    renotify_statuses      = list(string)
+    renotify_occurrences   = number
+    require_full_window    = bool
+    notify_audit           = bool
+    include_tags           = bool
+    timeout_h              = number
+    auto_resolve_min_hours = number
+    auto_resolve_max_hours = number
   })
 }

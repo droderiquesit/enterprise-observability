@@ -26,6 +26,7 @@ incident for the observability-platform team, not a warning.
   C14  paging discipline: anything paging that policy says should not
   C15  monitors with no actionable response (no impact statement / no runbook)
   C16  monitors with no NATIVE runbook attachment (Datadog notebook asset)
+  C17  monitors with no auto-resolve window (Datadog `timeout_h`)
 
 Modes: --live (Datadog API) or --fixtures DIR.
 
@@ -71,6 +72,7 @@ CHECK_TITLES = {
     "C14": "Paging discipline violations",
     "C15": "Monitors with no actionable response",
     "C16": "Monitors without a native runbook attachment",
+    "C17": "Monitors without an auto-resolve condition",
 }
 
 # Checks whose findings describe the ESTATE rather than the platform: content
@@ -202,7 +204,7 @@ def _covering_archetypes(policy: dict, service_archetype: str) -> set[str]:
 
 def run_checks(inventory, assignments, monitors, slos, policy) -> dict:
     g = policy["global"]
-    checks: dict[str, list] = {f"C{i}": [] for i in range(1, 17)}
+    checks: dict[str, list] = {f"C{i}": [] for i in range(1, 18)}
 
     monitor_tags = {m["id"]: oc.tags_to_map(m.get("tags")) for m in monitors}
     managed = {mid for mid, t in monitor_tags.items() if t.get("managed_by") == "terraform"}
@@ -362,6 +364,34 @@ def run_checks(inventory, assignments, monitors, slos, policy) -> dict:
                 "runbook": t.get("runbook", "(none)"),
                 "problem": "no Datadog notebook attached — the runbook is named but not "
                            "reachable from the monitor",
+            })
+
+        # C17 — every monitor resolves itself.
+        #
+        # `timeout_h` is Datadog's "automatically resolve from a triggered state
+        # after N hours", and its default is 0: never. A monitor left in the
+        # triggered state does not notify again for the NEXT occurrence of the
+        # same condition on the same group, so a single stale alert — a batch
+        # job whose group disappeared, a host that was decommissioned — quietly
+        # disables that monitor. The failure is invisible from the monitor list,
+        # which is why it is checked rather than trusted.
+        #
+        # Bounds come from policy so the check cannot drift from the plan-time
+        # precondition in modules/monitor_factory.
+        auto_resolve = g["monitor_defaults"]["auto_resolve"]
+        timeout_h = (m.get("options") or {}).get("timeout_h")
+        if not timeout_h:
+            checks["C17"].append({
+                "name": name,
+                "problem": "no auto-resolve window (timeout_h is 0 or unset) — the monitor "
+                           "stays triggered until a human clears it, and suppresses its own "
+                           "next alert while it does",
+            })
+        elif not (auto_resolve["min_hours"] <= timeout_h <= auto_resolve["max_hours"]):
+            checks["C17"].append({
+                "name": name,
+                "problem": f"auto-resolve window {timeout_h}h is outside the policy range "
+                           f"{auto_resolve['min_hours']}-{auto_resolve['max_hours']}h",
             })
 
         # A runbook URL in the alert body is a regression, not a fallback.

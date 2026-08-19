@@ -271,3 +271,32 @@ by their owner, raising the budget deploys the rest in priority order — no
 other change needed. Until then, monitors that reference not-yet-deployed
 workflows page correctly; only the automated enrichment is pending.
 
+
+## ADR-018 — Every monitor carries an auto-resolve window
+
+Datadog's `timeout_h` defaults to `0`, meaning a triggered monitor stays
+triggered until a human clears it. The platform inherited that default, and it
+is a silent paging defect rather than a cosmetic one: while a group sits in the
+triggered state Datadog does not notify again for the **next** occurrence of the
+same condition on that group. One stale alert — a batch run whose group
+disappeared, a host that was decommissioned, a deployment event that will never
+recur — quietly disables that monitor's page while the monitor list still shows
+it as healthy and configured.
+
+Auto-resolve is therefore mandatory and policy-derived, not per-archetype
+discretion. `platform/policy/global.yaml → monitor_defaults.auto_resolve`
+resolves a window for every monitor in the order archetype override → signal →
+detection → priority, and higher priorities resolve *sooner*, because a stuck P1
+is the one suppressing the page that matters.
+
+The window is a resolution mechanism, not a silencer: `timeout_h` only applies
+when a monitor stops reporting data while triggered, so a condition that is
+still true keeps alerting, and one whose signal recovers resolves normally
+through its recovery threshold. Missing telemetry stays a separate contract
+(`notify_no_data` / `no_data_timeframe`), which is why the `telemetry_health`
+signal is deliberately not shortened.
+
+Both monitor modules refuse to **plan** a monitor whose window falls outside the
+policy range, and coverage check C17 grades the deployed estate the same way, so
+the guarantee cannot be lost either by a Terraform change or by an out-of-band
+edit in the UI.

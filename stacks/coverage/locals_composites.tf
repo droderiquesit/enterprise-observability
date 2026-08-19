@@ -117,7 +117,17 @@ locals {
       next_action          = "Treat as a confirmed incident. The member alerts are the evidence trail; the runbook's remediation section applies directly."
 
       renotify_interval = 30
-      extra_tags        = try(cc.c.release_gate, false) ? ["release_gate:true"] : []
+
+      # AUTO-RESOLVE. A composite is only as resolvable as its members: if one
+      # member's group stops reporting while triggered, the composite stays
+      # triggered too. It therefore needs its own window rather than the
+      # org-wide scalar it used to inherit.
+      timeout_h = local.auto_resolve.by_priority[local.rank_priority[max(
+        local.priority_rank[local.prio.matrix[cc.c.impact_class][cc.band]],
+        local.priority_rank[local.env_policy[cc.env].priority_ceiling]
+      )]]
+
+      extra_tags = try(cc.c.release_gate, false) ? ["release_gate:true"] : []
     }
   }
 }

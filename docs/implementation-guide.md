@@ -60,8 +60,42 @@ Service registration schema: [`platform/schemas/service.schema.json`](../platfor
 | Message body (all 11 required answers) | message contract |
 | Recovery, warning and no-data sections | message contract |
 | Evaluation delay, new-group delay, renotify | monitor defaults × tier |
+| Auto-resolve window (`timeout_h`) | `auto_resolve` policy: signal → detection → priority |
 | `correlation_key`, `dedup_key` | failure domain + service + env |
-| Runbook deep link | runbook registry |
+| Native runbook attachment (`assets`) | runbook registry → published notebook id |
+
+### Every monitor resolves itself
+
+Datadog's default for `timeout_h` is `0` — *never auto-resolve*. That is not a
+neutral default. A monitor sitting in the triggered state does not notify again
+for the **next** occurrence of the same condition on the same group, so one
+stale alert on a batch run that finished or a host that was decommissioned
+silently disables that monitor's page, while the monitor list still shows it as
+configured.
+
+Every managed monitor therefore carries an auto-resolve window, resolved from
+`platform/policy/global.yaml → monitor_defaults.auto_resolve`, first match wins:
+
+| Order | Source | Example |
+|---|---|---|
+| 1 | the archetype's own `auto_resolve_hours` | an explicit, reviewed exception |
+| 2 | `by_signal` | `job_failure: 4` — a failed run is over; its group may never report again |
+| 3 | `by_detection` | `event: 2` — event monitors match an instant and then stick |
+| 4 | `by_priority` | `P1: 12 · P2: 24 · P3: 48 · P4: 72` |
+
+Higher priority resolves *sooner*, which reads backwards until you remember what
+the setting does: a stuck P1 is the one suppressing the page that matters. An
+outage that outlives the window is carried by the incident record and by the
+monitor re-triggering the moment data returns.
+
+`timeout_h` only applies when a monitor **stops reporting data** while
+triggered. It cannot silence a condition that is still true, and absent
+telemetry is a separate contract (`notify_no_data` / `no_data_timeframe`) —
+which is why the `telemetry_health` signal is deliberately not shortened.
+
+Enforced twice: `modules/monitor_factory` and `modules/composite_monitor` refuse
+to **plan** a monitor whose window is outside the policy range, and coverage
+check **C17** grades the live estate the same way.
 
 ### `thresholds: auto` and the one thing it cannot do
 
@@ -264,7 +298,7 @@ tag parsing, the rate-limit-aware `dd_request`) live in `obs_common.py`.
 | `validate_live.py` | submits every planned monitor to Datadog's validation API concurrently, grouped by cause |
 | `build_inventory.py` | authoritative inventory (live, or synthetic at 1.2M for scale tests) |
 | `profile_engine.py` | owner, tier, profile, **alert band** — zero-touch onboarding |
-| `coverage_report.py` | C1–C15 governance checks; `--gate governance` (nightly, blocks on everything) or `--gate deploy` (blocks on platform-integrity findings only — estate hygiene stays reported, chased by the nightly loop) |
+| `coverage_report.py` | C1–C17 governance checks; `--gate governance` (nightly, blocks on everything) or `--gate deploy` (blocks on platform-integrity findings only — estate hygiene stays reported, chased by the nightly loop) |
 | `monitor_scorecard.py` | quality score per monitor, team and domain |
 | `generate_matrix.py` | the coverage matrix (generated, CI-checked for staleness) |
 | `generate_runbooks.py` | 151 runbook drafts from the catalog, human sections preserved |
@@ -289,6 +323,8 @@ tag parsing, the rate-limit-aware `dd_request`) live in `obs_common.py`.
 | Hardcoded routes | *impossible* — the schema has no field for one | | |
 | Wildcard queries | SCOPE | precondition | — |
 | No actionable response | scorecard | precondition | C15 |
+| Runbook named but not attached | REFERENCE | `assets` block rendered from the registry | C16 |
+| Monitor that never auto-resolves | policy lint | precondition | C17 |
 | Expired exceptions | EXCEPTION | — | C12 + runtime archetype |
 | Unmanaged (click-ops) monitors | — | — | C9 + runtime archetype |
 

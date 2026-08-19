@@ -11,7 +11,11 @@ never again go stale without a documented refresh path:
     python tools/refresh_fixtures.py plan.json
 
 The fixture keeps only the fields the checks read (id, name, type, query,
-message, tags), with stable sequential ids in address order.
+message, tags, options), with stable sequential ids in address order.
+
+`options` is rendered in the shape the Datadog API returns rather than the flat
+shape a plan uses, because the checks that read it run against both sources and
+must not care which one they got.
 """
 from __future__ import annotations
 
@@ -37,6 +41,9 @@ def monitors_from_plan(plan: dict) -> list[dict]:
             "query": a.get("query"),          # null for burn monitors pre-apply
             "message": a.get("message") or "",
             "tags": a.get("tags") or [],
+            # Auto-resolve. Flat on the plan, nested under `options` on the
+            # API — C17 reads the API shape.
+            "options": {"timeout_h": a.get("timeout_h")},
         })
     return [{"id": i + 1, **row} for i, row in enumerate(rows)]
 

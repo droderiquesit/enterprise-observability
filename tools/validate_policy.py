@@ -100,6 +100,20 @@ def lint() -> list[str]:
                 err("CARDINALITY", where,
                     f"group_by declares {key!r} but the query does not group by it")
 
+        # AUTO-RESOLVE — an archetype may choose its own window, but only
+        # inside the policy range. Anything outside it is rejected by the
+        # monitor factory's precondition at plan time; catching it here means
+        # the author sees why in the pull request instead of in a failed apply.
+        ar = g["monitor_defaults"]["auto_resolve"]
+        if "auto_resolve_hours" in a:
+            h = a["auto_resolve_hours"]
+            if not isinstance(h, int) or isinstance(h, bool) or \
+                    not (ar["min_hours"] <= h <= ar["max_hours"]):
+                err("SCHEMA", where,
+                    f"auto_resolve_hours {h!r} must be a whole number of hours between "
+                    f"{ar['min_hours']} and {ar['max_hours']}. 0 means the monitor never "
+                    "resolves itself, which suppresses its own next alert")
+
         # DETECTION — predictive-first
         behavioral = a["signal"] in g["detection_policy"]["behavioral_signals"]
         absolute_ok = a["signal"] in g["detection_policy"]["absolute_threshold_allowed_signals"]

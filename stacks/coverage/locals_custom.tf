@@ -162,7 +162,16 @@ locals {
       no_data_timeframe   = null
       renotify_interval   = local.tiers[r.tier].renotify_interval_minutes > 0 ? local.tiers[r.tier].renotify_interval_minutes : null
       require_full_window = null
-      timeout_h           = null
+
+      # AUTO-RESOLVE. A self-service request may name its own window — a team
+      # knows its own batch cadence — but it cannot opt OUT: with no value in
+      # the request the monitor still lands on the signal/priority default, and
+      # the factory rejects zero.
+      timeout_h = coalesce(
+        try(r.m.auto_resolve_hours, null),
+        try(local.auto_resolve.by_signal[try(local.custom_base[k].signal, "custom")], null),
+        local.auto_resolve.by_priority[local.custom_priority[k]],
+      )
 
       compliance       = false
       compliance_scope = "sox"

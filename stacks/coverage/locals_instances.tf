@@ -229,7 +229,15 @@ locals {
       no_data_timeframe   = try(r.a.no_data_timeframe, null)
       renotify_interval   = local.tiers[r.tier].renotify_interval_minutes > 0 ? local.tiers[r.tier].renotify_interval_minutes : null
       require_full_window = null
-      timeout_h           = null
+
+      # AUTO-RESOLVE — mandatory, never Datadog's "never". Precedence is
+      # documented in locals_policy.tf → auto_resolve.
+      timeout_h = coalesce(
+        try(r.a.auto_resolve_hours, null),
+        try(local.auto_resolve.by_signal[r.a.signal], null),
+        try(local.auto_resolve.by_detection[r.a.detection], null),
+        local.auto_resolve.by_priority[r.priority],
+      )
 
       compliance       = try(r.a.compliance, false)
       compliance_scope = "sox"

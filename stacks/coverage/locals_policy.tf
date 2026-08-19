@@ -127,6 +127,26 @@ locals {
   rank_priority = { 1 = "P1", 2 = "P2", 3 = "P3", 4 = "P4" }
 
   # ---------------------------------------------------------------------------
+  # AUTO-RESOLVE RESOLUTION  (platform/policy/global.yaml → monitor_defaults.auto_resolve)
+  #
+  # Every monitor this stack builds carries an auto-resolve window; none of them
+  # inherits Datadog's "never resolves" default. The value is chosen from policy
+  # in this order, first match wins:
+  #
+  #   1. the archetype's own `auto_resolve_hours`  (an explicit, reviewed choice)
+  #   2. by_signal      — what the monitor watches: a batch run that ended, a
+  #                       deployment that happened, a security event that fired
+  #   3. by_detection   — how it watches: event and service-check monitors are
+  #                       the ones that stick in a triggered state
+  #   4. by_priority    — the floor every remaining monitor lands on
+  #
+  # The maps live in YAML precisely so this file stays an interpreter: the four
+  # expressions below appear once per instance builder (archetypes, custom,
+  # burn, composite) and read the same policy each time.
+  # ---------------------------------------------------------------------------
+  auto_resolve = local.global.monitor_defaults.auto_resolve
+
+  # ---------------------------------------------------------------------------
   # NOTIFICATION PROFILE RESOLUTION (first match wins, per notification_profiles.yaml)
   # ---------------------------------------------------------------------------
   # Implemented as a function-shaped local consumed by locals_instances.tf.

@@ -24,7 +24,11 @@ locals {
     require_full_window  = local.global.monitor_defaults.require_full_window
     notify_audit         = local.global.monitor_defaults.notify_audit
     include_tags         = local.global.monitor_defaults.include_tags
-    timeout_h            = local.global.monitor_defaults.timeout_h
+    # Auto-resolve: the org-wide floor plus the bounds the factory enforces.
+    # Per-monitor windows are resolved in locals_policy.tf → auto_resolve.
+    timeout_h              = local.global.monitor_defaults.timeout_h
+    auto_resolve_min_hours = local.auto_resolve.min_hours
+    auto_resolve_max_hours = local.auto_resolve.max_hours
   }
 
   cardinality_guardrails = {
@@ -69,12 +73,14 @@ module "composites" {
   composites  = local.composite_instances
   max_members = local.composites_budget.max_members_per_composite
   defaults = {
-    renotify_statuses    = local.monitor_defaults.renotify_statuses
-    renotify_occurrences = local.monitor_defaults.renotify_occurrences
-    require_full_window  = local.monitor_defaults.require_full_window
-    notify_audit         = local.monitor_defaults.notify_audit
-    include_tags         = local.monitor_defaults.include_tags
-    timeout_h            = local.monitor_defaults.timeout_h
+    renotify_statuses      = local.monitor_defaults.renotify_statuses
+    renotify_occurrences   = local.monitor_defaults.renotify_occurrences
+    require_full_window    = local.monitor_defaults.require_full_window
+    notify_audit           = local.monitor_defaults.notify_audit
+    include_tags           = local.monitor_defaults.include_tags
+    timeout_h              = local.monitor_defaults.timeout_h
+    auto_resolve_min_hours = local.monitor_defaults.auto_resolve_min_hours
+    auto_resolve_max_hours = local.monitor_defaults.auto_resolve_max_hours
   }
   api_validate = var.datadog_validate
 }
