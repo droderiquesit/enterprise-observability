@@ -25,6 +25,7 @@ incident for the observability-platform team, not a warning.
   C13  SLO integrity — missing SLOs and silent telemetry
   C14  paging discipline: anything paging that policy says should not
   C15  monitors with no actionable response (no impact statement / no runbook)
+  C16  monitors with no NATIVE runbook attachment (Datadog notebook asset)
 
 Modes: --live (Datadog API) or --fixtures DIR.
 
@@ -69,6 +70,7 @@ CHECK_TITLES = {
     "C13": "SLO integrity / silent telemetry",
     "C14": "Paging discipline violations",
     "C15": "Monitors with no actionable response",
+    "C16": "Monitors without a native runbook attachment",
 }
 
 # Checks whose findings describe the ESTATE rather than the platform: content
@@ -141,7 +143,7 @@ def _covering_archetypes(policy: dict, service_archetype: str) -> set[str]:
 
 def run_checks(inventory, assignments, monitors, slos, policy) -> dict:
     g = policy["global"]
-    checks: dict[str, list] = {f"C{i}": [] for i in range(1, 16)}
+    checks: dict[str, list] = {f"C{i}": [] for i in range(1, 17)}
 
     monitor_tags = {m["id"]: oc.tags_to_map(m.get("tags")) for m in monitors}
     managed = {mid for mid, t in monitor_tags.items() if t.get("managed_by") == "terraform"}
@@ -286,6 +288,30 @@ def run_checks(inventory, assignments, monitors, slos, policy) -> dict:
         msg = m.get("message", "")
         if "**DO THIS NEXT:**" not in msg and "RUNBOOK" not in msg.upper():
             checks["C15"].append({"name": name, "problem": "message states no next action or runbook"})
+
+        # C16 — the runbook is ATTACHED, not merely named.
+        #
+        # Read from the `runbook_notebook` tag rather than re-fetching every
+        # monitor with `with_assets=true`: the factory writes the tag from the
+        # same registry value it builds the asset from, so the tag is the
+        # cheap, list-visible proof that the attachment was rendered. A monitor
+        # that names a runbook it never attached is the exact failure this
+        # check exists to catch — it looks covered and is not.
+        if not t.get("runbook_notebook"):
+            checks["C16"].append({
+                "name": name,
+                "runbook": t.get("runbook", "(none)"),
+                "problem": "no Datadog notebook attached — the runbook is named but not "
+                           "reachable from the monitor",
+            })
+
+        # A runbook URL in the alert body is a regression, not a fallback.
+        if "http://" in msg or "https://" in msg:
+            checks["C16"].append({
+                "name": name,
+                "problem": "alert body contains a URL; runbooks must be attached as a "
+                           "monitor asset, never linked from the message",
+            })
 
     # C12 — expired exceptions
     today = dt.date.today()

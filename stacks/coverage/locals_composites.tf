@@ -107,12 +107,14 @@ locals {
       notification_profile = contains(local.nonprod_envs, cc.env) ? "nonprod_standard" : "production_critical"
       failure_domain       = cc.c.failure_domain
 
-      slo_id      = cc.c.slo_id
-      runbook     = cc.c.runbook
-      runbook_url = "${local.runbooks.docs_base_url}/${try(local.runbooks.runbooks[cc.c.runbook].source, "${cc.c.runbook}.md")}"
-      workflow    = cc.c.workflow
-      impact      = "Confirmed impact: every member condition is true simultaneously, which is the evidence threshold this platform requires before paging on a symptom."
-      next_action = "Treat as a confirmed incident. The member alerts are the evidence trail; the runbook's remediation section applies directly."
+      slo_id               = cc.c.slo_id
+      runbook              = cc.c.runbook
+      runbook_notebook_id  = try(local.runbook_notebook_id[cc.c.runbook], "")
+      runbook_notebook_url = try(local.runbook_notebook_url[cc.c.runbook], "")
+      runbook_title        = try(local.runbook_title[cc.c.runbook], cc.c.runbook)
+      workflow             = cc.c.workflow
+      impact               = "Confirmed impact: every member condition is true simultaneously, which is the evidence threshold this platform requires before paging on a symptom."
+      next_action          = "Treat as a confirmed incident. The member alerts are the evidence trail; the runbook's remediation section applies directly."
 
       renotify_interval = 30
       extra_tags        = try(cc.c.release_gate, false) ? ["release_gate:true"] : []

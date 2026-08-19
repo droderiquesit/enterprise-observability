@@ -198,11 +198,13 @@ locals {
       notification_profile = local.notification_profile_for[k]
       failure_domain       = r.a.failure_domain
 
-      slo_id      = r.a.slo_id
-      slo_url     = ""
-      runbook     = r.a.runbook
-      runbook_url = "${local.runbooks.docs_base_url}/${try(local.runbooks.runbooks[r.a.runbook].source, "${r.a.runbook}.md")}"
-      workflow    = r.a.workflow
+      slo_id               = r.a.slo_id
+      slo_url              = ""
+      runbook              = r.a.runbook
+      runbook_notebook_id  = try(local.runbook_notebook_id[r.a.runbook], "")
+      runbook_notebook_url = try(local.runbook_notebook_url[r.a.runbook], "")
+      runbook_title        = try(local.runbook_title[r.a.runbook], r.a.runbook)
+      workflow             = r.a.workflow
 
       summary = try(r.a.notes, "${r.a.title}: ${r.a.signal} signal detected by ${r.a.detection} analysis.")
       impact = (

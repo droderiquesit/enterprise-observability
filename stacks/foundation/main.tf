@@ -42,17 +42,40 @@ module "teams" {
     for handle, t in local.teams : handle => {
       name        = t.name
       description = "Owns ${length(t.domains_owned) > 0 ? join(", ", t.domains_owned) : "no domains directly"}. Escalates to ${t.escalation_to}."
-      members     = lookup(var.oncall_members, handle, [])
-      time_zone   = t.business_hours_timezone
+      # Rosters come from the IdP/SCIM sync and are frequently empty at
+      # bootstrap. That is fine: the module builds the full on-call structure
+      # regardless and holds an UNASSIGNED schedule position until people
+      # exist. Nobody is ever invented to fill a rotation.
+      members           = lookup(var.oncall_members, handle, [])
+      secondary_members = lookup(var.oncall_secondary_members, handle, [])
+      time_zone         = t.business_hours_timezone
       # Ack/escalation timeouts come from the PRIORITY model, not per team —
-      # a P1 has the same urgency contract everywhere in the enterprise.
+      # a P1 has the same urgency contract everywhere in the enterprise. These
+      # stay at P1 values because they describe the PAGING path, and the only
+      # things that page are P1 and confirmed-impact P2 (priorities.yaml
+      # paging_rule). P2's own 10/20 ack contract is enforced by the
+      # routing-rule urgency split inside the module (high vs low urgency), not
+      # by a second escalation policy per priority.
       ack_timeout_minutes        = local.prio.priorities.P1.ack_minutes
       escalation_timeout_minutes = local.prio.priorities.P1.escalate_minutes
       rotation_days              = var.rotation_days
-      business_hours_only        = false
+      # Read the team's own policy when teams.yaml declares one; otherwise
+      # 24x7. No team declares `business_hours_only` today, so every rotation
+      # is round-the-clock — but a team that adds the key gets the restriction
+      # without a code change here.
+      business_hours_only = try(t.business_hours_only, false)
     }
   }
   schedule_effective_date = var.schedule_effective_date
+  create_schedules        = var.create_oncall_schedules
+
+  # Escalation step 4 is the incident commander / platform leadership team.
+  # teams.yaml names `platform-leadership` and `security-leadership` as
+  # escalation targets, but neither exists as a Datadog Team yet, so there is
+  # no ID to point at. Empty string = the module falls back to the owning team
+  # for step 4; wire the real ID here the moment a leadership team handle is
+  # provisioned.
+  leadership_team_id = ""
 }
 
 # =============================================================================
@@ -88,11 +111,35 @@ locals {
 
   routing_rows = {
     for v in local.routing_variants : "${v.profile}.${v.prio}.${v.pages}" => {
-      profile               = v.profile
-      priority              = v.prio
-      pages                 = v.pages
-      teams                 = v.teams
-      page                  = v.pages
+      profile  = v.profile
+      priority = v.prio
+      pages    = v.pages
+      teams    = v.teams
+      page     = v.pages
+      # ONE non-production channel, deliberately — not a QA/stage split.
+      #
+      # A routing row is keyed (profile × priority × pages) and the notification
+      # rule it produces filters on exactly those tags plus `team`. There is no
+      # `env` tag in that filter, and there is no environment on the row: the
+      # `nonprod_standard` profile is selected for `env in [qa, stage]`
+      # (notification_profiles.yaml), so ONE rule already covers both. Deriving
+      # "-qa" vs "-stage" here is not possible — the row genuinely does not know
+      # which environment fired.
+      #
+      # environments.yaml does carry `teams_channel_suffix: -qa | -stage | ""`,
+      # so a real per-environment split IS expressible, but it means adding an
+      # environment dimension to routing_variants, adding `env:<e>` to the
+      # notification-rule filter tags, and doubling the non-prod rule count.
+      # That is a restructure of the routing matrix, not a suffix fix, and it is
+      # deliberately not done here.
+      #
+      # It is also the right answer operationally: QA and stage are both
+      # ticket-only, business-hours, non-paging, priority-ceiling P3
+      # environments with the same audience. Splitting them buys two quieter
+      # channels nobody watches instead of one that gets read. What mattered was
+      # keeping non-prod OUT of the production channels, and the suffix (now
+      # applied to both the normal and the low-noise arm — see
+      # modules/notification_rules/main.tf) does exactly that.
       channel_suffix        = startswith(v.profile, "nonprod") ? "-nonprod" : ""
       use_low_noise_channel = contains(["low_noise_channel", "security_low_noise"], try(v.route.teams, ""))
       cc_owner_team         = try(v.route.cc_owner_team, false)
@@ -230,48 +277,95 @@ module "downtimes" {
 }
 
 # =============================================================================
-# RBAC — four roles plus one scoped security role (see ADR-009)
+# RBAC — EXACTLY FOUR ROLES (ADR-009)
+#
 # Permissions are resolved by NAME against the live permission catalog at plan
 # time, so a typo fails the plan instead of silently granting nothing.
+#
+# THE FOUR-ROLE MODEL
+#
+#   platform-admin          runs Datadog itself: org settings, keys, RBAC,
+#                           integrations, On-Call administration.
+#   observability-engineer  builds and owns detection: monitors, SLOs,
+#                           notebooks/runbooks, dashboards, workflows.
+#   incident-responder      works incidents: investigate, acknowledge, mute,
+#                           resolve, run approved workflows. Absorbs what used
+#                           to be a separate security-engineer role.
+#   viewer-auditor          reads everything, changes nothing.
+#
+# WHY THERE ARE NO PER-TEAM, PER-SERVICE OR PER-ENVIRONMENT ROLES
+#
+# A role answers "what KIND of action may this person take?". It is the wrong
+# instrument for "on WHICH objects?" — that is scope, and scope in Datadog comes
+# from three other mechanisms this platform already uses:
+#
+#   * Datadog Teams          (modules/team_oncall) — membership, ownership and
+#                            the on-call rotation.
+#   * ownership tags         `team:<handle>` on every monitor, SLO, dashboard
+#                            and service, emitted by modules/monitor_factory.
+#   * datadog_restriction_policy — the actual per-object write fence, applied
+#                            to a resource and referencing a Team.
+#
+# Encoding scope in roles instead multiplies them: 8 teams × 4 environments ×
+# 2 access levels is 64 roles that all say "monitors_write" and drift apart the
+# moment one is edited by hand. It also breaks the moment somebody is on two
+# teams, which is the normal case for SRE. Four verbs plus tag-driven scope
+# stays correct as the estate grows; a role matrix does not.
+#
+# The removed roles and where their duties went:
+#   engineering-user   → incident-responder (identical intent, honest name)
+#   security-engineer  → incident-responder holds the signal/rule permissions;
+#                        the SECURITY SCOPE was never enforced by that role
+#                        anyway — it comes from team:security ownership and the
+#                        security_operational routing profile.
 # =============================================================================
 module "rbac" {
   source = "../../modules/rbac"
   count  = var.manage_rbac ? 1 : 0
 
   roles = {
-    datadog-platform-admin = {
-      name = "Datadog Platform Admin"
+    # Full Datadog, RBAC, integration and On-Call administration.
+    platform-admin = {
+      name = "Platform Admin"
       permissions = [
         "org_management", "api_keys_write", "user_access_manage",
         "monitors_write", "monitors_downtime", "slos_write",
         "dashboards_write", "notebooks_write", "workflows_write",
-        "monitor_config_policy_write",
+        "monitor_config_policy_write", "incident_settings_write",
+        "security_monitoring_rules_write",
       ]
     }
+
+    # Manage monitors, SLOs, runbooks (notebooks), dashboards, workflows and
+    # notification rules. No org, key or user administration.
     observability-engineer = {
       name = "Observability Engineer"
       permissions = [
         "monitors_write", "monitors_downtime", "slos_write", "slos_corrections",
         "dashboards_write", "notebooks_write", "workflows_write",
-        "incident_settings_write",
+        "monitor_config_policy_write",
       ]
     }
-    engineering-user = {
-      name = "Engineering User"
+
+    # Investigate, acknowledge, resolve, and execute already-approved
+    # workflows. Cannot author new detection.
+    incident-responder = {
+      name = "Incident Responder"
       permissions = [
-        "monitors_downtime", "incident_write", "workflows_run", "notebooks_write",
+        "monitors_downtime", "incident_write", "incident_settings_write",
+        "workflows_run", "notebooks_write",
+        "security_monitoring_signals_write",
       ]
     }
-    observability-read-only = {
-      name        = "Observability Read Only"
+
+    # Read-only. The permission list is INTENTIONALLY EMPTY: Datadog grants
+    # baseline read access to every role in the org, so a role with no
+    # permissions is exactly "can see everything, can change nothing". Adding
+    # a "*_read" permission here would not widen anything — it would only
+    # imply, falsely, that read had to be granted.
+    viewer-auditor = {
+      name        = "Viewer / Auditor"
       permissions = []
-    }
-    security-engineer = {
-      name = "Security Engineer (scoped)"
-      permissions = [
-        "security_monitoring_rules_write", "security_monitoring_signals_write",
-        "incident_write", "workflows_run",
-      ]
     }
   }
 
@@ -284,7 +378,7 @@ module "rbac" {
     svc-observability-coverage = {
       email = "svc-observability-coverage@acme.example"
       name  = "Coverage reporting (read-only)"
-      roles = ["observability-read-only"]
+      roles = ["viewer-auditor"]
     }
   }
 }
@@ -293,6 +387,46 @@ module "rbac" {
 # SERVICE CATALOG — ownership inside Datadog, generated from the registry and
 # from inventory discovery. Never hand-edited in the UI.
 # =============================================================================
+# -----------------------------------------------------------------------------
+# SERVICE-LEVEL RUNBOOK RELATIONSHIPS
+#
+# The monitor→runbook binding is the monitor's native `assets` field (see
+# modules/monitor_factory). This is the complementary SERVICE→runbook
+# relationship: Datadog's service-definition schema has a first-class
+# `type: runbook` link, so the catalog entry for a service points at the same
+# published notebooks a responder would reach from any of its monitors.
+#
+# Both point at the notebook, never at a repository file. Scope is the
+# archetype packs the service's archetype actually deploys, so a service links
+# to the runbooks that can actually fire for it and nothing else.
+# -----------------------------------------------------------------------------
+locals {
+  service_archetypes_doc = yamldecode(file("${local.policy_dir}/policy/service_archetypes.yaml"))
+  runbook_registry       = yamldecode(file("${local.policy_dir}/policy/runbooks.yaml"))
+
+  # service_archetype → the runbook ids reachable through its packs.
+  runbooks_for_archetype = {
+    for sa, v in local.service_archetypes_doc.service_archetypes : sa => distinct(flatten([
+      for pack in v.packs : [
+        for arch in try(local.service_archetypes_doc.packs[pack].archetypes, []) : arch
+      ]
+    ]))
+  }
+
+  service_runbook_links = {
+    for name, s in local.service_docs : name => [
+      for rid in try(local.runbooks_for_archetype[s.service_archetype], []) : {
+        name = "Runbook: ${local.runbook_registry.runbooks[rid].title}"
+        type = "runbook"
+        url  = "${local.runbook_registry.notebook_base_url}/${local.runbook_registry.runbooks[rid].id}"
+      }
+      # Only published runbooks: an entry without an id has no notebook to
+      # point at, and a catalog link to nothing is worse than no link.
+      if try(local.runbook_registry.runbooks[rid].id, null) != null
+    ]
+  }
+}
+
 module "service_catalog" {
   source = "../../modules/service_catalog"
   services = merge(
@@ -305,7 +439,7 @@ module "service_catalog" {
         domain             = local.domains[try(local.service_archetype_domain[s.service_archetype], "application")].platform_tag
         monitoring_profile = local.tiers[s.tier].monitoring_profile
         env                = "prod"
-        links              = try(s.links, [])
+        links              = concat(try(s.links, []), local.service_runbook_links[name])
       }
     },
     var.services,

@@ -21,10 +21,19 @@ locals {
         priority = row.priority
         pages    = row.pages
         team     = tkey
-        recipients = compact(concat(
+        recipients = distinct(compact(concat(
           # Team channel — low-noise for P4, env-suffixed for non-production.
+          #
+          # BUG FIXED: row.channel_suffix used to be applied ONLY to the
+          # non-low-noise arm of this ternary. A non-production P4 routes to the
+          # low-noise channel, so it landed in the UNSUFFIXED PRODUCTION
+          # low-noise channel — QA and stage informational alerts leaking into
+          # the production signal stream, where they are indistinguishable from
+          # real production hygiene findings. The suffix is a property of the
+          # ENVIRONMENT, not of which of the two channels was picked, so it
+          # applies to both arms.
           [row.use_low_noise_channel
-            ? "@teams-${team.low_noise_channel}"
+            ? "@teams-${team.low_noise_channel}${row.channel_suffix}"
           : "@teams-${team.channel}${row.channel_suffix}"],
           # ServiceNow incident or task.
           row.servicenow_handle != "" ? [row.servicenow_handle] : [],
@@ -34,8 +43,22 @@ locals {
           row.extra_channels,
           # Security profiles notify the owning team for CONTEXT, never as the
           # primary responder — the responder is the security rotation.
+          #
+          # BUG FIXED (partially — see below): `team` here is the team the rule
+          # is being generated FOR, and security_operational applies only to
+          # `security`, so this resolved to the security team's own channel and
+          # listed it twice. `distinct()` now collapses that duplicate.
+          #
+          # LIMITATION, stated plainly: this does not implement a real
+          # owner-cc. A true cc-the-owner needs the OWNING team of the firing
+          # resource, and the routing row shape (profile × priority × pages)
+          # carries no owner — the owner is only knowable per monitor, from the
+          # monitor's own `team:` tag, which the security override has already
+          # rewritten to `security`. Delivering it means adding an owner
+          # dimension to the routing rows and a second filter tag, which is a
+          # restructure of the routing matrix, not a fix here.
           row.cc_owner_team ? ["@teams-${team.channel}"] : [],
-        ))
+        )))
       }
     }
   ]...)

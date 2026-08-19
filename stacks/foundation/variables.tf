@@ -20,6 +20,34 @@ variable "oncall_members" {
   default     = {}
 }
 
+variable "oncall_secondary_members" {
+  description = <<-EOT
+    team handle → Datadog user IDs for the SECONDARY on-call rotation (the
+    backstop paged at escalation step 2, ten minutes after an unacknowledged
+    primary page). Same contract as oncall_members: fed from the IdP/SCIM sync,
+    never hand-edited, never committed. An empty map is a valid steady state —
+    the secondary schedule is still created and holds an unassigned position,
+    so the escalation ladder is complete and reviewable before rosters exist.
+  EOT
+  type        = map(list(string))
+  default     = {}
+}
+
+variable "create_oncall_schedules" {
+  description = <<-EOT
+    Create the primary/secondary On-Call schedules. Leave true.
+
+    Escape hatch for one specific risk: Datadog requires every schedule layer
+    to carry at least one member slot, and an empty roster is expressed as a
+    single UNASSIGNED position (`users = [null]`). If the org rejects
+    unassigned positions, set this false — teams, escalation policies and
+    routing rules are still created in full and every escalation step targets
+    the team instead of a schedule, so paging keeps working.
+  EOT
+  type        = bool
+  default     = true
+}
+
 variable "rotation_days" {
   description = "Length of the primary on-call rotation in days."
   type        = number

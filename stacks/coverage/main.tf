@@ -65,9 +65,17 @@ module "burn_monitors" {
 
 # --- 3. Composites (depend on member monitor IDs) ----------------------------
 module "composites" {
-  source       = "../../modules/composite_monitor"
-  composites   = local.composite_instances
-  max_members  = local.composites_budget.max_members_per_composite
+  source      = "../../modules/composite_monitor"
+  composites  = local.composite_instances
+  max_members = local.composites_budget.max_members_per_composite
+  defaults = {
+    renotify_statuses    = local.monitor_defaults.renotify_statuses
+    renotify_occurrences = local.monitor_defaults.renotify_occurrences
+    require_full_window  = local.monitor_defaults.require_full_window
+    notify_audit         = local.monitor_defaults.notify_audit
+    include_tags         = local.monitor_defaults.include_tags
+    timeout_h            = local.monitor_defaults.timeout_h
+  }
   api_validate = var.datadog_validate
 }
 
