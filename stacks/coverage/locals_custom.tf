@@ -145,11 +145,13 @@ locals {
       )
       failure_domain = try(local.custom_base[k].failure_domain, r.m.service)
 
-      slo_id      = r.m.slo
-      slo_url     = ""
-      runbook     = r.m.runbook
-      runbook_url = "${local.runbooks.docs_base_url}/${try(local.runbooks.runbooks[r.m.runbook].source, "${r.m.runbook}.md")}"
-      workflow    = r.m.workflow
+      slo_id               = r.m.slo
+      slo_url              = ""
+      runbook              = r.m.runbook
+      runbook_notebook_id  = try(local.runbook_notebook_id[r.m.runbook], "")
+      runbook_notebook_url = try(local.runbook_notebook_url[r.m.runbook], "")
+      runbook_title        = try(local.runbook_title[r.m.runbook], r.m.runbook)
+      workflow             = r.m.workflow
 
       summary     = try(r.m.summary, "${r.m.name}: custom monitor requested by ${r.m.team}.")
       impact      = try(r.m.impact, "Service-specific impact declared by the owning team; see the runbook.")

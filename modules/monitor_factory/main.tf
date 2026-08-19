@@ -44,6 +44,11 @@ locals {
       "detection:${m.detection}",
       "signal:${m.signal}",
       "runbook:${m.runbook}",
+      # The published notebook this monitor's runbook asset points at. Carried
+      # as a tag as well as an asset so coverage reporting can prove the
+      # attachment from a monitor list call, without a per-monitor
+      # `with_assets` fetch across the whole estate.
+      "runbook_notebook:${m.runbook_notebook_id}",
       "automation_ref:${m.workflow}",
       "notification_profile:${m.notification_profile}",
       "failure_domain:${m.failure_domain}",
@@ -63,9 +68,21 @@ locals {
 
   # ---------------------------------------------------------------------------
   # THE MESSAGE CONTRACT
-  # Every alert answers all eleven questions from the monitor message standard.
-  # No destination is ever written here — routing is tag-based, resolved by
-  # datadog_monitor_notification_rule. No individual is ever @-mentioned.
+  #
+  # The message carries the ALERT CONDITION, its IMPACT, its OWNERSHIP and the
+  # NOTIFICATION CONTEXT — and nothing else. Procedure lives in the runbook,
+  # which is a Datadog notebook attached to this monitor through the native
+  # `assets` field below.
+  #
+  # No runbook text and no runbook URL is written here, deliberately. A URL in
+  # an alert body is unversioned, unattributed, invisible to the API, and
+  # (when it points at a repository) unreadable to a responder who is inside
+  # Datadog at 3am. The asset attachment is the supported mechanism and it is
+  # machine-readable, so coverage can PROVE every monitor has a runbook rather
+  # than grepping alert text for an http:// string.
+  #
+  # No destination is ever written here either — routing is tag-based, resolved
+  # by datadog_monitor_notification_rule. No individual is ever @-mentioned.
   # ---------------------------------------------------------------------------
   monitor_message = {
     for k, m in var.instances : k => <<-EOT
@@ -77,19 +94,18 @@ locals {
       **BUSINESS IMPACT:** ${m.impact}
       **WHY IT TRIGGERED:** ${m.why}
       **OWNER:** ${m.team} · support ${m.support_model} · ${m.pages ? "this pages the on-call rotation" : "this does not page"}
-      **DO THIS NEXT:** ${m.next_action}
-      **RUNBOOK:** ${m.runbook_url}
+      **RUNBOOK:** attached to this monitor as `${m.runbook_title != "" ? m.runbook_title : m.runbook}` — open it from the monitor's Runbook asset.
       **AUTOMATED DIAGNOSTICS:** workflow `${m.workflow}` has run; its output is attached to this event.
       **RELATED EVENTS:** correlated on `${m.failure_domain}.${m.env}.${m.service}` — deployments, infrastructure changes and platform events from the last 30 minutes are attached as context.
-      **SLO / ERROR BUDGET:** `${m.slo_id}`${m.slo_url != "" ? " — ${m.slo_url}" : ""}${m.slo_impacting ? " · this condition consumes error budget" : " · no error-budget impact (non-production)"}
+      **SLO / ERROR BUDGET:** `${m.slo_id}`${m.slo_impacting ? " · this condition consumes error budget" : " · no error-budget impact (non-production)"}
       {{/is_alert}}
       {{#is_warning}}
       ## ${m.title} — warning
-      Approaching the alert condition on {{value}}. Investigate before it becomes ${m.priority}. Runbook: ${m.runbook_url}
+      Approaching the alert condition on {{value}}. Investigate before it becomes ${m.priority}.
       {{/is_warning}}
       {{#is_no_data}}
       ## ${m.title} — NO DATA
-      Telemetry stopped arriving for {{value}}. Treat this as a telemetry-health incident: an unmonitored resource is worse than an alerting one. Runbook: ${m.runbook_url}
+      Telemetry stopped arriving for {{value}}. Treat this as a telemetry-health incident: an unmonitored resource is worse than an alerting one.
       {{/is_no_data}}
       {{#is_recovery}}
       ## Recovered · ${m.title}
@@ -115,6 +131,30 @@ resource "datadog_monitor" "this" {
   message  = local.monitor_message[each.key]
   priority = local.priority_number[each.value.priority]
   tags     = local.monitor_tags[each.key]
+
+  # ---------------------------------------------------------------------------
+  # NATIVE RUNBOOK ATTACHMENT
+  #
+  # `assets` is Datadog's supported monitor field for tying a monitor to the
+  # resource a responder should open. `category = "runbook"` and
+  # `resource_type = "notebook"` are the only values the API accepts, and
+  # `resource_key` is a genuine object reference to the notebook id — not a
+  # link glued into the alert body.
+  #
+  # Emitted only when the notebook has been published (id is non-empty): an
+  # asset that points at nothing is worse than no asset, because it looks like
+  # coverage. The `runbook_attached` coverage check reports any monitor that
+  # reaches production without one.
+  dynamic "assets" {
+    for_each = each.value.runbook_notebook_id != "" ? [1] : []
+    content {
+      category      = "runbook"
+      resource_type = "notebook"
+      resource_key  = each.value.runbook_notebook_id
+      name          = each.value.runbook_title != "" ? each.value.runbook_title : each.value.runbook
+      url           = each.value.runbook_notebook_url
+    }
+  }
 
   monitor_thresholds {
     critical          = lookup(each.value.thresholds, "critical", null)

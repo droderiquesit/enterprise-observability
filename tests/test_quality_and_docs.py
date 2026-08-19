@@ -107,5 +107,43 @@ def test_editing_a_runbook_changes_its_hash():
 
 
 def test_incomplete_runbook_is_rejected():
-    assert len(pr.validate_template("# Runbook: X\n## Meaning\nonly one section")) == \
+    one = pr.REQUIRED_SECTIONS[0]
+    assert len(pr.validate_template(f"# Runbook: X\n## {one}\nonly one section")) == \
         len(pr.REQUIRED_SECTIONS) - 1
+
+
+# --- the runbook is an ATTACHABLE Datadog object, not a document reference ----
+
+def test_no_runbook_contains_a_placeholder():
+    """A runbook attached to a monitor promises a responder will find
+    instructions. A stub keeps the promise's shape and drops its content."""
+    for path in sorted(generate_runbooks.RUNBOOK_DIR.glob("*.md")):
+        assert pr.unfinished_sections(path.read_text()) == 0, (
+            f"{path.name} still contains a placeholder marker")
+
+
+def test_every_runbook_carries_every_required_section():
+    for path in sorted(generate_runbooks.RUNBOOK_DIR.glob("*.md")):
+        assert pr.validate_template(path.read_text()) == [], path.name
+
+
+def test_runbooks_are_not_repository_links():
+    """No runbook may point a responder back at the repository: the published
+    notebook is the artifact, and a GitHub blob is unreachable from Datadog."""
+    doc = POLICY["runbooks_doc"]
+    assert "docs_base_url" not in doc, (
+        "docs_base_url resurrects repository links as runbooks")
+    assert doc["notebook_base_url"].startswith("https://app.datadoghq.com"), doc
+
+
+def test_registry_ids_are_numeric_notebook_references():
+    for rid, r in POLICY["runbooks"].items():
+        if r.get("id") is not None:
+            assert str(r["id"]).isdigit(), f"{rid}: id must be a notebook id, got {r['id']!r}"
+
+
+def test_review_date_is_deterministic():
+    """A runbook that rewrites itself daily cannot be staleness-checked."""
+    first = generate_runbooks.review_date(POLICY, "quarterly")
+    assert first == generate_runbooks.review_date(POLICY, "quarterly")
+    assert len(first) == 10 and first[4] == "-"

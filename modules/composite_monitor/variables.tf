@@ -26,12 +26,15 @@ variable "composites" {
     notification_profile = string
     failure_domain       = string
 
-    slo_id      = string
-    runbook     = string
-    runbook_url = optional(string, "")
-    workflow    = string
-    impact      = string
-    next_action = string
+    slo_id  = string
+    runbook = string
+    # Native runbook attachment — see modules/monitor_factory/variables.tf.
+    runbook_notebook_id  = optional(string, "")
+    runbook_notebook_url = optional(string, "")
+    runbook_title        = optional(string, "")
+    workflow             = string
+    impact               = string
+    next_action          = string
 
     renotify_interval = optional(number, 60)
     extra_tags        = optional(list(string), [])
@@ -57,4 +60,22 @@ variable "max_members" {
 variable "api_validate" {
   type    = bool
   default = true
+}
+
+variable "defaults" {
+  description = <<-EOT
+    Org-wide monitor option defaults (platform/policy/global.yaml →
+    monitor_defaults). Composites previously hardcoded a subset and let the
+    rest fall to provider defaults, so a composite silently behaved differently
+    from every other managed monitor. It now takes the same defaults object the
+    monitor factory does.
+  EOT
+  type = object({
+    renotify_statuses    = list(string)
+    renotify_occurrences = number
+    require_full_window  = bool
+    notify_audit         = bool
+    include_tags         = bool
+    timeout_h            = number
+  })
 }

@@ -144,11 +144,13 @@ locals {
         notification_profile = "production_critical"
         failure_domain       = s.service
 
-        slo_id      = slo_id
-        slo_url     = ""
-        runbook     = "slo-error-budget-burn"
-        runbook_url = "${local.runbooks.docs_base_url}/slo-error-budget-burn.md"
-        workflow    = "auto-major-incident"
+        slo_id               = slo_id
+        slo_url              = ""
+        runbook              = "slo-error-budget-burn"
+        runbook_notebook_id  = try(local.runbook_notebook_id["slo-error-budget-burn"], "")
+        runbook_notebook_url = try(local.runbook_notebook_url["slo-error-budget-burn"], "")
+        runbook_title        = try(local.runbook_title["slo-error-budget-burn"], "SLO Error Budget Burn")
+        workflow             = "auto-major-incident"
 
         summary     = "Error budget for ${s.name} is being consumed ${local.burn_windows[w].factor}× faster than sustainable, confirmed over ${local.burn_windows[w].long_window} and still true over the last ${local.burn_windows[w].short_window}."
         impact      = "Customer-facing objective at risk. At the current rate the ${s.timeframe} budget is exhausted well before the window ends."

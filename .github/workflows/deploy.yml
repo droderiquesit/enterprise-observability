@@ -113,11 +113,17 @@ jobs:
           if [ -f terraform.tfstate ]; then ../../tools/tfstate-git.sh persist foundation prod; fi
           exit "$rc"
 
-      - name: "2 · Runbooks — publish (API-backed, hash-drift aware; ADR-006)"
+      # Publishing runs BEFORE the coverage apply on purpose: it creates any
+      # unpublished runbook notebook and writes its id into
+      # platform/policy/runbooks.yaml in this checkout, so the apply that
+      # follows can attach every runbook to its monitors through the native
+      # `assets` field. Without --write-registry a newly-added runbook would
+      # deploy a monitor with no attachment and the C16 gate would fail the run.
+      - name: "2 · Runbooks — publish notebooks and bind ids (ADR-006)"
         env:
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
           DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
-        run: cd tools && python publish_runbooks.py
+        run: cd tools && python publish_runbooks.py --write-registry
 
       - name: "3 · Coverage — monitors, SLOs, burn-rate alerts, composites"
         env:

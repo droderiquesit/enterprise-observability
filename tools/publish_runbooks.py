@@ -28,21 +28,11 @@ from pathlib import Path
 
 import obs_common as oc
 
-# The sections every runbook must contain. Enforced before anything is
-# published — an incomplete runbook is worse than an obvious gap, because it
-# looks like coverage.
-REQUIRED_SECTIONS = [
-    "Meaning",
-    "Impact",
-    "Validation",
-    "Likely causes",
-    "Diagnostic queries",
-    "Dependency checks",
-    "Remediation",
-    "Automation",
-    "Escalation",
-    "Recovery verification",
-]
+# The sections every runbook must contain, imported from the generator so the
+# standard has exactly one definition. Enforced before anything is published —
+# an incomplete runbook is worse than an obvious gap, because it looks like
+# coverage, and this notebook is what a monitor's `assets` field points at.
+from generate_runbooks import REQUIRED_SECTIONS  # noqa: E402
 
 
 def render_cells(md_text: str) -> list[dict]:
@@ -78,7 +68,13 @@ def validate_template(md_text: str) -> list[str]:
 
 
 def unfinished_sections(md_text: str) -> int:
-    return md_text.count("TODO(owner)")
+    """Count placeholder markers. A runbook carrying one is not publishable.
+
+    A runbook attached to a monitor is a promise that a responder will find
+    instructions there. Publishing a stub keeps the promise's shape and drops
+    its content, which is worse than an obvious gap.
+    """
+    return sum(md_text.count(m) for m in ("TODO(owner)", "TODO:", "TBD"))
 
 
 def remote_hash(notebook: dict) -> str | None:
@@ -158,7 +154,11 @@ def main() -> int:
     for p in sources:
         text = p.read_text()
         problems += [f"{p.name}: {e}" for e in validate_template(text)]
-        unfinished += unfinished_sections(text)
+        n = unfinished_sections(text)
+        unfinished += n
+        if n:
+            problems.append(f"{p.name}: {n} placeholder marker(s) — a runbook attached "
+                            "to a monitor may not contain placeholders")
     # Every registry entry must have a source file, and vice versa.
     sources_by_stem = {p.stem for p in sources}
     for rid, r in registry.items():
@@ -173,8 +173,27 @@ def main() -> int:
             print(f"RUNBOOK ERROR: {e}")
         return 1
 
-    print(f"runbooks: {len(sources)} valid, {unfinished} sections still marked "
-          f"TODO(owner) across the estate")
+    # Every registry entry must carry the notebook id Terraform attaches with:
+    # without it the monitor's native `assets` block cannot be built.
+    #
+    # Severity is mode-dependent on purpose. A publish run is what CREATES the
+    # missing notebook and fills the id, so treating a gap as fatal there would
+    # deadlock the very loop that closes it. `--check` runs after publishing
+    # (nightly drift, post-deploy governance), where a gap is a real defect.
+    missing_ids = sorted(rid for rid, r in registry.items() if not r.get("id"))
+    if missing_ids:
+        label = "ERROR" if args.check else "PENDING"
+        for rid in missing_ids:
+            print(f"RUNBOOK {label}: {rid} has no notebook id — monitor `assets` "
+                  "attachment cannot be built until it is published.")
+        if args.check:
+            print(f"{len(missing_ids)} runbook(s) unattachable. Run "
+                  "publish_runbooks.py --write-registry and commit the result.")
+            return 1
+
+    print(f"runbooks: {len(sources)} valid and complete, "
+          f"{sum(1 for r in registry.values() if r.get('id'))}/{len(registry)} "
+          f"bound to a published notebook")
 
     if args.dry_run:
         for p in sources:

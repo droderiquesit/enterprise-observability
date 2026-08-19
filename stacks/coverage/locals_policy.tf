@@ -23,7 +23,31 @@ locals {
   slo_catalog = local.slo_doc.slos
   exceptions  = yamldecode(file("${local.policy_dir}/policy/exceptions.yaml")).exceptions
   runbooks    = yamldecode(file("${local.policy_dir}/policy/runbooks.yaml"))
-  composites  = yamldecode(file("${local.policy_dir}/policy/composites.yaml")).composites
+
+  # ---------------------------------------------------------------------------
+  # NATIVE RUNBOOK ATTACHMENT LOOKUP
+  #
+  # runbook id → the published Datadog notebook it lives in. The monitor
+  # factory turns these into the monitor's `assets` block (category=runbook,
+  # resource_type=notebook), which is how a runbook is attached to a monitor.
+  # NOTHING here produces a URL for the alert body.
+  #
+  # `notebook_id` is empty for a runbook that has not been published yet; the
+  # factory omits the asset in that case rather than attaching a dead pointer,
+  # and tools/publish_runbooks.py --check fails the governance run until it is
+  # published and its id is committed to the registry.
+  # ---------------------------------------------------------------------------
+  runbook_notebook_id = {
+    for rid, r in local.runbooks.runbooks : rid => try(tostring(r.id), "")
+  }
+  runbook_notebook_url = {
+    for rid, r in local.runbooks.runbooks :
+    rid => try("${local.runbooks.notebook_base_url}/${tostring(r.id)}", "")
+  }
+  runbook_title = {
+    for rid, r in local.runbooks.runbooks : rid => try(r.title, rid)
+  }
+  composites = yamldecode(file("${local.policy_dir}/policy/composites.yaml")).composites
 
   # service_archetype → domain, straight from the service-archetype catalog.
   # (Previously re-typed by hand here AND in the foundation stack — a policy

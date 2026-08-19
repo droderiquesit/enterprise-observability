@@ -37,7 +37,7 @@ resource "datadog_monitor" "this" {
     **BUSINESS IMPACT:** ${each.value.impact}
     **OWNER:** ${each.value.team}${length(each.value.cc_teams) > 0 ? " (observers: ${join(", ", each.value.cc_teams)})" : ""} · ${each.value.pages ? "pages the on-call rotation" : "does not page"}
     **DO THIS NEXT:** ${each.value.next_action}
-    **RUNBOOK:** ${each.value.runbook_url}
+    **RUNBOOK:** attached to this monitor as `${each.value.runbook_title != "" ? each.value.runbook_title : each.value.runbook}` — open it from the monitor's Runbook asset.
     **AUTOMATED DIAGNOSTICS:** workflow `${each.value.workflow}`.
     **SLO / ERROR BUDGET:** `${each.value.slo_id}`
     {{/is_alert}}
@@ -68,6 +68,7 @@ resource "datadog_monitor" "this" {
     "detection:composite",
     "signal:confirmed_impact",
     "runbook:${each.value.runbook}",
+    "runbook_notebook:${each.value.runbook_notebook_id}",
     "automation_ref:${each.value.workflow}",
     "notification_profile:${each.value.notification_profile}",
     "failure_domain:${each.value.failure_domain}",
@@ -79,11 +80,32 @@ resource "datadog_monitor" "this" {
     ], each.value.extra_tags
   )
 
-  notify_no_data    = false
-  renotify_interval = each.value.renotify_interval
-  renotify_statuses = ["alert"]
-  include_tags      = true
-  validate          = var.api_validate
+  # Native runbook attachment — identical contract to modules/monitor_factory.
+  # A composite is the platform's confirmed-impact signal, so it is exactly the
+  # monitor a responder opens the runbook from.
+  dynamic "assets" {
+    for_each = each.value.runbook_notebook_id != "" ? [1] : []
+    content {
+      category      = "runbook"
+      resource_type = "notebook"
+      resource_key  = each.value.runbook_notebook_id
+      name          = each.value.runbook_title != "" ? each.value.runbook_title : each.value.runbook
+      url           = each.value.runbook_notebook_url
+    }
+  }
+
+  # Composites inherit the platform monitor-option defaults rather than the
+  # provider's, so a composite behaves like every other managed monitor.
+  notify_no_data       = false
+  no_data_timeframe    = null
+  renotify_interval    = each.value.renotify_interval
+  renotify_statuses    = var.defaults.renotify_statuses
+  renotify_occurrences = var.defaults.renotify_occurrences
+  require_full_window  = var.defaults.require_full_window
+  timeout_h            = var.defaults.timeout_h
+  notify_audit         = var.defaults.notify_audit
+  include_tags         = var.defaults.include_tags
+  validate             = var.api_validate
 
   lifecycle {
     precondition {

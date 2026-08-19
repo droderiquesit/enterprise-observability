@@ -44,15 +44,22 @@ variable "instances" {
     failure_domain       = string
 
     # contract
-    slo_id      = string
-    slo_url     = optional(string, "")
-    runbook     = string
-    runbook_url = optional(string, "")
-    workflow    = string
-    summary     = string
-    impact      = string
-    why         = string
-    next_action = string
+    slo_id  = string
+    slo_url = optional(string, "")
+    runbook = string
+    # NATIVE RUNBOOK ATTACHMENT (see the `assets` block in main.tf).
+    # The runbook is a Datadog notebook (metadata.type = runbook), and the
+    # monitor references it as a first-class asset — never as a URL in the
+    # message. An empty notebook id means the notebook has not been published
+    # yet; the asset is then omitted rather than pointing at nothing.
+    runbook_notebook_id  = optional(string, "")
+    runbook_notebook_url = optional(string, "")
+    runbook_title        = optional(string, "")
+    workflow             = string
+    summary              = string
+    impact               = string
+    why                  = string
+    next_action          = string
 
     # behavior overrides
     notify_no_data      = optional(bool)
