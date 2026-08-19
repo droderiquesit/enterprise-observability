@@ -81,7 +81,7 @@ Every managed monitor therefore carries an auto-resolve window, resolved from
 | 1 | the archetype's own `auto_resolve_hours` | an explicit, reviewed exception |
 | 2 | `by_signal` | `job_failure: 4` — a failed run is over; its group may never report again |
 | 3 | `by_detection` | `event: 2` — event monitors match an instant and then stick |
-| 4 | `by_priority` | `P1: 12 · P2: 24 · P3: 48 · P4: 72` |
+| 4 | `by_priority` | `P1: 6 · P2: 12 · P3: 18 · P4: 24` |
 
 Higher priority resolves *sooner*, which reads backwards until you remember what
 the setting does: a stuck P1 is the one suppressing the page that matters. An
@@ -92,6 +92,11 @@ monitor re-triggering the moment data returns.
 triggered. It cannot silence a condition that is still true, and absent
 telemetry is a separate contract (`notify_no_data` / `no_data_timeframe`) —
 which is why the `telemetry_health` signal is deliberately not shortened.
+
+24 hours is the ceiling because Datadog's monitor API rejects anything above it
+(`400 The timeout_h option should be an integer value in the range 0-24`), at
+validate time — a longer window is not a slower monitor, it is a monitor that
+cannot be created.
 
 Enforced twice: `modules/monitor_factory` and `modules/composite_monitor` refuse
 to **plan** a monitor whose window is outside the policy range, and coverage

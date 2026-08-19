@@ -49,6 +49,11 @@ def monitors_from_plan(plan: dict) -> list[dict]:
                     "new_group_delay": a.get("new_group_delay"),
                     "renotify_interval": a.get("renotify_interval"),
                     "require_full_window": a.get("require_full_window"),
+                    # Datadog bounds timeout_h to 0-24 and enforces it HERE, at
+                    # validate. Leaving it out of the payload is what let an
+                    # out-of-range auto-resolve window pass a green pull request
+                    # and fail the deploy's plan instead.
+                    "timeout_h": a.get("timeout_h"),
                     "include_tags": a.get("include_tags"),
                     "notify_audit": a.get("notify_audit"),
                 }.items() if v is not None

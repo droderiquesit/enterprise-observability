@@ -158,6 +158,17 @@ def test_every_auto_resolve_window_is_inside_its_own_bounds():
         assert ar["min_hours"] <= hours <= ar["max_hours"], f"{where} = {hours}h"
 
 
+def test_auto_resolve_stays_inside_the_datadog_api_limit():
+    """Datadog rejects `timeout_h` above 24 at VALIDATE time:
+    `400 The timeout_h option should be an integer value in the range 0-24`.
+    A window past the cap is not a slower monitor — it is a monitor that cannot
+    be created, which is how it was found: a green pull request, a red plan."""
+    ar = POLICY["global"]["monitor_defaults"]["auto_resolve"]
+    assert ar["max_hours"] <= 24
+    for m in ("by_priority", "by_signal", "by_detection"):
+        assert all(v <= 24 for v in ar[m].values()), m
+
+
 def test_auto_resolve_is_never_disabled_by_policy():
     """`timeout_h: 0` is Datadog's default and means 'never resolves'. The
     whole point of this block is that no path through it can produce one."""
