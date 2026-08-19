@@ -262,10 +262,10 @@ archetypes:
     monitor_type: query alert
     resource_type: sqlserver_instance
     selector: ""
-    query: "max(next_6h):forecast(avg:sqlserver.stats.connections{__SCOPE__} by {host}, 'linear', 1, interval='15m', history='1d') > 0"
+    query: "max(next_12h):forecast(avg:sqlserver.stats.connections{__SCOPE__} by {host}, 'linear', 1, interval='15m', history='1d') > 0"
     thresholds: { critical: 0 }
     group_by: [host]
-    evaluation_window: next_6h
+    evaluation_window: next_12h
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-database-availability
@@ -447,11 +447,11 @@ archetypes:
     monitor_type: query alert
     resource_type: azure_sql
     selector: "resource_type:azure_sql"
-    query: "max(next_6h):forecast(max:azure.sql_servers_databases.sessions_percent{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='15m', history='1d') > 90"
+    query: "max(next_12h):forecast(max:azure.sql_servers_databases.sessions_percent{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='15m', history='1d') > 90"
     thresholds: { critical: 90, warning: 80 }
     group_by: [subscription_name, name]
     notify_by: [subscription_name]
-    evaluation_window: next_6h
+    evaluation_window: next_12h
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-database-availability

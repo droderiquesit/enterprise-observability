@@ -142,11 +142,11 @@ archetypes:
     monitor_type: query alert
     resource_type: azure_redis
     selector: "resource_type:azure_redis"
-    query: "max(next_6h):forecast(avg:azure.cache_redis.connectedclients{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='15m', history='1d') > 0"
+    query: "max(next_12h):forecast(avg:azure.cache_redis.connectedclients{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='15m', history='1d') > 0"
     thresholds: { critical: 0 }
     group_by: [subscription_name, name]
     notify_by: [subscription_name]
-    evaluation_window: next_6h
+    evaluation_window: next_12h
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability

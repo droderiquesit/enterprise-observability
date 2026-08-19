@@ -28,7 +28,7 @@ It fires when a fixed threshold was crossed, evaluated over `last_15m`.
 Condition as deployed:
 
 ```
-max(last_15m):max:acme.hardware.component_health{__SCOPE__} by {host,component} > 0
+max(last_15m):max:acme.hardware.component_health{__SCOPE__} by {host,component} >= 2
 ```
 
 Thresholds: `critical` = 2, `warning` = 1.

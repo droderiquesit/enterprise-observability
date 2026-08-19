@@ -89,7 +89,7 @@ archetypes:
     monitor_type: query alert
     resource_type: hardware_node
     selector: ""
-    query: "max(last_15m):max:acme.hardware.component_health{__SCOPE__} by {host,component} > 0"
+    query: "max(last_15m):max:acme.hardware.component_health{__SCOPE__} by {host,component} >= 2"
     thresholds: { critical: 2, warning: 1 }
     group_by: [host, component]
     notify_by: [host]

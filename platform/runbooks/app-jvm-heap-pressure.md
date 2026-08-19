@@ -23,12 +23,12 @@
 
 This monitor watches **saturation** for `service` resources in the Application domain. It measures how close a bounded resource is to its limit — the point past which work queues rather than completes.
 
-It fires when extrapolating the recent trend, the resource is projected to cross its limit inside the forecast horizon. It has NOT crossed it yet, evaluated over `next_6h`.
+It fires when extrapolating the recent trend, the resource is projected to cross its limit inside the forecast horizon. It has NOT crossed it yet, evaluated over `next_12h`.
 
 Condition as deployed:
 
 ```
-max(next_6h):forecast(avg:jvm.heap_memory{__SCOPE__} by {service} / avg:jvm.heap_memory_max{__SCOPE__} by {service} * 100, 'linear', 1, interval='15m', history='1d') > 90
+max(next_12h):forecast(avg:jvm.heap_memory{__SCOPE__} by {service} / avg:jvm.heap_memory_max{__SCOPE__} by {service} * 100, 'linear', 1, interval='15m', history='1d') > 90
 ```
 
 Thresholds: `critical` = 90, `warning` = 80.
@@ -105,7 +105,7 @@ Whatever is changed, record it on the incident. If `diag-app-health` performed a
 
 Resolved when utilisation is back inside its normal band with the original limits restored, the projection no longer crosses the limit inside the forecast horizon, and any deferred work has been drained.
 
-1. The monitor returns to OK and stays there for at least one full evaluation window (`next_6h`).
+1. The monitor returns to OK and stays there for at least one full evaluation window (`next_12h`).
 2. `slo-app-availability` has stopped burning; record the budget consumed against the incident.
 3. Any downtime, silence or circuit breaker applied during the incident is removed.
 4. The correlation group closes — do not close it while a child alert is still firing.

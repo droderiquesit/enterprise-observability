@@ -218,10 +218,10 @@ archetypes:
     monitor_type: query alert
     resource_type: network_firewall
     selector: "resource_type:azure_firewall"
-    query: "max(next_6h):forecast(avg:azure.network_azurefirewalls.snat_port_utilization{__SCOPE__} by {name}, 'linear', 1, interval='15m', history='1d') > 80"
+    query: "max(next_12h):forecast(avg:azure.network_azurefirewalls.snat_port_utilization{__SCOPE__} by {name}, 'linear', 1, interval='15m', history='1d') > 80"
     thresholds: { critical: 80, warning: 65 }
     group_by: [name]
-    evaluation_window: next_6h
+    evaluation_window: next_12h
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability

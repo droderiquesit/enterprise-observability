@@ -185,10 +185,10 @@ archetypes:
     monitor_type: query alert
     resource_type: service
     selector: ""
-    query: "max(next_6h):forecast(avg:jvm.heap_memory{__SCOPE__} by {service} / avg:jvm.heap_memory_max{__SCOPE__} by {service} * 100, 'linear', 1, interval='15m', history='1d') > 90"
+    query: "max(next_12h):forecast(avg:jvm.heap_memory{__SCOPE__} by {service} / avg:jvm.heap_memory_max{__SCOPE__} by {service} * 100, 'linear', 1, interval='15m', history='1d') > 90"
     thresholds: { critical: 90, warning: 80 }
     group_by: [service]
-    evaluation_window: next_6h
+    evaluation_window: next_12h
     envs: [prod]
     bands: [critical]
     slo_id: slo-app-availability

@@ -4207,7 +4207,7 @@
   "options": {
    "timeout_h": 18
   },
-  "query": "max(next_6h):forecast(avg:jvm.heap_memory{env:prod,alert_band:critical} by {service} / avg:jvm.heap_memory_max{env:prod,alert_band:critical} by {service} * 100, 'linear', 1, interval='15m', history='1d') > 90",
+  "query": "max(next_12h):forecast(avg:jvm.heap_memory{env:prod,alert_band:critical} by {service} / avg:jvm.heap_memory_max{env:prod,alert_band:critical} by {service} * 100, 'linear', 1, interval='15m', history='1d') > 90",
   "tags": [
    "alert_band:critical",
    "archetype:app-jvm-heap-pressure",
@@ -6433,7 +6433,7 @@
   "options": {
    "timeout_h": 18
   },
-  "query": "max(next_6h):forecast(avg:azure.cache_redis.connectedclients{env:prod,alert_band:critical,resource_type:azure_redis} by {subscription_name,name}, 'linear', 1, interval='15m', history='1d') > 0",
+  "query": "max(next_12h):forecast(avg:azure.cache_redis.connectedclients{env:prod,alert_band:critical,resource_type:azure_redis} by {subscription_name,name}, 'linear', 1, interval='15m', history='1d') > 0",
   "tags": [
    "alert_band:critical",
    "archetype:redis-connection-saturation-forecast",
@@ -7408,7 +7408,7 @@
   "options": {
    "timeout_h": 18
   },
-  "query": "max(next_6h):forecast(max:azure.sql_servers_databases.sessions_percent{env:prod,alert_band:critical,resource_type:azure_sql} by {subscription_name,name}, 'linear', 1, interval='15m', history='1d') > 90",
+  "query": "max(next_12h):forecast(max:azure.sql_servers_databases.sessions_percent{env:prod,alert_band:critical,resource_type:azure_sql} by {subscription_name,name}, 'linear', 1, interval='15m', history='1d') > 90",
   "tags": [
    "alert_band:critical",
    "archetype:azuresql-session-saturation",
@@ -8579,7 +8579,7 @@
   "options": {
    "timeout_h": 18
   },
-  "query": "max(next_6h):forecast(avg:sqlserver.stats.connections{env:prod,alert_band:critical} by {host}, 'linear', 1, interval='15m', history='1d') > 0",
+  "query": "max(next_12h):forecast(avg:sqlserver.stats.connections{env:prod,alert_band:critical} by {host}, 'linear', 1, interval='15m', history='1d') > 0",
   "tags": [
    "alert_band:critical",
    "archetype:sqlserver-connection-saturation",
@@ -9206,7 +9206,7 @@
   "options": {
    "timeout_h": 18
   },
-  "query": "max(last_15m):max:acme.hardware.component_health{env:prod,alert_band:critical} by {host,component} > 0",
+  "query": "max(last_15m):max:acme.hardware.component_health{env:prod,alert_band:critical} by {host,component} >= 2",
   "tags": [
    "alert_band:critical",
    "archetype:hardware-component-fault",
@@ -11905,7 +11905,7 @@
   "options": {
    "timeout_h": 18
   },
-  "query": "max(next_6h):forecast(avg:azure.network_azurefirewalls.snat_port_utilization{env:prod,alert_band:critical,resource_type:azure_firewall} by {name}, 'linear', 1, interval='15m', history='1d') > 80",
+  "query": "max(next_12h):forecast(avg:azure.network_azurefirewalls.snat_port_utilization{env:prod,alert_band:critical,resource_type:azure_firewall} by {name}, 'linear', 1, interval='15m', history='1d') > 80",
   "tags": [
    "alert_band:critical",
    "archetype:firewall-snat-exhaustion",
@@ -21137,7 +21137,7 @@
   "options": {
    "timeout_h": 18
   },
-  "query": "max(next_6h):forecast(max:azure.sql_servers_databases.sessions_percent{env:stage,alert_band:critical,resource_type:azure_sql} by {subscription_name,name}, 'linear', 1, interval='15m', history='1d') > 90",
+  "query": "max(next_12h):forecast(max:azure.sql_servers_databases.sessions_percent{env:stage,alert_band:critical,resource_type:azure_sql} by {subscription_name,name}, 'linear', 1, interval='15m', history='1d') > 90",
   "tags": [
    "alert_band:critical",
    "archetype:azuresql-session-saturation",
@@ -21566,7 +21566,7 @@
   "options": {
    "timeout_h": 18
   },
-  "query": "max(next_6h):forecast(avg:sqlserver.stats.connections{env:stage,alert_band:critical} by {host}, 'linear', 1, interval='15m', history='1d') > 0",
+  "query": "max(next_12h):forecast(avg:sqlserver.stats.connections{env:stage,alert_band:critical} by {host}, 'linear', 1, interval='15m', history='1d') > 0",
   "tags": [
    "alert_band:critical",
    "archetype:sqlserver-connection-saturation",

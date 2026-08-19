@@ -23,12 +23,12 @@
 
 This monitor watches **capacity** for `network_firewall` resources in the Networking domain. It measures remaining headroom against a hard, physical or contractual limit that cannot be exceeded.
 
-It fires when extrapolating the recent trend, the resource is projected to cross its limit inside the forecast horizon. It has NOT crossed it yet, evaluated over `next_6h`.
+It fires when extrapolating the recent trend, the resource is projected to cross its limit inside the forecast horizon. It has NOT crossed it yet, evaluated over `next_12h`.
 
 Condition as deployed:
 
 ```
-max(next_6h):forecast(avg:azure.network_azurefirewalls.snat_port_utilization{__SCOPE__} by {name}, 'linear', 1, interval='15m', history='1d') > 80
+max(next_12h):forecast(avg:azure.network_azurefirewalls.snat_port_utilization{__SCOPE__} by {name}, 'linear', 1, interval='15m', history='1d') > 80
 ```
 
 Thresholds: `critical` = 80, `warning` = 65.
@@ -102,7 +102,7 @@ Whatever is changed, record it on the incident. If `auto-capacity-ticket` perfor
 
 Resolved when headroom is back above the policy threshold, the reclaim or expansion is permanent rather than manual, and the projection no longer breaches.
 
-1. The monitor returns to OK and stays there for at least one full evaluation window (`next_6h`).
+1. The monitor returns to OK and stays there for at least one full evaluation window (`next_12h`).
 2. `slo-network-availability` has stopped burning; record the budget consumed against the incident.
 3. Any downtime, silence or circuit breaker applied during the incident is removed.
 4. The correlation group closes — do not close it while a child alert is still firing.
