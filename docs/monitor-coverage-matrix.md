@@ -6,9 +6,9 @@
 
 ## Summary
 
-- **261 archetypes** → **585 monitor instances** (archetype × environment × alert band)
+- **264 archetypes** → **588 monitor instances** (archetype × environment × alert band)
 - **159** instances (27%) are permitted to page; everything else is a ticket or informational
-- **256** instances (43%) use predictive detection (anomaly, seasonal, forecast, outlier, rate-of-change)
+- **258** instances (43%) use predictive detection (anomaly, seasonal, forecast, outlier, rate-of-change)
 - **21 domain SLOs** plus one per tier0 service
 
 Instances marked `Threshold*` use a fixed number. Every one of them carries a
@@ -288,7 +288,7 @@ Owner: `data-engineering` · Default SLO: `slo-data-freshness` · 31 instances
 
 ## Databases
 
-Owner: `data-engineering` · Default SLO: `slo-database-availability` · 92 instances
+Owner: `data-engineering` · Default SLO: `slo-database-availability` · 95 instances
 
 | Monitor | Signal | Detection | Env | Band | Pri | SLO | Teams | SNOW | Page | Runbook | Automation | Window | Grouping | Collapse |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -331,6 +331,9 @@ Owner: `data-engineering` · Default SLO: `slo-database-availability` · 92 inst
 | Database Instance Unavailable | availability | Service check | stage | standard | **P3** | `slo-database-availability` | yes | Task | — | `db-availability` | `diag-database` (diagnostic only) | last_3_checks | db_instance | — |
 | Database Backup Older Than RPO | backup_age | Threshold* | prod | critical | **P3** | `slo-database-availability` | yes | Task (sustained) | — | `db-backup-age` | `auto-compliance-ticket` (fully automatic) | last_4h | db_instance | — |
 | Database Backup Older Than RPO | backup_age | Threshold* | prod | standard | **P3** | `slo-database-availability` | yes | Task (sustained) | — | `db-backup-age` | `auto-compliance-ticket` (fully automatic) | last_4h | db_instance | — |
+| Database Connection Pool Saturation Forecast | saturation | Forecast | prod | critical | **P4** | `slo-database-availability` | yes | — | — | `db-availability` | `diag-database` (diagnostic only) | next_1d | db_instance | — |
+| Database Query Latency Anomaly | latency | Anomaly | prod | critical | **P4** | `slo-database-latency` | yes | — | — | `db-availability` | `diag-database` (diagnostic only) | last_30m | db_instance | — |
+| Database Replication Lag Beyond Limit | replication_lag | Threshold* | prod | critical | **P4** | `slo-database-availability` | yes | — | — | `db-availability` | `diag-database` (diagnostic only) | last_10m | db_instance | — |
 | Database Stopped Reporting Telemetry | telemetry_health | Threshold* | prod | baseline | **P4** | `slo-database-availability` | yes | — | — | `db-telemetry-loss` | `diag-database` (diagnostic only) | last_30m | db_instance | — |
 | Database Stopped Reporting Telemetry | telemetry_health | Threshold* | prod | critical | **P4** | `slo-database-availability` | yes | — | — | `db-telemetry-loss` | `diag-database` (diagnostic only) | last_30m | db_instance | — |
 | Database Stopped Reporting Telemetry | telemetry_health | Threshold* | prod | standard | **P4** | `slo-database-availability` | yes | — | — | `db-telemetry-loss` | `diag-database` (diagnostic only) | last_30m | db_instance | — |
