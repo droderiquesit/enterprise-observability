@@ -206,8 +206,8 @@ resource "datadog_on_call_escalation_policy" "this" {
 #                                          impact": SLO burn or composite. A
 #                                          symptom-raised P2 has pages:false and
 #                                          never reaches this rule.)
-#   rule 3  team catch-all               → low urgency, NO escalation policy;
-#                                          notifies without waking anyone.
+#   rule 3  terminal catch-all           → low urgency, escalation policy
+#                                          (required by the API; see below)
 #
 # P2 gets urgency "high" on purpose: a P2 that reaches this resource has already
 # passed the paging gate, so it is a real page. The P1-vs-P2 difference in ack
@@ -235,21 +235,21 @@ resource "datadog_on_call_team_routing_rules" "this" {
     escalation_policy = datadog_on_call_escalation_policy.this[each.key].id
   }
 
-  # Everything else for this team — notify, never page. ServiceNow and Teams
-  # routing (modules/notification_rules) carry these.
-  rule {
-    query   = "tags.team:${each.key}"
-    urgency = "low"
-  }
-
-  # API-REQUIRED TERMINAL RULE.
-  # Datadog rejects the whole routing-rules request with a 400 unless the LAST
-  # rule is a true catch-all: no query, no time restriction, and an escalation
-  # policy (the provider mirrors this in its own validation). Rule 3 above
-  # already matches every page that reaches this team-scoped resource, so this
-  # rule is unreachable in practice; it exists to satisfy that contract. If a
-  # page ever did arrive without the `team` tag, escalating it is the safe
-  # failure mode — better a page nobody expected than a page nobody got.
+  # API-REQUIRED TERMINAL RULE — and the only other rule that can exist.
+  #
+  # Datadog rejects the whole request with a 400 unless the LAST rule is a true
+  # catch-all: no query, no time restriction, and an escalation policy. It also
+  # rejects `urgency` on any rule that has no escalation policy
+  # ("urgency is only allowed if an escalation policy is provided" — a live
+  # apply, not a plan, is what surfaced this).
+  #
+  # That pair of constraints removes the "notify, never page" rule that used to
+  # sit here, and it should never have existed anyway: ONLY monitors that page
+  # reach On-Call at all. modules/notification_rules attaches the
+  # `@oncall-<team>` recipient exclusively where `pages:true`, so a P3, a P4 or
+  # a symptom-raised P2 never arrives at this resource — Teams and ServiceNow
+  # carry those. Anything that does arrive is by definition a page and must
+  # reach a responder; low urgency is what keeps it from overriding quiet hours.
   rule {
     urgency           = "low"
     escalation_policy = datadog_on_call_escalation_policy.this[each.key].id

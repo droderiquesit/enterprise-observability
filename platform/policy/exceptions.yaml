@@ -4,13 +4,20 @@
 # The ONLY sanctioned way to deviate from platform defaults. Every entry needs
 # REASON, OWNER, APPROVER and EXPIRY — no exceptions to the exception rule.
 #
-#   control: monitoring_profile | priority | threshold | paging | routing | slo_waiver
+#   control: monitoring_profile | priority | threshold | paging | routing |
+#            slo_waiver | finding_acceptance
 #   scope:   any combination of service / env / archetype / team
 #
 # CI fails the build on an expired entry (tools/validate_policy.py), the
 # coverage report lists every active and expired exception (check C12), and the
 # platform archetype `exception-expired` alerts on them at runtime. An
 # exception cannot be quietly forgotten.
+#
+# `finding_acceptance` is the one control that does not change what the platform
+# DOES — it records that a governance finding is known, owned and time-boxed, so
+# the nightly run stops failing on it while still reporting it. `value` is the
+# accepted COUNT: if the finding grows past it, or anything new appears, the run
+# goes red again. This is what makes a red governance run mean something.
 #
 # Maximum duration by control type is enforced in `policy` at the bottom.
 # =============================================================================
@@ -81,6 +88,46 @@ exceptions:
 # Short by design: an exception that needs to be permanent is not an exception,
 # it is a missing policy, and should be proposed as one.
 # -----------------------------------------------------------------------------
+  - id: EXC-2026-006
+    scope: { check: C3, applies_to: discovered_resources }
+    control: finding_acceptance
+    value: 27
+    reason: >
+      27 services discovered in this organization carry none of the five
+      owner-applied tags (env, service, team, tier, service_archetype). They are
+      pre-existing demo/vendor workloads that this platform discovered but does
+      not own, so the profile engine infers what it can and records a violation
+      per inference rather than presenting a guess as a fact — which is correct
+      behaviour, not a defect. Accepted at the CURRENT count so the tagging
+      campaign is still visible: if a 28th untagged service appears, or a
+      managed monitor loses a required tag, the nightly run goes red again.
+    owner: observability-platform
+    approved_by: observability-platform
+    approved_on: 2026-08-19
+    expires: 2026-11-17
+    review_note: >
+      Close by tagging the estate (migration-strategy.md, M2) and lowering this
+      value to 0. Do not raise it to make a red run green.
+
+  - id: EXC-2026-007
+    scope: { check: C13, applies_to: declared_telemetry_dependency }
+    control: finding_acceptance
+    value: 1
+    reason: >
+      slo-infra-backup-success is computed from `acme.backup.jobs`, a custom
+      metric whose producer is not deployed in this organization. The SLO
+      declares the dependency explicitly (telemetry_dependency in slos.yaml),
+      which is the honest state: the objective exists and cannot be measured
+      yet. Accepted so the nightly run can still detect a REAL SLO failure —
+      a live SLO status error is a different finding class and is never
+      accepted by this entry.
+    owner: infrastructure-engineering
+    approved_by: observability-platform
+    approved_on: 2026-08-19
+    expires: 2026-11-17
+    review_note: >
+      Close when the backup telemetry producer ships, or retire the objective.
+
 policy:
   # `threshold` is deliberately NOT an exception control.
   #
@@ -99,12 +146,14 @@ policy:
     paging: 30
     routing: 90
     slo_waiver: 180
+    finding_acceptance: 90
   required_approver:
     monitoring_profile: sre
     priority: observability-platform
     paging: sre
     routing: observability-platform
     slo_waiver: sre
+    finding_acceptance: observability-platform
   compliance_scoped_requires: security      # regulated resources need security sign-off
   renewal_requires_new_justification: true
   expired_exception_behavior: fail_ci       # not "warn" — fail

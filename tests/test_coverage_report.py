@@ -182,3 +182,46 @@ def test_deploy_pass_is_consistent_with_blocking_counts():
     assert s["deploy_pass"] == all(v == 0 for v in s["deploy_blocking_counts"].values())
     for cid, n in s["deploy_blocking_counts"].items():
         assert 0 <= n <= s["check_counts"][cid]
+
+
+# --- accepted findings: governance fails on NEW, not on KNOWN ----------------
+
+def test_acceptances_are_owned_and_time_boxed():
+    """An acceptance without an owner or an expiry is a silent waiver."""
+    accs = [e for e in POLICY["exceptions"] if e.get("control") == "finding_acceptance"]
+    assert accs, "expected at least one finding_acceptance entry"
+    for e in accs:
+        assert e["owner"] and e["approved_by"] and e["expires"], e["id"]
+        assert "check" in e["scope"], e["id"]
+        assert isinstance(e["value"], int), e["id"]
+
+
+def test_expired_acceptance_stops_suppressing():
+    import datetime as dt
+    live = cr.acceptances(POLICY, today=dt.date(2026, 9, 1))
+    assert live, "acceptances should be live before their expiry"
+    dead = cr.acceptances(POLICY, today=dt.date(2099, 1, 1))
+    assert dead == {}, "an expired acceptance must stop suppressing findings"
+
+
+def test_a_finding_beyond_the_accepted_count_still_fails():
+    """Accepting 27 untagged resources must not accept the 28th."""
+    inv, assignments = _estate()
+    r = cr.run_checks(inv, assignments, MONITORS, SLOS, POLICY)
+    s = r["summary"]
+    # The synthetic estate seeds far more tag violations than the live-calibrated
+    # acceptance covers, so the surplus must remain unaccepted and fail the run.
+    assert s["check_counts"]["C3"] > s["accepted_counts"]["C3"]
+    assert s["unaccepted_counts"]["C3"] > 0
+    assert s["pass"] is False
+
+
+def test_declared_dependency_accepted_but_live_slo_error_is_not():
+    broken = copy.deepcopy(SLOS[0]) if SLOS else {"name": "x", "tags": []}
+    broken["name"] = "objective with a broken query"
+    broken["overall_status"] = [{"error": "metric not found"}]
+    s = _run(slos=SLOS + [broken])["summary"]
+    # the declared dependency is accepted; the live error is a real failure
+    assert s["accepted_counts"]["C13"] == 1
+    assert s["unaccepted_counts"]["C13"] >= 1
+    assert s["deploy_pass"] is False
