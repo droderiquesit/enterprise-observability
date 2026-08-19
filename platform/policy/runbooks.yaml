@@ -751,467 +751,584 @@ runbooks:
     title: "Container Registry Pull Failure Anomaly"
     domain: cloud
     source: acr-pull-failure-anomaly.md
+    id: 15318337
   acr-push-failure-anomaly:
     title: "Container Registry Push Failure Anomaly"
     domain: cloud
     source: acr-push-failure-anomaly.md
+    id: 15318338
   acr-storage-growth-forecast:
     title: "Container Registry Storage Growth Forecast"
     domain: cloud
     source: acr-storage-growth-forecast.md
+    id: 15318339
   agent-version-drift:
     title: "Datadog Agent Version Drift"
     domain: infrastructure
     source: agent-version-drift.md
+    id: 15318341
   apim-backend-latency-degradation:
     title: "API Management Backend Latency Degradation"
     domain: cloud
     source: apim-backend-latency-degradation.md
+    id: 15318343
   apim-capacity-saturation:
     title: "API Management Capacity Saturation Forecast"
     domain: cloud
     source: apim-capacity-saturation.md
+    id: 15318344
   apim-connectivity-degraded:
     title: "API Management Dependency Connectivity Degraded"
     domain: cloud
     source: apim-connectivity-degraded.md
+    id: 15318345
   apim-failed-request-anomaly:
     title: "API Management Failed Request Anomaly"
     domain: cloud
     source: apim-failed-request-anomaly.md
+    id: 15318346
   apim-gateway-latency-degradation:
     title: "API Management Gateway Latency Degradation"
     domain: cloud
     source: apim-gateway-latency-degradation.md
+    id: 15318347
   apim-unauthorized-spike:
     title: "API Management Unauthorized Request Spike"
     domain: cloud
     source: apim-unauthorized-spike.md
+    id: 15318348
   app-connection-acquisition-latency:
     title: "Application Connection Acquisition Latency"
     domain: application
     source: app-connection-acquisition-latency.md
+    id: 15318349
   app-connection-pool-saturation:
     title: "Application Connection Pool Saturation"
     domain: application
     source: app-connection-pool-saturation.md
+    id: 15318350
   app-dotnet-gc-pause-degradation:
     title: ".NET Garbage Collection Pause Degradation"
     domain: application
     source: app-dotnet-gc-pause-degradation.md
+    id: 15318351
   app-dotnet-gen2-collection-anomaly:
     title: ".NET Gen2 Collection Anomaly"
     domain: application
     source: app-dotnet-gen2-collection-anomaly.md
+    id: 15318352
   app-jvm-gc-pause-degradation:
     title: "JVM Garbage Collection Pause Degradation"
     domain: application
     source: app-jvm-gc-pause-degradation.md
+    id: 15318353
   app-jvm-heap-pressure:
     title: "JVM Heap Pressure"
     domain: application
     source: app-jvm-heap-pressure.md
+    id: 15318354
   azure-budget-breach:
     title: "Azure Budget Breach"
     domain: cloud
     source: azure-budget-breach.md
+    id: 15318356
   azure-budget-utilization:
     title: "Azure Budget Utilization"
     domain: cloud
     source: azure-budget-utilization.md
+    id: 15318357
   azure-cost-burn-rate:
     title: "Azure Budget Burn Rate Excessive"
     domain: cloud
     source: azure-cost-burn-rate.md
+    id: 15318358
   azure-cost-forecast-overrun:
     title: "Azure Budget Forecast Overrun"
     domain: cloud
     source: azure-cost-forecast-overrun.md
+    id: 15318360
   azuresql-cpu-pressure:
     title: "Azure SQL CPU Pressure"
     domain: database
     source: azuresql-cpu-pressure.md
+    id: 15318362
   azuresql-deadlock-anomaly:
     title: "Azure SQL Deadlock Anomaly"
     domain: database
     source: azuresql-deadlock-anomaly.md
+    id: 15318363
   azuresql-firewall-blocked-connections:
     title: "Azure SQL Connections Blocked By Firewall"
     domain: database
     source: azuresql-firewall-blocked-connections.md
+    id: 15318364
   azuresql-log-write-saturation:
     title: "Azure SQL Transaction Log Write Saturation"
     domain: database
     source: azuresql-log-write-saturation.md
+    id: 15318366
   azuresql-session-saturation:
     title: "Azure SQL Session and Worker Exhaustion"
     domain: database
     source: azuresql-session-saturation.md
+    id: 15318367
   azuresql-storage-exhaustion-forecast:
     title: "Azure SQL Storage Exhaustion Forecast"
     domain: database
     source: azuresql-storage-exhaustion-forecast.md
+    id: 15318368
   azuresql-tempdb-log-saturation:
     title: "Azure SQL TempDB Log Utilization"
     domain: database
     source: azuresql-tempdb-log-saturation.md
+    id: 15318369
   azuresql-unavailable:
     title: "Azure SQL Database Unavailable"
     domain: database
     source: azuresql-unavailable.md
+    id: 15318370
   cdn-cache-hit-ratio-degradation:
     title: "CDN Cache Hit Ratio Degradation"
     domain: cloud
     source: cdn-cache-hit-ratio-degradation.md
+    id: 15318373
   cosmos-metadata-request-anomaly:
     title: "Cosmos DB Metadata Request Anomaly"
     domain: database
     source: cosmos-metadata-request-anomaly.md
+    id: 15318374
   cosmos-normalized-ru-saturation:
     title: "Cosmos DB Normalized RU Saturation (Hot Partition)"
     domain: database
     source: cosmos-normalized-ru-saturation.md
+    id: 15318375
   cosmos-region-failover:
     title: "Cosmos DB Region Failover Occurred"
     domain: database
     source: cosmos-region-failover.md
+    id: 15318376
   cosmos-regional-availability-loss:
     title: "Cosmos DB Region Taken Offline"
     domain: database
     source: cosmos-regional-availability-loss.md
+    id: 15318377
   cosmos-replication-latency:
     title: "Cosmos DB Cross-Region Replication Latency"
     domain: database
     source: cosmos-replication-latency.md
+    id: 15318378
   cosmos-server-side-latency-anomaly:
     title: "Cosmos DB Server-Side Latency Anomaly"
     domain: database
     source: cosmos-server-side-latency-anomaly.md
+    id: 15318379
   cosmos-service-availability:
     title: "Cosmos DB Service Availability Degraded"
     domain: database
     source: cosmos-service-availability.md
+    id: 15318380
   cosmos-storage-growth-forecast:
     title: "Cosmos DB Storage Growth Forecast"
     domain: database
     source: cosmos-storage-growth-forecast.md
+    id: 15318381
   deployment-version-tag-missing:
     title: "Service Emitting Traces Without a Version Tag"
     domain: application
     source: deployment-version-tag-missing.md
+    id: 15318384
   eventhub-capture-backlog:
     title: "Event Hubs Capture Backlog"
     domain: messaging
     source: eventhub-capture-backlog.md
+    id: 15318385
   eventhub-egress-stalled:
     title: "Event Hubs Outgoing Event Stall"
     domain: messaging
     source: eventhub-egress-stalled.md
+    id: 15318386
   eventhub-ingress-anomaly:
     title: "Event Hubs Incoming Event Anomaly"
     domain: messaging
     source: eventhub-ingress-anomaly.md
+    id: 15318388
   eventhub-server-busy-throttling:
     title: "Event Hubs Server Busy Throttling"
     domain: messaging
     source: eventhub-server-busy-throttling.md
+    id: 15318389
   eventhub-server-errors:
     title: "Event Hubs Server Error Anomaly"
     domain: messaging
     source: eventhub-server-errors.md
+    id: 15318390
   eventhub-throughput-exhaustion:
     title: "Event Hubs Throughput Unit Exhaustion"
     domain: messaging
     source: eventhub-throughput-exhaustion.md
+    id: 15318391
   expressroute-arp-degraded:
     title: "ExpressRoute ARP Availability Degraded"
     domain: network
     source: expressroute-arp-degraded.md
+    id: 15318392
   expressroute-bandwidth-saturation:
     title: "ExpressRoute Circuit Bandwidth Saturation Forecast"
     domain: network
     source: expressroute-bandwidth-saturation.md
+    id: 15318393
   expressroute-bgp-down:
     title: "ExpressRoute BGP Session Down"
     domain: network
     source: expressroute-bgp-down.md
+    id: 15318394
   expressroute-qos-drops:
     title: "ExpressRoute QoS Packet Drops"
     domain: network
     source: expressroute-qos-drops.md
+    id: 15318396
   firewall-denied-traffic-anomaly:
     title: "Azure Firewall Denied Traffic Anomaly"
     domain: network
     source: firewall-denied-traffic-anomaly.md
+    id: 15318397
   firewall-snat-exhaustion:
     title: "Azure Firewall SNAT Port Exhaustion Forecast"
     domain: network
     source: firewall-snat-exhaustion.md
+    id: 15318398
   firewall-throughput-saturation:
     title: "Azure Firewall Throughput Saturation Forecast"
     domain: network
     source: firewall-throughput-saturation.md
+    id: 15318399
   firewall-unhealthy:
     title: "Azure Firewall Unhealthy"
     domain: network
     source: firewall-unhealthy.md
+    id: 15318400
   frontdoor-backend-latency-anomaly:
     title: "Front Door Origin Latency Anomaly"
     domain: cloud
     source: frontdoor-backend-latency-anomaly.md
+    id: 15318401
   frontdoor-origin-unhealthy:
     title: "Front Door Origin Pool Unhealthy"
     domain: cloud
     source: frontdoor-origin-unhealthy.md
+    id: 15318402
   frontdoor-total-latency-degradation:
     title: "Front Door Request Latency Degradation"
     domain: cloud
     source: frontdoor-total-latency-degradation.md
+    id: 15318403
   frontdoor-traffic-anomaly:
     title: "Front Door Traffic Anomaly"
     domain: cloud
     source: frontdoor-traffic-anomaly.md
+    id: 15318404
   frontdoor-waf-block-surge:
     title: "Front Door WAF Block Surge"
     domain: cloud
     source: frontdoor-waf-block-surge.md
+    id: 15318405
   hardware-component-fault:
     title: "Hardware Component Fault"
     domain: infrastructure
     source: hardware-component-fault.md
+    id: 15318406
   hardware-thermal-trend:
     title: "Hardware Thermal Trend"
     domain: infrastructure
     source: hardware-thermal-trend.md
+    id: 15318407
   host-swap-exhaustion-forecast:
     title: "Host Swap Exhaustion Forecast"
     domain: infrastructure
     source: host-swap-exhaustion-forecast.md
+    id: 15318408
   host-swap-pressure:
     title: "Host Swap Pressure"
     domain: infrastructure
     source: host-swap-pressure.md
+    id: 15318409
   nsg-denied-flow-anomaly:
     title: "NSG Denied Flow Anomaly"
     domain: network
     source: nsg-denied-flow-anomaly.md
+    id: 15318412
   os-critical-patch-missing:
     title: "Critical OS Patches Missing"
     domain: infrastructure
     source: os-critical-patch-missing.md
+    id: 15318413
   os-end-of-life:
     title: "Operating System Past End of Life"
     domain: infrastructure
     source: os-end-of-life.md
+    id: 15318414
   os-patch-age-excessive:
     title: "OS Patch Age Excessive"
     domain: infrastructure
     source: os-patch-age-excessive.md
+    id: 15318415
   private-dns-query-anomaly:
     title: "Private DNS Query Volume Anomaly"
     domain: network
     source: private-dns-query-anomaly.md
+    id: 15318417
   private-dns-recordset-capacity:
     title: "Private DNS Record Set Capacity"
     domain: network
     source: private-dns-recordset-capacity.md
+    id: 15318418
   private-endpoint-traffic-loss:
     title: "Private Endpoint Traffic Loss"
     domain: network
     source: private-endpoint-traffic-loss.md
+    id: 15318421
   redis-cache-hit-ratio-degradation:
     title: "Redis Cache Hit Ratio Degradation"
     domain: cloud
     source: redis-cache-hit-ratio-degradation.md
+    id: 15318422
   redis-connection-saturation-forecast:
     title: "Redis Connection Exhaustion Forecast"
     domain: cloud
     source: redis-connection-saturation-forecast.md
+    id: 15318423
   redis-cpu-saturation-forecast:
     title: "Redis CPU Saturation Forecast"
     domain: cloud
     source: redis-cpu-saturation-forecast.md
+    id: 15318424
   redis-error-anomaly:
     title: "Redis Error Anomaly"
     domain: cloud
     source: redis-error-anomaly.md
+    id: 15318425
   redis-eviction-anomaly:
     title: "Redis Key Eviction Anomaly"
     domain: cloud
     source: redis-eviction-anomaly.md
+    id: 15318426
   redis-geo-replication-unhealthy:
     title: "Redis Geo-Replication Unhealthy"
     domain: cloud
     source: redis-geo-replication-unhealthy.md
+    id: 15318427
   redis-latency-anomaly:
     title: "Redis Latency Anomaly"
     domain: cloud
     source: redis-latency-anomaly.md
+    id: 15318428
   redis-memory-pressure-forecast:
     title: "Redis Memory Pressure Forecast"
     domain: cloud
     source: redis-memory-pressure-forecast.md
+    id: 15318429
   redis-server-load-saturation:
     title: "Redis Server Load Saturation"
     domain: cloud
     source: redis-server-load-saturation.md
+    id: 15318430
   servicebus-message-age:
     title: "Service Bus Oldest Message Age"
     domain: messaging
     source: servicebus-message-age.md
+    id: 15318431
   servicebus-namespace-cpu-saturation:
     title: "Service Bus Namespace CPU Saturation Forecast"
     domain: messaging
     source: servicebus-namespace-cpu-saturation.md
+    id: 15318432
   servicebus-publish-volume-collapse:
     title: "Service Bus Incoming Message Collapse"
     domain: messaging
     source: servicebus-publish-volume-collapse.md
+    id: 15318433
   servicebus-server-errors:
     title: "Service Bus Server Error Anomaly"
     domain: messaging
     source: servicebus-server-errors.md
+    id: 15318434
   snowflake-connectivity-failure:
     title: "Snowflake Account Unreachable"
     domain: database
     source: snowflake-connectivity-failure.md
+    id: 15318435
   snowflake-credit-consumption-anomaly:
     title: "Snowflake Credit Consumption Anomaly"
     domain: database
     source: snowflake-credit-consumption-anomaly.md
+    id: 15318436
   snowflake-failsafe-growth:
     title: "Snowflake Fail-safe Storage Growth"
     domain: database
     source: snowflake-failsafe-growth.md
+    id: 15318437
   snowflake-login-failure-anomaly:
     title: "Snowflake Login Failure Anomaly"
     domain: database
     source: snowflake-login-failure-anomaly.md
+    id: 15318438
   snowflake-pipe-ingestion-stalled:
     title: "Snowflake Snowpipe Ingestion Stalled"
     domain: database
     source: snowflake-pipe-ingestion-stalled.md
+    id: 15318439
   snowflake-query-blocked:
     title: "Snowflake Blocked Query Contention"
     domain: database
     source: snowflake-query-blocked.md
+    id: 15318440
   snowflake-query-latency-anomaly:
     title: "Snowflake Query Execution Time Anomaly"
     domain: database
     source: snowflake-query-latency-anomaly.md
+    id: 15318441
   snowflake-storage-growth-forecast:
     title: "Snowflake Storage Growth Forecast"
     domain: database
     source: snowflake-storage-growth-forecast.md
+    id: 15318442
   snowflake-task-failure:
     title: "Snowflake Task Failure"
     domain: database
     source: snowflake-task-failure.md
+    id: 15318443
   snowflake-warehouse-provisioning-delay:
     title: "Snowflake Warehouse Provisioning Delay"
     domain: database
     source: snowflake-warehouse-provisioning-delay.md
+    id: 15318444
   snowflake-warehouse-queueing:
     title: "Snowflake Warehouse Queueing (Overload)"
     domain: database
     source: snowflake-warehouse-queueing.md
+    id: 15318445
   sqlserver-ag-no-primary:
     title: "SQL Server Availability Group Has No Primary Replica"
     domain: database
     source: sqlserver-ag-no-primary.md
+    id: 15318446
   sqlserver-ag-sync-unhealthy:
     title: "SQL Server Availability Group Synchronization Unhealthy"
     domain: database
     source: sqlserver-ag-sync-unhealthy.md
+    id: 15318447
   sqlserver-blocking-sessions:
     title: "SQL Server Blocking Session Chain"
     domain: database
     source: sqlserver-blocking-sessions.md
+    id: 15318448
   sqlserver-connection-saturation:
     title: "SQL Server Connection Exhaustion Forecast"
     domain: database
     source: sqlserver-connection-saturation.md
+    id: 15318449
   sqlserver-data-file-growth-forecast:
     title: "SQL Server Data File Exhaustion Forecast"
     domain: database
     source: sqlserver-data-file-growth-forecast.md
+    id: 15318451
   sqlserver-deadlock-anomaly:
     title: "SQL Server Deadlock Anomaly"
     domain: database
     source: sqlserver-deadlock-anomaly.md
+    id: 15318455
   sqlserver-instance-unreachable:
     title: "SQL Server Instance Unreachable"
     domain: database
     source: sqlserver-instance-unreachable.md
+    id: 15318456
   sqlserver-lock-wait-degradation:
     title: "SQL Server Lock Wait Time Degradation"
     domain: database
     source: sqlserver-lock-wait-degradation.md
+    id: 15318457
   sqlserver-log-flush-wait-degradation:
     title: "SQL Server Transaction Log Flush Wait Degradation"
     domain: database
     source: sqlserver-log-flush-wait-degradation.md
+    id: 15318458
   sqlserver-long-running-transaction:
     title: "SQL Server Long-Running Transaction"
     domain: database
     source: sqlserver-long-running-transaction.md
+    id: 15318459
   sqlserver-memory-pressure:
     title: "SQL Server Buffer Pool Memory Pressure"
     domain: database
     source: sqlserver-memory-pressure.md
+    id: 15318460
   sqlserver-replica-lag:
     title: "SQL Server Secondary Replica Lag"
     domain: database
     source: sqlserver-replica-lag.md
+    id: 15318461
   sqlserver-replica-not-synchronized:
     title: "SQL Server Replica Not Synchronized"
     domain: database
     source: sqlserver-replica-not-synchronized.md
+    id: 15318462
   sqlserver-restore-verification-failed:
     title: "SQL Server Restore Verification Failed"
     domain: database
     source: sqlserver-restore-verification-failed.md
+    id: 15318463
   sqlserver-restore-verification-stale:
     title: "SQL Server Restore Verification Stale"
     domain: database
     source: sqlserver-restore-verification-stale.md
+    id: 15318464
   sqlserver-tempdb-space-exhaustion:
     title: "SQL Server TempDB Space Exhaustion Forecast"
     domain: database
     source: sqlserver-tempdb-space-exhaustion.md
+    id: 15318465
   sqlserver-tempdb-version-store-growth:
     title: "SQL Server TempDB Version Store Growth"
     domain: database
     source: sqlserver-tempdb-version-store-growth.md
+    id: 15318466
   trafficmanager-endpoint-down:
     title: "Traffic Manager Endpoint Down"
     domain: cloud
     source: trafficmanager-endpoint-down.md
+    id: 15318467
   trafficmanager-traffic-distribution-anomaly:
     title: "Traffic Manager Traffic Distribution Anomaly"
     domain: cloud
     source: trafficmanager-traffic-distribution-anomaly.md
+    id: 15318468
   vpn-bgp-peer-down:
     title: "VPN Gateway BGP Peer Down"
     domain: network
     source: vpn-bgp-peer-down.md
+    id: 15318469
   vpn-tunnel-bandwidth-anomaly:
     title: "VPN Tunnel Bandwidth Anomaly"
     domain: network
     source: vpn-tunnel-bandwidth-anomaly.md
+    id: 15318470
   vpn-tunnel-packet-drops:
     title: "VPN Tunnel Packet Drop Anomaly"
     domain: network
     source: vpn-tunnel-packet-drops.md
+    id: 15318472
   web-vitals-cls-degradation:
     title: "Core Web Vitals — Cumulative Layout Shift Degraded"
     domain: application
     source: web-vitals-cls-degradation.md
+    id: 15318473
   web-vitals-inp-degradation:
     title: "Core Web Vitals — Interaction to Next Paint Degraded"
     domain: application
     source: web-vitals-inp-degradation.md
+    id: 15318474
   web-vitals-lcp-degradation:
     title: "Core Web Vitals — Largest Contentful Paint Degraded"
     domain: application
     source: web-vitals-lcp-degradation.md
+    id: 15318475
