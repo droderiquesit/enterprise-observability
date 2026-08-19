@@ -86,15 +86,65 @@ CHECK_TITLES = {
 ESTATE_CHECKS = {"C2", "C4", "C9", "C10", "C12"}
 
 
+def _finding_class(cid: str, item) -> str:
+    """Which KIND of finding this is, within a check.
+
+    Two checks mix platform defects with estate hygiene, and the difference
+    decides both who must act and whether a deploy should stop:
+      C3   a `monitor:*` entry is a managed monitor missing a required tag —
+           the platform's own defect. Anything else is a discovered resource
+           somebody else owns.
+      C13  a declared `telemetry_dependency` is a known, recorded gap. A live
+           SLO status error is a real failure of a real objective.
+    """
+    if cid == "C3":
+        return ("managed_monitors" if str(getattr(item, "get", lambda k, d=None: None)("id", "") or "").startswith("monitor:")
+                else "discovered_resources")
+    if cid == "C13":
+        return "declared_telemetry_dependency" if isinstance(item, dict) and "slo_id" in item \
+            else "live_slo_error"
+    return "all"
+
+
 def _deploy_blocking(cid: str, items: list) -> int:
     """How many of a check's findings block the DEPLOY gate."""
     if cid in ESTATE_CHECKS:
         return 0
     if cid == "C3":
-        return sum(1 for it in items if str(it.get("id", "")).startswith("monitor:"))
+        return sum(1 for it in items if _finding_class(cid, it) == "managed_monitors")
     if cid == "C13":
-        return sum(1 for it in items if "slo_id" not in it)
+        return sum(1 for it in items if _finding_class(cid, it) == "live_slo_error")
     return len(items)
+
+
+def acceptances(policy: dict, today: dt.date | None = None) -> dict:
+    """Accepted governance findings — `control: finding_acceptance`.
+
+    An acceptance records that a finding is KNOWN, OWNED and TIME-BOXED. It
+    suppresses the failure, never the report. The nightly run therefore stays
+    meaningful: a finding that grows past the accepted count, a new finding, or
+    an expired acceptance all turn it red again.
+
+    Expiry is evaluated here (unlike Terraform, which must stay deterministic):
+    a governance run is allowed to know what day it is, and an acceptance that
+    silently outlived its review is exactly what this must catch.
+    """
+    today = today or dt.date.today()
+    out: dict[tuple[str, str], dict] = {}
+    for e in policy["exceptions"]:
+        if e.get("control") != "finding_acceptance":
+            continue
+        exp = e["expires"]
+        if not isinstance(exp, dt.date):
+            exp = dt.date.fromisoformat(str(exp))
+        if exp < today:
+            continue          # expired: stops suppressing, and C12 reports it
+        sc = e.get("scope", {})
+        out[(sc.get("check"), sc.get("applies_to", "all"))] = {
+            "max": int(e["value"]), "exception": e["id"],
+            "owner": e["owner"], "expires": str(exp),
+        }
+    return out
 
 
 def fetch_live():
@@ -333,6 +383,33 @@ def run_checks(inventory, assignments, monitors, slos, policy) -> dict:
 
     counts = {k: len(v) for k, v in checks.items()}
     blocking = {k: _deploy_blocking(k, v) for k, v in checks.items()}
+
+    # --- accepted findings -----------------------------------------------------
+    # Subtract owned, time-boxed acceptances from what FAILS the run, while
+    # leaving every finding in the report. A run that fails on the same two
+    # known findings every night cannot signal a regression, because nobody can
+    # tell the new red from yesterday's red.
+    accepted_map = acceptances(policy)
+    accepted, unaccepted, accepted_detail = {}, {}, []
+    for cid, items in checks.items():
+        by_class: dict[str, int] = defaultdict(int)
+        for it in items:
+            by_class[_finding_class(cid, it)] += 1
+        acc_total = 0
+        for klass, n in sorted(by_class.items()):
+            rule = accepted_map.get((cid, klass)) or accepted_map.get((cid, "all"))
+            if not rule:
+                continue
+            covered_n = min(n, rule["max"])
+            acc_total += covered_n
+            accepted_detail.append({
+                "check": cid, "class": klass, "findings": n,
+                "accepted": covered_n, "over_budget": max(0, n - rule["max"]),
+                "exception": rule["exception"], "owner": rule["owner"],
+                "expires": rule["expires"],
+            })
+        accepted[cid] = acc_total
+        unaccepted[cid] = max(0, counts[cid] - acc_total)
     total = assignments["summary"]["total"]
     alertable = assignments["summary"]["alertable"]
     covered = alertable - len(checks["C1"])
@@ -348,11 +425,17 @@ def run_checks(inventory, assignments, monitors, slos, policy) -> dict:
             "monitors_managed": len(managed),
             "monitors_paging": sum(1 for t in monitor_tags.values() if t.get("pages") == "true"),
             "check_counts": counts,
+            "accepted_counts": accepted,
+            "unaccepted_counts": unaccepted,
             "deploy_blocking_counts": blocking,
-            "pass": all(v == 0 for v in counts.values()),
-            "deploy_pass": all(v == 0 for v in blocking.values()),
+            # `pass` now means "nothing unexpected": every finding is either
+            # absent or covered by a live, owned, expiring acceptance.
+            "pass": all(v == 0 for v in unaccepted.values()),
+            "deploy_pass": all(
+                max(0, blocking[c] - accepted.get(c, 0)) == 0 for c in blocking),
         },
         "checks": {k: v[:200] for k, v in checks.items()},
+        "accepted_findings": accepted_detail,
         "observe_only_sample": observe_only[:50],
     }
 
@@ -368,7 +451,8 @@ def to_markdown(report: dict) -> str:
         f"({s['resources_covered']}/{s['resources_alertable']})",
         f"- Monitors: {s['monitors_total']} total, {s['monitors_managed']} Terraform-managed, "
         f"{s['monitors_paging']} able to page",
-        f"- Governance gate (all checks): **{'PASS' if s['pass'] else 'FAIL'}**",
+        f"- Governance gate (all checks, minus accepted): "
+        f"**{'PASS' if s['pass'] else 'FAIL'}**",
         f"- Deploy gate (platform-integrity checks only): "
         f"**{'PASS' if s.get('deploy_pass', s['pass']) else 'FAIL'}**",
         "",
@@ -388,6 +472,20 @@ def to_markdown(report: dict) -> str:
             gate = "blocks"
         lines.append(f"| {cid} {title} | {n}{mark} | {gate} |")
     lines.append("")
+    acc = report.get("accepted_findings") or []
+    if acc:
+        lines += ["## Accepted findings",
+                  "",
+                  "Known, owned and time-boxed. They are reported but do not fail the run; "
+                  "anything beyond the accepted count does.",
+                  "",
+                  "| Check | Class | Findings | Accepted | Over budget | Exception | Owner | Expires |",
+                  "|---|---|---|---|---|---|---|---|"]
+        for a in acc:
+            lines.append(
+                f"| {a['check']} | {a['class']} | {a['findings']} | {a['accepted']} | "
+                f"{a['over_budget']} | {a['exception']} | {a['owner']} | {a['expires']} |")
+        lines.append("")
     for cid, items in report["checks"].items():
         if not items:
             continue
