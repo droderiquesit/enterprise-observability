@@ -57,11 +57,14 @@ def test_tier3_is_observe_only_with_a_recorded_reason():
     assert a["observe_only_reason"], "observe_only must always carry its reason"
 
 
-def test_dev_never_alerts():
+def test_dev_is_capped_at_the_baseline_band():
+    """Dev alerts now, but a tier0 service in dev is graded exactly like a
+    tier0 service in QA: baseline packs only. The environment clamp, not the
+    tier, decides."""
     a = _assign([_res(env="dev", tags={"env": "dev", "team": "sre", "tier": "tier0",
                                        "service_archetype": "api"})])["assignments"][0]
-    assert a["alert_band"] == "none"
-    assert "development environment" in a["observe_only_reason"]
+    assert a["alert_band"] == "baseline"
+    assert a["monitoring_profile"] == "baseline"
 
 
 def test_qa_is_capped_at_the_baseline_band():

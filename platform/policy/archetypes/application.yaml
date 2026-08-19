@@ -26,7 +26,7 @@ archetypes:
     thresholds: { critical: 3, warning: 1 }
     group_by: [service, check_id]
     evaluation_window: last_10m
-    envs: [prod, stage, qa]
+    envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-web-availability
     runbook: web-synthetic-availability
@@ -171,7 +171,7 @@ archetypes:
     thresholds: { critical: 1 }
     group_by: [service]
     evaluation_window: last_30m
-    envs: [prod, stage, qa]
+    envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-worker-throughput
     runbook: worker-stalled
@@ -257,7 +257,7 @@ archetypes:
     thresholds: { critical: 1 }
     group_by: [service]
     evaluation_window: last_30m
-    envs: [prod, stage, qa]
+    envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-app-availability
     runbook: app-telemetry-loss

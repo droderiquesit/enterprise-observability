@@ -28,7 +28,7 @@ It fires when the signal deviated from its own learned baseline by more than the
 Condition as deployed:
 
 ```
-avg(last_30m):anomalies(avg:azure.servicebus_namespaces.activemessages{__SCOPE__} by {namespace,entity}, 'agile', 3, direction='above') >= 1
+avg(last_30m):anomalies(avg:azure.servicebus_namespaces.count_of_active_messages_in_a_queue_topic{__SCOPE__} by {namespace,entity}, 'agile', 3, direction='above') >= 1
 ```
 
 Thresholds: `critical` = 1.0.
@@ -68,7 +68,7 @@ Most frequent first.
 
 ## Metrics, logs, traces, dashboards and dependencies
 
-**Metrics.** `azure.servicebus_namespaces.activemessages`.
+**Metrics.** `azure.servicebus_namespaces.count_of_active_messages_in_a_queue_topic`.
 
 **Logs.** `service:messaging-platform env:prod status:error`
 

@@ -112,6 +112,8 @@ def resolve_priority(policy: dict, impact_class: str, band: str, env: str) -> st
 def resolve_notification_profile(policy: dict, domain: str, env: str, band: str) -> str:
     if domain == "security":
         return "security_operational"
+    if env == "dev":
+        return "nonprod_dev"
     if env in ("qa", "stage"):
         return "nonprod_standard"
     return {

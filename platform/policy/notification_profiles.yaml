@@ -6,7 +6,7 @@
 # and Datadog monitor notification rules (modules/notification_rules) resolve
 # those tags to destinations. A destination change touches zero monitors.
 #
-# There are SIX notification profiles for the entire enterprise. A team never
+# There are SEVEN notification profiles for the entire enterprise. A team never
 # picks one — it is derived from environment × band × domain overlay.
 # =============================================================================
 version: 2
@@ -23,7 +23,7 @@ destinations:
   major_incident_channel: "@teams-major-incident"
   release_channel: "@teams-release-train"
 
-# --- The six profiles --------------------------------------------------------
+# --- The seven profiles --------------------------------------------------------
 notification_profiles:
 
   production_critical:
@@ -73,6 +73,19 @@ notification_profiles:
     routes:
       P3: { page: false, servicenow: task_p3, teams: team_channel_env_suffixed }
       P4: { page: false, servicenow: none, teams: low_noise_channel }
+
+  nonprod_dev:
+    display: Development
+    provisioned: true
+    applies_to_teams: all
+    selected_when: "env == dev"
+    description: >
+      Development. The team's own dev channel and nothing else — no ServiceNow
+      record, no incident, no page, no error-budget impact. A dev alert is a
+      message to the person who just deployed, and it is deliberately the only
+      profile in the platform with a single destination.
+    routes:
+      P4: { page: false, servicenow: none, teams: team_channel_env_suffixed }
 
   security_operational:
     display: Security Operational

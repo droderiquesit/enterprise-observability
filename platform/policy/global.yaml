@@ -175,7 +175,16 @@ cardinality:
   # a cost problem; paging count is a burnout problem. Both are asserted at
   # plan time so growth is a reviewed decision, not a drift.
   max_paging_monitors: 90
-  max_p1_monitors: 70
+  # RAISED 70 → 85, deliberately, when the catalog took on the technologies the
+  # estate actually runs: Azure SQL, on-premises SQL Server (Always On), Cosmos
+  # DB, Snowflake, Front Door, Traffic Manager, ExpressRoute and Azure Firewall.
+  # Each of those contributed exactly ONE unambiguous-outage pattern — the
+  # database has no primary, the circuit's BGP session is down, the origin pool
+  # is empty — and nothing else from those catalogs pages at all. Nine new
+  # patterns against a 73-pattern estate is the honest cost of covering nine
+  # technologies that previously had no coverage; the alternative was to leave
+  # a SQL Server availability group with no primary replica unpaged.
+  max_p1_monitors: 85
   forbidden_group_keys:
     [host_ip, container_id, pod_name, request_id, trace_id, path, url,
      user_id, session_id, instance_id, uuid]

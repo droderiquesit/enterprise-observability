@@ -1,0 +1,360 @@
+# =============================================================================
+# MONITOR ARCHETYPE CATALOG — AZURE EDGE AND API DELIVERY
+#   Front Door · CDN · API Management · Traffic Manager
+#
+# These four sit in front of everything else, which has two consequences:
+#
+#   1. They fail CUSTOMER-FIRST. A dead origin pool or a Traffic Manager
+#      endpoint marked down is a customer outage before any application
+#      monitor moves, because the request never reaches the application.
+#   2. They are the only place where "the internet's view" is measurable.
+#      Application-side monitors cannot see a request that Front Door rejected.
+#
+# TELEMETRY NOTE — Front Door Standard/Premium and CDN are the same Azure
+# resource provider (Microsoft.Cdn/profiles) and publish a much thinner metric
+# set than Front Door Classic. Response-code ratios and cache behaviour for
+# those SKUs come from access LOGS, not metrics; that gap is recorded in
+# docs/telemetry-gaps.md rather than papered over with a metric that does not
+# exist for the SKU in use.
+# =============================================================================
+version: 2
+domain: cloud
+
+archetypes:
+
+  # --- AZURE FRONT DOOR -----------------------------------------------------
+  frontdoor-origin-unhealthy:
+    title: Front Door Origin Pool Unhealthy
+    signal: availability
+    impact_class: customer_impact
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_front_door
+    selector: "resource_type:azure_front_door"
+    query: "min(last_10m):avg:azure.network_frontdoors.backend_health_percentage{__SCOPE__} by {subscription_name,name} < 50"
+    thresholds: { critical: 50, warning: 80 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_10m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-cloud-platform-availability
+    runbook: frontdoor-origin-unhealthy
+    workflow: diag-azure-resource
+    failure_domain: edge
+    rationale_fixed_threshold: >
+      Below 50% of origins healthy, the surviving origins are carrying more
+      than double their designed load and the pool is one failure from
+      serving nothing. Above 80% is a warning because redundancy is gone but
+      capacity is not.
+
+  frontdoor-total-latency-degradation:
+    title: Front Door Request Latency Degradation
+    signal: latency
+    impact_class: degradation
+    detection: rate_of_change
+    monitor_type: query alert
+    resource_type: azure_front_door
+    selector: "resource_type:azure_front_door"
+    query: "pct_change(avg(last_15m),last_4h):avg:azure.network_frontdoors.total_latency{__SCOPE__} by {subscription_name,name} > 50"
+    thresholds: { critical: 50, warning: 25 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-api-latency
+    runbook: frontdoor-total-latency-degradation
+    workflow: diag-azure-resource
+    failure_domain: edge
+    notes: >
+      Total latency is measured edge-to-client, so it includes everything the
+      customer experiences. Compare against backend_request_latency to split
+      "our origin is slow" from "the edge or the network is slow".
+
+  frontdoor-backend-latency-anomaly:
+    title: Front Door Origin Latency Anomaly
+    signal: latency
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: azure_front_door
+    selector: "resource_type:azure_front_door"
+    query: "avg(last_15m):anomalies(avg:azure.network_frontdoors.backend_request_latency{__SCOPE__} by {subscription_name,name}, 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-api-latency
+    runbook: frontdoor-backend-latency-anomaly
+    workflow: diag-azure-resource
+    failure_domain: edge
+
+  frontdoor-traffic-anomaly:
+    title: Front Door Traffic Anomaly
+    signal: throughput
+    impact_class: risk
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: azure_front_door
+    selector: "resource_type:azure_front_door"
+    query: "avg(last_30m):anomalies(sum:azure.network_frontdoors.request_count{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-cloud-platform-availability
+    runbook: frontdoor-traffic-anomaly
+    workflow: diag-azure-resource
+    failure_domain: edge
+    notes: >
+      Two-sided. A collapse is usually DNS or a client-side deploy; a surge is
+      usually a bot, a retry storm, or a genuine event the capacity plan has
+      not heard about.
+
+  frontdoor-waf-block-surge:
+    title: Front Door WAF Block Surge
+    signal: auth_anomaly
+    impact_class: risk
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: azure_front_door
+    selector: "resource_type:azure_front_door"
+    query: "avg(last_30m):anomalies(sum:azure.network_frontdoors.web_application_firewall_request_count{__SCOPE__,action:block} by {subscription_name,name}.as_rate(), 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-security-telemetry
+    runbook: frontdoor-waf-block-surge
+    workflow: diag-security-control
+    failure_domain: edge
+    notes: >
+      A block surge is either an attack or a WAF rule that just started
+      rejecting legitimate traffic after a deployment. The second is far more
+      common and far more damaging, which is why this is not routed as a
+      security incident by default.
+
+  # --- AZURE CDN ------------------------------------------------------------
+  cdn-cache-hit-ratio-degradation:
+    title: CDN Cache Hit Ratio Degradation
+    signal: saturation
+    impact_class: degradation
+    detection: rate_of_change
+    monitor_type: query alert
+    resource_type: azure_cdn
+    selector: "resource_type:azure_cdn"
+    query: "pct_change(avg(last_1h),last_1d):avg:azure.cdn_profiles.byte_hit_ratio{__SCOPE__} by {subscription_name,name} < -25"
+    thresholds: { critical: -25, warning: -15 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_1h
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-cloud-platform-availability
+    runbook: cdn-cache-hit-ratio-degradation
+    workflow: diag-azure-resource
+    failure_domain: edge
+    notes: >
+      A hit-ratio collapse moves load to the origin without any monitor on the
+      origin moving first — it is the earliest warning that a cache-control
+      header change or a purge has just turned the CDN into a proxy.
+
+  # --- AZURE API MANAGEMENT -------------------------------------------------
+  apim-capacity-saturation:
+    title: API Management Capacity Saturation Forecast
+    signal: saturation
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: azure_apim
+    selector: "resource_type:azure_apim"
+    query: "max(next_12h):forecast(avg:azure.apimanagement_service.capacity{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='30m', history='1d') > 80"
+    thresholds: { critical: 80, warning: 70 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: next_12h
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-api-availability
+    runbook: apim-capacity-saturation
+    workflow: auto-capacity-ticket
+    failure_domain: edge
+    notes: >
+      Capacity is Azure's own composite of CPU, memory and queue depth for the
+      gateway. Microsoft's guidance is to scale before sustained 70-80%, which
+      is why this forecasts rather than alerts on the current value.
+
+  apim-failed-request-anomaly:
+    title: API Management Failed Request Anomaly
+    signal: error_rate
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: azure_apim
+    selector: "resource_type:azure_apim"
+    query: "avg(last_15m):anomalies(sum:azure.apimanagement_service.failed_requests{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-api-availability
+    runbook: apim-failed-request-anomaly
+    workflow: diag-azure-resource
+    failure_domain: edge
+    notes: >
+      Failed requests are gateway-attributed 5xx. Client 4xx arrive as
+      `other_requests` and are deliberately not alerted on here — a caller
+      sending bad requests is not an outage of the gateway.
+
+  apim-gateway-latency-degradation:
+    title: API Management Gateway Latency Degradation
+    signal: latency
+    impact_class: degradation
+    detection: rate_of_change
+    monitor_type: query alert
+    resource_type: azure_apim
+    selector: "resource_type:azure_apim"
+    query: "pct_change(avg(last_15m),last_4h):avg:azure.apimanagement_service.overall_duration_of_gateway_requests{__SCOPE__} by {subscription_name,name} > 50"
+    thresholds: { critical: 50, warning: 25 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-api-latency
+    runbook: apim-gateway-latency-degradation
+    workflow: diag-azure-resource
+    failure_domain: edge
+
+  apim-backend-latency-degradation:
+    title: API Management Backend Latency Degradation
+    signal: latency
+    impact_class: degradation
+    detection: rate_of_change
+    monitor_type: query alert
+    resource_type: azure_apim
+    selector: "resource_type:azure_apim"
+    query: "pct_change(avg(last_15m),last_4h):avg:azure.apimanagement_service.duration_of_backend_requests{__SCOPE__} by {subscription_name,name} > 50"
+    thresholds: { critical: 50, warning: 25 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-api-latency
+    runbook: apim-backend-latency-degradation
+    workflow: diag-dependency
+    failure_domain: edge
+    notes: >
+      Deliberately paired with apim-gateway-latency-degradation. Gateway slow
+      and backend flat is a policy or capacity problem inside APIM; both slow
+      together is the backend, and the investigation moves to the service.
+
+  apim-connectivity-degraded:
+    title: API Management Dependency Connectivity Degraded
+    signal: availability
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_apim
+    selector: "resource_type:azure_apim"
+    query: "min(last_15m):min:azure.apimanagement_service.network_connectivity_status_of_resources{__SCOPE__} by {subscription_name,name} < 1"
+    thresholds: { critical: 1 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-api-availability
+    runbook: apim-connectivity-degraded
+    workflow: diag-network
+    failure_domain: edge
+    rationale_fixed_threshold: >
+      Azure reports this as reachable (1) or not (0) per required dependency —
+      storage, SQL, Key Vault. Anything below 1 means the gateway has lost a
+      dependency it needs to start, configure or renew certificates, which
+      surfaces later as a failure nobody connects back to networking.
+
+  apim-unauthorized-spike:
+    title: API Management Unauthorized Request Spike
+    signal: auth_anomaly
+    impact_class: risk
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: azure_apim
+    selector: "resource_type:azure_apim"
+    query: "avg(last_30m):anomalies(sum:azure.apimanagement_service.unauthorized_requests{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-security-telemetry
+    runbook: apim-unauthorized-spike
+    workflow: diag-security-control
+    failure_domain: edge
+    notes: >
+      Most unauthorized spikes are an expired subscription key or a rotated
+      credential a consumer has not picked up — an integration incident that
+      looks like a security one.
+
+  # --- AZURE TRAFFIC MANAGER ------------------------------------------------
+  trafficmanager-endpoint-down:
+    title: Traffic Manager Endpoint Down
+    signal: availability
+    impact_class: customer_impact
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_traffic_manager
+    selector: "resource_type:azure_traffic_manager"
+    query: "min(last_10m):min:azure.network_trafficmanagerprofiles.probe_agent_current_endpoint_state_by_profile_resource_id{__SCOPE__} by {name,endpoint_name} < 1"
+    thresholds: { critical: 1 }
+    group_by: [name, endpoint_name]
+    notify_by: [name]
+    evaluation_window: last_10m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-cloud-platform-availability
+    runbook: trafficmanager-endpoint-down
+    workflow: diag-network
+    failure_domain: edge
+    rationale_fixed_threshold: >
+      Traffic Manager publishes endpoint probe state as 1 (up) or 0 (down).
+      A down endpoint is removed from DNS responses, so traffic silently
+      concentrates on the survivors — capacity that was designed to be shared
+      is now carried by fewer regions.
+
+  trafficmanager-traffic-distribution-anomaly:
+    title: Traffic Manager Traffic Distribution Anomaly
+    signal: throughput
+    impact_class: risk
+    detection: outlier
+    monitor_type: query alert
+    resource_type: azure_traffic_manager
+    selector: "resource_type:azure_traffic_manager"
+    query: "avg(last_1h):outliers(sum:azure.network_trafficmanagerprofiles.qps_by_endpoint{__SCOPE__} by {name,endpoint_name}.as_rate(), 'DBSCAN', 3) > 0"
+    thresholds: { critical: 0 }
+    group_by: [name, endpoint_name]
+    notify_by: [name]
+    evaluation_window: last_1h
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-cloud-platform-availability
+    runbook: trafficmanager-traffic-distribution-anomaly
+    workflow: diag-network
+    failure_domain: edge
+    notes: >
+      Endpoints in one profile should receive comparable shares under weighted
+      or performance routing. An endpoint diverging from its peers means either
+      a routing-method change or a regional DNS problem that has not yet
+      escalated to a failed probe.

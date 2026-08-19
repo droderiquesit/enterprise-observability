@@ -1,0 +1,377 @@
+# =============================================================================
+# MONITOR ARCHETYPE CATALOG — AZURE CONNECTIVITY AND NETWORK EDGE
+#   ExpressRoute · VPN Gateway · Azure Firewall · NSG · Private Endpoint / DNS
+#
+# THE NOISE RULE FOR NETWORK MONITORING. Networks drop packets, deny traffic
+# and reset connections continuously as part of working correctly. Alerting on
+# raw counts produces a pager that is always on and therefore always ignored.
+# Every archetype here alerts on one of three things instead:
+#
+#   * a STATE that is binary and operationally meaningful (BGP session down,
+#     firewall unhealthy, endpoint probe failed)
+#   * a RESOURCE running out (SNAT ports, circuit bandwidth)
+#   * a DEVIATION from the link's own learned baseline (denied-flow anomaly)
+#
+# Nothing here pages on "traffic was denied" — that is the firewall doing its
+# job. It pages when the firewall cannot do its job.
+# =============================================================================
+version: 2
+domain: network
+
+archetypes:
+
+  # --- EXPRESSROUTE ---------------------------------------------------------
+  expressroute-bgp-down:
+    title: ExpressRoute BGP Session Down
+    signal: availability
+    impact_class: customer_impact
+    detection: threshold
+    monitor_type: query alert
+    resource_type: network_circuit
+    selector: "resource_type:azure_expressroute"
+    query: "min(last_10m):min:azure.network_expressroutecircuits.bgp_availability{__SCOPE__} by {name,peering_type} < 100"
+    thresholds: { critical: 100 }
+    group_by: [name, peering_type]
+    notify_by: [name]
+    evaluation_window: last_10m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-network-availability
+    runbook: expressroute-bgp-down
+    workflow: diag-network
+    failure_domain: connectivity
+    rationale_fixed_threshold: >
+      BGP availability is published per peering as a percentage where anything
+      below 100 means a session on one of the redundant links is down. The pair
+      exists precisely so that one failure is survivable — and precisely so
+      that one failure must be fixed before the second one arrives.
+
+  expressroute-arp-degraded:
+    title: ExpressRoute ARP Availability Degraded
+    signal: availability
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: network_circuit
+    selector: "resource_type:azure_expressroute"
+    query: "min(last_15m):min:azure.network_expressroutecircuits.arp_availability{__SCOPE__} by {name,peering_type} < 100"
+    thresholds: { critical: 100 }
+    group_by: [name, peering_type]
+    notify_by: [name]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-network-availability
+    runbook: expressroute-arp-degraded
+    workflow: diag-network
+    failure_domain: connectivity
+    rationale_fixed_threshold: >
+      ARP resolution failing on a peering is a layer-2 fault that usually
+      precedes the BGP session dropping. Catching it at 100% gives the network
+      team the window between "the link is sick" and "the link is gone".
+
+  expressroute-bandwidth-saturation:
+    title: ExpressRoute Circuit Bandwidth Saturation Forecast
+    signal: capacity
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: network_circuit
+    selector: "resource_type:azure_expressroute"
+    query: "max(next_1w):forecast(avg:azure.network_expressroutecircuits.egress_bandwidth_utilization{__SCOPE__} by {name}, 'linear', 1, interval='1h', history='1w') > 80"
+    thresholds: { critical: 80, warning: 70 }
+    group_by: [name]
+    evaluation_window: next_1w
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-network-availability
+    runbook: expressroute-bandwidth-saturation
+    workflow: auto-capacity-ticket
+    failure_domain: connectivity
+    notes: >
+      Circuit bandwidth upgrades are a procurement exercise with a lead time
+      measured in weeks, which is why this forecasts a week ahead rather than
+      alerting when the circuit is already full.
+
+  expressroute-qos-drops:
+    title: ExpressRoute QoS Packet Drops
+    signal: error_rate
+    impact_class: degradation
+    detection: rate_of_change
+    monitor_type: query alert
+    resource_type: network_circuit
+    selector: "resource_type:azure_expressroute"
+    query: "pct_change(avg(last_15m),last_4h):avg:azure.network_expressroutecircuits.qos_drop_bits_in_per_second{__SCOPE__} by {name} > 100"
+    thresholds: { critical: 100, warning: 50 }
+    group_by: [name]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-network-availability
+    runbook: expressroute-qos-drops
+    workflow: diag-network
+    failure_domain: connectivity
+    notes: >
+      QoS drops mean the circuit is discarding traffic that exceeded its
+      class allocation. A step change is what matters — a steady low rate is
+      the shaping policy working as designed.
+
+  # --- VPN GATEWAY ----------------------------------------------------------
+  vpn-bgp-peer-down:
+    title: VPN Gateway BGP Peer Down
+    signal: availability
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: network_tunnel
+    selector: "resource_type:azure_vpn_gateway"
+    query: "min(last_10m):min:azure.network_virtualnetworkgateways.bgp_peer_status{__SCOPE__} by {name,bgp_peer_address} < 1"
+    thresholds: { critical: 1 }
+    group_by: [name, bgp_peer_address]
+    notify_by: [name]
+    evaluation_window: last_10m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-network-availability
+    runbook: vpn-bgp-peer-down
+    workflow: diag-network
+    failure_domain: connectivity
+    rationale_fixed_threshold: >
+      BGP peer status is connected (1) or not. Classified as degradation
+      rather than customer impact because in this estate the VPN is the backup
+      path for ExpressRoute — losing it removes resilience, not service.
+
+  vpn-tunnel-packet-drops:
+    title: VPN Tunnel Packet Drop Anomaly
+    signal: error_rate
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: network_tunnel
+    selector: "resource_type:azure_vpn_gateway"
+    query: "avg(last_15m):anomalies(sum:azure.network_virtualnetworkgateways.tunnel_ingress_packet_drop_count{__SCOPE__} by {name,connection_name}.as_rate(), 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [name, connection_name]
+    notify_by: [name]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-network-availability
+    runbook: vpn-tunnel-packet-drops
+    workflow: diag-network
+    failure_domain: connectivity
+
+  vpn-tunnel-bandwidth-anomaly:
+    title: VPN Tunnel Bandwidth Anomaly
+    signal: throughput
+    impact_class: risk
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: network_tunnel
+    selector: "resource_type:azure_vpn_gateway"
+    query: "avg(last_30m):anomalies(avg:azure.network_virtualnetworkgateways.tunnel_average_bandwidth{__SCOPE__} by {name,connection_name}, 'agile', 3) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [name, connection_name]
+    notify_by: [name]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-network-availability
+    runbook: vpn-tunnel-bandwidth-anomaly
+    workflow: diag-network
+    failure_domain: connectivity
+    notes: >
+      Two-sided: bandwidth collapsing on a tunnel that is still "up" is the
+      classic silent VPN failure, where the tunnel negotiates but traffic no
+      longer passes.
+
+  # --- AZURE FIREWALL -------------------------------------------------------
+  firewall-unhealthy:
+    title: Azure Firewall Unhealthy
+    signal: availability
+    impact_class: customer_impact
+    detection: threshold
+    monitor_type: query alert
+    resource_type: network_firewall
+    selector: "resource_type:azure_firewall"
+    query: "min(last_10m):min:azure.network_azurefirewalls.firewall_health{__SCOPE__} by {name} < 100"
+    thresholds: { critical: 100 }
+    group_by: [name]
+    evaluation_window: last_10m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-network-availability
+    runbook: firewall-unhealthy
+    workflow: diag-network
+    failure_domain: connectivity
+    rationale_fixed_threshold: >
+      Azure publishes firewall health as a percentage that is 100 when the
+      firewall can process rules and lower when it cannot — usually SNAT port
+      exhaustion. Everything behind it loses egress, so this is customer
+      impact even though no application metric has moved yet.
+
+  firewall-snat-exhaustion:
+    title: Azure Firewall SNAT Port Exhaustion Forecast
+    signal: capacity
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: network_firewall
+    selector: "resource_type:azure_firewall"
+    query: "max(next_12h):forecast(avg:azure.network_azurefirewalls.snat_port_utilization{__SCOPE__} by {name}, 'linear', 1, interval='15m', history='1d') > 80"
+    thresholds: { critical: 80, warning: 65 }
+    group_by: [name]
+    evaluation_window: next_12h
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-network-availability
+    runbook: firewall-snat-exhaustion
+    workflow: auto-capacity-ticket
+    failure_domain: connectivity
+    notes: >
+      SNAT exhaustion is the single most common Azure Firewall outage and it
+      arrives as "random intermittent connection failures from everything"
+      rather than as a firewall alert. Adding public IPs is the fix and it
+      takes minutes — but only if somebody knows in advance.
+
+  firewall-throughput-saturation:
+    title: Azure Firewall Throughput Saturation Forecast
+    signal: capacity
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: network_firewall
+    selector: "resource_type:azure_firewall"
+    query: "max(next_12h):forecast(avg:azure.network_azurefirewalls.throughput{__SCOPE__} by {name}, 'linear', 1, interval='30m', history='1w') > 0"
+    thresholds: { critical: 0 }
+    group_by: [name]
+    evaluation_window: next_12h
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-network-availability
+    runbook: firewall-throughput-saturation
+    workflow: auto-capacity-ticket
+    failure_domain: connectivity
+    notes: >
+      The SKU ceiling differs between Standard and Premium, so the comparison
+      number lives in the runbook rather than in a threshold that would be
+      wrong for half the estate.
+
+  firewall-denied-traffic-anomaly:
+    title: Azure Firewall Denied Traffic Anomaly
+    signal: control_failure
+    impact_class: risk
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: network_firewall
+    selector: "resource_type:azure_firewall"
+    query: "avg(last_30m):anomalies(sum:azure.network_azurefirewalls.network_rule_hit{__SCOPE__,status:deny} by {name}.as_rate(), 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [name]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-network-availability
+    runbook: firewall-denied-traffic-anomaly
+    workflow: diag-network
+    failure_domain: connectivity
+    notes: >
+      Against the firewall's own baseline, never against a count. A deny surge
+      is far more often a deployment that forgot a rule than an attack, and
+      both need the same first question: what changed?
+
+  # TELEMETRY GAP, IMPLEMENTED. Network security groups publish NO Azure
+  # Monitor metrics at all — NSG observability is flow logs only. The flow logs
+  # are shipped to Datadog and a log-based metric
+  # `acme.network.nsg_denied_flows` is derived from them, which is what this
+  # archetype reads. See docs/telemetry-gaps.md for the pipeline.
+  nsg-denied-flow-anomaly:
+    title: NSG Denied Flow Anomaly
+    signal: control_failure
+    impact_class: risk
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: network_security_group
+    selector: ""
+    query: "avg(last_30m):anomalies(sum:acme.network.nsg_denied_flows{__SCOPE__} by {nsg_name}.as_rate(), 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [nsg_name]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-network-availability
+    runbook: nsg-denied-flow-anomaly
+    workflow: diag-network
+    failure_domain: connectivity
+
+  # --- PRIVATE ENDPOINT / PRIVATE DNS ---------------------------------------
+  private-endpoint-traffic-loss:
+    title: Private Endpoint Traffic Loss
+    signal: availability
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_private_endpoint
+    selector: "resource_type:azure_private_endpoint"
+    query: "sum(last_30m):sum:azure.network_privateendpoints.pe_bytes_in{__SCOPE__} by {name}.as_count() < 1"
+    thresholds: { critical: 1 }
+    group_by: [name]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-network-availability
+    runbook: private-endpoint-traffic-loss
+    workflow: diag-network
+    failure_domain: connectivity
+    rationale_fixed_threshold: >
+      Azure publishes only PEBytesIn/PEBytesOut for a private endpoint — there
+      is no connection-state metric. Zero bytes across thirty minutes on an
+      endpoint that normally carries traffic is the only NATIVE evidence
+      available that the private path has stopped working. The definitive
+      connectivity test is the Synthetic TCP check described in the runbook.
+
+  private-dns-query-anomaly:
+    title: Private DNS Query Volume Anomaly
+    signal: availability
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: dns_zone
+    selector: "resource_type:azure_private_dns"
+    query: "avg(last_30m):anomalies(sum:azure.network_privatednszones.query_volume{__SCOPE__} by {name}.as_rate(), 'agile', 3) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [name]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-network-availability
+    runbook: private-dns-query-anomaly
+    workflow: diag-network
+    failure_domain: connectivity
+    notes: >
+      A private zone whose query volume collapses is usually a virtual-network
+      link that was removed or a resolver change — clients silently fall back
+      to public DNS and reach the wrong endpoint, or nothing at all.
+
+  private-dns-recordset-capacity:
+    title: Private DNS Record Set Capacity
+    signal: capacity
+    impact_class: risk
+    detection: threshold
+    monitor_type: query alert
+    resource_type: dns_zone
+    selector: "resource_type:azure_private_dns"
+    query: "avg(last_1h):max:azure.network_privatednszones.record_set_capacity_utilization{__SCOPE__} by {name} > 80"
+    thresholds: { critical: 80, warning: 70 }
+    group_by: [name]
+    evaluation_window: last_1h
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-network-availability
+    runbook: private-dns-recordset-capacity
+    workflow: auto-capacity-ticket
+    failure_domain: connectivity
+    rationale_fixed_threshold: >
+      Private DNS zones have a hard record-set ceiling. Hitting it means new
+      private endpoints cannot register, and the failure appears as a
+      deployment error in an unrelated team's pipeline.

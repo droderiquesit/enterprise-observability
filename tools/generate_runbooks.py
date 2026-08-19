@@ -385,6 +385,13 @@ def main() -> int:
 
     stale, written = [], 0
     for aid, a in sorted(policy["archetypes"].items()):
+        # An archetype may SHARE another archetype's runbook (api-latency-seasonal
+        # points at api-latency-p99). The registry is keyed by runbook id, so
+        # generating a file per archetype produced orphan markdown that
+        # publish_runbooks.py --check then failed on. Only the archetype that
+        # owns its runbook id writes the file.
+        if a["runbook"] != aid:
+            continue
         path = RUNBOOK_DIR / f"{aid}.md"
         generated = render(policy, aid, a)
         merged = merge(path.read_text(), generated) if path.exists() else generated

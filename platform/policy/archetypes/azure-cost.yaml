@@ -1,0 +1,135 @@
+# =============================================================================
+# MONITOR ARCHETYPE CATALOG — AZURE COST MANAGEMENT
+#
+# Cost anomaly detection alone answers "did spend change?" It never answers
+# the question finance actually asks, which is "are we going to end the month
+# over budget?" This file adds the three layers that do:
+#
+#   1. ANOMALY      spend deviating from its own pattern            (hygiene)
+#   2. UTILISATION  where we are against the budget, 50% and 75%    (hygiene)
+#   3. BREACH       90% and 100% of budget consumed             (degradation)
+#   4. FORECAST     projected to exceed budget before month-end       (risk)
+#   5. BURN RATE    spending faster than the month can absorb         (risk)
+#
+# NOTHING HERE PAGES. Cost is never a customer-impact class in this platform,
+# so the priority matrix cannot produce a P1 from it, and the paging rule
+# requires P1. A subscription crossing a threshold at 03:00 creates a ticket
+# and a Teams message; it does not wake anyone. That is deliberate and it is
+# the reason the dev subscriptions can be monitored at all.
+#
+# ROUTING. Cost data carries the Azure resource tags, so these archetypes group
+# by the dimensions the business actually reviews on — subscription and cost
+# centre — while env, team and criticality come from the standard tag contract
+# and drive the notification profile like every other monitor.
+#
+# TELEMETRY. Layer 1 reads Datadog Cloud Cost Management (`azure.cost.actual`).
+# Layers 2-5 need something CCM does not have: the BUDGET. Azure budgets live
+# in the Consumption API and are not a metric, so a scheduled exporter converts
+# them into `acme.finops.budget_utilization_pct` and
+# `acme.finops.budget_burn_rate` — see docs/telemetry-gaps.md. Inventing a
+# budget number inside a monitor query would have been quicker and would have
+# gone stale the first time finance re-planned.
+# =============================================================================
+version: 2
+domain: cloud
+
+archetypes:
+
+  azure-budget-utilization:
+    title: Azure Budget Utilization
+    signal: cost
+    impact_class: hygiene
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_subscription
+    selector: "resource_type:azure_subscription"
+    query: "max(last_1h):max:acme.finops.budget_utilization_pct{__SCOPE__} by {subscription_name,cost_center} > 75"
+    thresholds: { critical: 75, warning: 50 }
+    group_by: [subscription_name, cost_center]
+    notify_by: [subscription_name]
+    evaluation_window: last_1h
+    envs: [prod, stage, qa]
+    bands: [critical, standard, baseline]
+    slo_id: slo-platform-services
+    runbook: azure-budget-utilization
+    workflow: auto-finops-review
+    failure_domain: finops
+    rationale_fixed_threshold: >
+      50% and 75% of a monthly budget are calendar checkpoints, not statistical
+      ones — they only mean something against the day of the month, which the
+      runbook covers. Informational by design: this is the layer that gives
+      finance and engineering a shared number before anything is wrong.
+
+  azure-budget-breach:
+    title: Azure Budget Breach
+    signal: cost
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_subscription
+    selector: "resource_type:azure_subscription"
+    query: "max(last_1h):max:acme.finops.budget_utilization_pct{__SCOPE__} by {subscription_name,cost_center} > 100"
+    thresholds: { critical: 100, warning: 90 }
+    group_by: [subscription_name, cost_center]
+    notify_by: [subscription_name]
+    evaluation_window: last_1h
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-platform-services
+    runbook: azure-budget-breach
+    workflow: auto-finops-review
+    failure_domain: finops
+    rationale_fixed_threshold: >
+      100% is the budget. It is the one cost number that is not a judgement
+      call. Restricted to production subscriptions on purpose — a development
+      subscription crossing its budget is a conversation, not an incident, and
+      it is covered by azure-budget-utilization.
+
+  azure-cost-forecast-overrun:
+    title: Azure Budget Forecast Overrun
+    signal: cost
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: azure_subscription
+    selector: "resource_type:azure_subscription"
+    query: "max(next_1w):forecast(avg:acme.finops.budget_utilization_pct{__SCOPE__} by {subscription_name,cost_center}, 'linear', 1, interval='1h', history='1w') > 100"
+    thresholds: { critical: 100, warning: 90 }
+    group_by: [subscription_name, cost_center]
+    notify_by: [subscription_name]
+    evaluation_window: next_1w
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-platform-services
+    runbook: azure-cost-forecast-overrun
+    workflow: auto-finops-review
+    failure_domain: finops
+    notes: >
+      The layer that makes cost monitoring actionable instead of retrospective:
+      it fires while there is still a month left to change something, rather
+      than confirming an overrun that already happened.
+
+  azure-cost-burn-rate:
+    title: Azure Budget Burn Rate Excessive
+    signal: cost
+    impact_class: risk
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_subscription
+    selector: "resource_type:azure_subscription"
+    query: "avg(last_6h):avg:acme.finops.budget_burn_rate{__SCOPE__} by {subscription_name,cost_center} > 1.5"
+    thresholds: { critical: 1.5, warning: 1.2 }
+    group_by: [subscription_name, cost_center]
+    notify_by: [subscription_name]
+    evaluation_window: last_6h
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-platform-services
+    runbook: azure-cost-burn-rate
+    workflow: auto-finops-review
+    failure_domain: finops
+    rationale_fixed_threshold: >
+      Burn rate is spend pace divided by the pace that would exactly consume
+      the budget by month-end, so 1.0 is "on plan" by construction. 1.5 means
+      the month ends 50% over if nothing changes — the same multi-window logic
+      the SLO burn-rate alerts use, applied to money.

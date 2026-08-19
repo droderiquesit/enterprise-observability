@@ -20,7 +20,7 @@ archetypes:
     thresholds: { critical: 0.5, warning: 0.2 }
     group_by: [service]
     evaluation_window: last_5m
-    envs: [prod, stage, qa]
+    envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-api-availability
     runbook: api-availability

@@ -159,8 +159,11 @@ def assign(inventory: dict, policy: dict, services: dict | None = None) -> dict:
             profile = tiers[tier]["monitoring_profile"]
             if profile == "observe_only":
                 reason = tiers[tier].get("observe_only_reason", f"{tier} policy")
-            # QA only ever runs the baseline packs, whatever the tier says.
-            if env == "qa" and profile in ("standard", "critical"):
+            # QA and DEV only ever run the baseline packs, whatever the tier
+            # says. Dev used to land on observe_only via `alerting: false`;
+            # now that dev alerts, the same clamp that keeps QA quiet is what
+            # keeps dev to liveness and telemetry health.
+            if env in ("qa", "dev") and profile in ("standard", "critical"):
                 profile = "baseline"
 
         band = profile_to_band[profile]

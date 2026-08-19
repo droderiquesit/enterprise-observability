@@ -118,7 +118,7 @@ service_archetypes:
     display: Datastore
     domain: database
     description: Managed or self-hosted database / cache / search cluster.
-    packs: [datastore-core]
+    packs: [datastore-core, sqlserver-core, cosmos-core, snowflake-core]
     required_telemetry: [dbm_or_integration_metrics]
     default_slis: [availability, latency, replication]
     group_by: [db_instance]
@@ -214,11 +214,37 @@ packs:
     archetypes: [certificate-expiry]
 
   datastore-core:
-    description: Database instance health.
+    description: >
+      Engine-agnostic database health. The engine-specific packs below carry
+      the signals that only exist for one engine — this pack is what EVERY
+      datastore gets regardless of what it runs.
+    archetypes: [db-availability, db-backup-age, db-telemetry-loss]
+
+  sqlserver-core:
+    description: >
+      Microsoft SQL Server (on-premises) and Azure SQL. Blocking and deadlocks
+      are separate members on purpose: they are different failures.
     archetypes:
-      [db-availability, db-query-latency-anomaly, db-connection-saturation,
-       db-replication-lag, db-storage-forecast, db-deadlock-anomaly,
-       db-backup-age]
+      [sqlserver-instance-unreachable, sqlserver-blocking-sessions,
+       sqlserver-deadlock-anomaly, sqlserver-tempdb-space-exhaustion,
+       sqlserver-log-flush-wait-degradation, sqlserver-ag-sync-unhealthy,
+       sqlserver-restore-verification-stale,
+       azuresql-unavailable, azuresql-dtu-saturation,
+       azuresql-connection-failures, azuresql-storage-exhaustion-forecast]
+
+  cosmos-core:
+    description: Azure Cosmos DB — throughput is the failure mode.
+    archetypes:
+      [cosmos-service-availability, cosmos-ru-throttling,
+       cosmos-normalized-ru-saturation, cosmos-server-side-latency-anomaly,
+       cosmos-replication-latency]
+
+  snowflake-core:
+    description: Snowflake analytics platform.
+    archetypes:
+      [snowflake-connectivity-failure, snowflake-query-latency-anomaly,
+       snowflake-warehouse-queueing, snowflake-credit-consumption-anomaly,
+       snowflake-task-failure]
 
   host-core:
     description: Host / VM health.

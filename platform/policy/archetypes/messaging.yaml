@@ -65,7 +65,7 @@ archetypes:
     monitor_type: query alert
     resource_type: queue
     selector: ""
-    query: 'avg(last_30m):avg:azure.servicebus_namespaces.deadletteredmessages{__SCOPE__} by {namespace,entity} > 100'
+    query: 'avg(last_30m):avg:azure.servicebus_namespaces.count_of_dead_lettered_messages_in_a_queue_topic{__SCOPE__} by {namespace,entity} > 100'
     thresholds: { critical: 100, warning: 10 }
     group_by: [namespace, entity]
     evaluation_window: last_30m
@@ -110,7 +110,7 @@ archetypes:
     monitor_type: query alert
     resource_type: queue
     selector: ""
-    query: "avg(last_30m):anomalies(avg:azure.servicebus_namespaces.activemessages{__SCOPE__} by {namespace,entity}, 'agile', 3, direction='above') >= 1"
+    query: "avg(last_30m):anomalies(avg:azure.servicebus_namespaces.count_of_active_messages_in_a_queue_topic{__SCOPE__} by {namespace,entity}, 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
     group_by: [namespace, entity]
     evaluation_window: last_30m
@@ -173,7 +173,7 @@ archetypes:
     monitor_type: query alert
     resource_type: messaging_namespace
     selector: ""
-    query: 'sum(last_15m):sum:azure.servicebus_namespaces.throttledrequests{__SCOPE__} by {namespace}.as_count() > 0'
+    query: 'sum(last_15m):sum:azure.servicebus_namespaces.throttled_requests{__SCOPE__} by {namespace}.as_count() > 0'
     thresholds: { critical: 0 }
     group_by: [namespace]
     evaluation_window: last_15m

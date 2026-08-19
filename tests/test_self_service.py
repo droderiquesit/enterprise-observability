@@ -72,8 +72,14 @@ def test_high_cardinality_grouping_is_rejected(tmp_path):
     assert any("maximum is" in e for e in errs)
 
 
-def test_dev_environment_is_rejected(tmp_path):
-    assert any("does not alert by policy" in e for e in _errs(tmp_path, env=["dev"]))
+def test_dev_environment_is_accepted_but_can_only_be_informational(tmp_path):
+    """dev alerts now. A team may request a dev monitor and it will be created
+    — at P4, on the team's dev Teams channel, with no ServiceNow record and no
+    way to page. The environment ceiling does that, not the request."""
+    assert _errs(tmp_path, env=["dev"]) == []
+    envp = oc.load_policy()["environments"]["dev"]
+    assert envp["priority_ceiling"] == "P4"
+    assert envp["paging_allowed"] is False
 
 
 def test_p1_on_a_low_tier_service_is_rejected(tmp_path):

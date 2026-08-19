@@ -23,7 +23,7 @@ archetypes:
     thresholds: { critical: 1 }
     group_by: [service, job_name]
     evaluation_window: last_2h
-    envs: [prod, stage, qa]
+    envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-batch-completion
     runbook: batch-job-failure

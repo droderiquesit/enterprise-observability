@@ -12,12 +12,13 @@ variable "datadog_validate" {
 variable "environments" {
   description = <<-EOT
     Environments to instantiate. The SAME definitions are used for all of them;
-    platform/policy/environments.yaml decides how loud each one is. `dev` is
-    accepted here but produces no monitors — its policy sets alerting: false.
+    platform/policy/environments.yaml decides how loud each one is. `dev`
+    instantiates the BASELINE band only, at P4, routed to a Teams channel with
+    no ServiceNow path and no possibility of paging.
 
     Promotion is done by narrowing this list, not by copying definitions:
       stage rollout  →  ["stage"]
-      full           →  ["qa", "stage", "prod"]
+      full           →  ["dev", "qa", "stage", "prod"]
 
     Under per-environment state files (ADR-016) the deploy workflow applies
     exactly ONE environment per state file. Environment-agnostic objects —
@@ -25,7 +26,7 @@ variable "environments" {
     contains "prod", so they exist exactly once.
   EOT
   type        = list(string)
-  default     = ["qa", "stage", "prod"]
+  default     = ["dev", "qa", "stage", "prod"]
 
   validation {
     condition     = alltrue([for e in var.environments : contains(["dev", "qa", "stage", "prod"], e)])

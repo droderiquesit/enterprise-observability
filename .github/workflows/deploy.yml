@@ -39,7 +39,7 @@ env:
 jobs:
   # ---------------------------------------------------------------------------
   nonprod:
-    name: "promote → qa, then stage"
+    name: "promote → dev, qa, then stage"
     runs-on: ubuntu-latest
     environment: datadog-nonprod
     # Runs on every push to main and on both dispatch targets — a production
@@ -70,7 +70,7 @@ jobs:
           DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
         run: cd tools && python publish_runbooks.py --write-registry
 
-      - name: Plan & apply, one environment at a time — qa first, stage only if qa applied
+      - name: Plan & apply, one environment at a time — dev, then qa, then stage
         env:
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
           DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
@@ -82,7 +82,7 @@ jobs:
           # State is persisted even when apply FAILS: a partial apply has
           # already created real resources, and losing the state that tracks
           # them with the runner turns a red apply into an orphan fleet.
-          for env in qa stage; do
+          for env in dev qa stage; do
             ../../tools/tfstate-git.sh restore coverage "$env"
             terraform plan  -input=false -var "environments=[\"$env\"]" -out=tfplan
             rc=0; terraform apply -input=false tfplan || rc=$?

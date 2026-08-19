@@ -25,7 +25,7 @@ archetypes:
     thresholds: { critical: 1 }
     group_by: [subscription_name, resource_group, name]
     evaluation_window: last_10m
-    envs: [prod, stage, qa]
+    envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-cloud-platform-availability
     runbook: azure-appservice-unavailable
@@ -382,9 +382,13 @@ archetypes:
     monitor_type: query alert
     resource_type: azure_subscription
     selector: "resource_type:azure_subscription"
-    query: "avg(last_1d):anomalies(sum:azure.usage.cost{__SCOPE__} by {subscription_name}.as_rate(), 'basic', 3, direction='above') >= 1"
+    query: "avg(last_1d):anomalies(sum:azure.cost.actual{__SCOPE__} by {subscriptionname}.as_rate(), 'basic', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
-    group_by: [subscription_name]
+    # Cost data comes from Cloud Cost Management, whose subscription tag is
+    # `subscriptionname` — not the `subscription_name` that Azure Monitor
+    # resource metrics carry. The previous query grouped by the resource-metric
+    # tag on a cost metric that did not exist at all (`azure.usage.cost`).
+    group_by: [subscriptionname]
     evaluation_window: last_1d
     envs: [prod]
     bands: [critical, standard]

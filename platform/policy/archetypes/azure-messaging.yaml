@@ -1,0 +1,252 @@
+# =============================================================================
+# MONITOR ARCHETYPE CATALOG — AZURE SERVICE BUS AND EVENT HUBS
+#
+# Telemetry source: the Azure Monitor integration. Metric names here are the
+# verbatim Datadog names, which are NOT the obvious ones — Service Bus queue
+# depth is `count_of_active_messages_in_a_queue_topic`, not `activemessages`.
+# Three archetypes in messaging.yaml were written against the obvious-looking
+# names and therefore never matched a series; they are corrected in that file.
+#
+# THE BACKLOG RULE. A queue containing messages is a queue doing its job. None
+# of these archetypes alert on depth alone. They alert on:
+#   * depth deviating from its own learned baseline (queue-depth-anomaly, in
+#     messaging.yaml), or
+#   * messages that have stopped being consumable at all (dead-letter), or
+#   * the broker refusing work (throttling, quota, server errors), or
+#   * the age of the oldest message, which is the only depth-independent
+#     measure of whether consumers are keeping up.
+# =============================================================================
+version: 2
+domain: messaging
+
+archetypes:
+
+  # --- AZURE SERVICE BUS ----------------------------------------------------
+  servicebus-server-errors:
+    title: Service Bus Server Error Anomaly
+    signal: error_rate
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: messaging_namespace
+    selector: ""
+    query: "avg(last_15m):anomalies(sum:azure.servicebus_namespaces.server_errors{__SCOPE__} by {namespace}.as_rate(), 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [namespace]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-messaging-delivery
+    runbook: servicebus-server-errors
+    workflow: diag-messaging
+    failure_domain: messaging
+    notes: >
+      Server errors are the broker's fault, not the client's — distinct from
+      user_errors, which are malformed requests and belong to the publisher.
+
+  servicebus-publish-volume-collapse:
+    title: Service Bus Incoming Message Collapse
+    signal: throughput
+    impact_class: degradation
+    detection: rate_of_change
+    monitor_type: query alert
+    resource_type: messaging_namespace
+    selector: ""
+    query: "pct_change(avg(last_15m),last_4h):sum:azure.servicebus_namespaces.incoming_messages{__SCOPE__} by {namespace}.as_rate() < -70"
+    thresholds: { critical: -70, warning: -50 }
+    group_by: [namespace]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-messaging-delivery
+    runbook: servicebus-publish-volume-collapse
+    workflow: diag-messaging
+    failure_domain: messaging
+    notes: >
+      A queue that stops RECEIVING is as broken as one that stops draining, and
+      it is invisible to every depth-based monitor — depth simply goes to zero,
+      which looks healthy.
+
+  servicebus-namespace-cpu-saturation:
+    title: Service Bus Namespace CPU Saturation Forecast
+    signal: saturation
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: messaging_namespace
+    selector: ""
+    query: "max(next_12h):forecast(avg:azure.servicebus_namespaces.cpu_per_namespace{__SCOPE__} by {namespace}, 'linear', 1, interval='30m', history='1d') > 80"
+    thresholds: { critical: 80, warning: 70 }
+    group_by: [namespace]
+    evaluation_window: next_12h
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-messaging-delivery
+    runbook: servicebus-namespace-cpu-saturation
+    workflow: auto-capacity-ticket
+    failure_domain: messaging
+    notes: >
+      Premium namespaces only — CPU per namespace is not published for
+      Standard tier, where the equivalent control is throttling.
+
+  # TELEMETRY GAP, IMPLEMENTED. Azure publishes queue DEPTH but never message
+  # AGE, and depth cannot distinguish "1000 messages arriving fast and draining
+  # fast" from "1000 messages nobody has touched in an hour". The consumer
+  # emits `acme.messaging.oldest_message_age_seconds` from the enqueued time of
+  # the message it is currently handling — see docs/telemetry-gaps.md.
+  servicebus-message-age:
+    title: Service Bus Oldest Message Age
+    signal: freshness
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: queue
+    selector: ""
+    query: "max(last_15m):max:acme.messaging.oldest_message_age_seconds{__SCOPE__} by {namespace,entity} > 900"
+    thresholds: { critical: 900, warning: 300 }
+    group_by: [namespace, entity]
+    notify_by: [namespace]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-messaging-delivery
+    runbook: servicebus-message-age
+    workflow: diag-messaging
+    failure_domain: messaging
+    rationale_fixed_threshold: >
+      15 minutes is the delivery commitment in slo-messaging-delivery. Age is
+      the only backlog measure that means the same thing on a queue that
+      handles ten messages a day and one that handles ten thousand a minute.
+
+  # --- AZURE EVENT HUBS -----------------------------------------------------
+  eventhub-throughput-exhaustion:
+    title: Event Hubs Throughput Unit Exhaustion
+    signal: saturation
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: stream
+    selector: ""
+    query: "sum(last_15m):sum:azure.eventhub_namespaces.quota_exceeded_errors{__SCOPE__} by {namespace}.as_count() > 0"
+    thresholds: { critical: 0 }
+    group_by: [namespace]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-messaging-delivery
+    runbook: eventhub-throughput-exhaustion
+    workflow: diag-messaging
+    failure_domain: messaging
+    rationale_fixed_threshold: >
+      A quota-exceeded error is Event Hubs rejecting a publish because the
+      namespace is out of throughput units. The producer either retries (adding
+      latency) or drops the event. Zero is the only correct number.
+
+  eventhub-server-busy-throttling:
+    title: Event Hubs Server Busy Throttling
+    signal: saturation
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: stream
+    selector: ""
+    query: "avg(last_15m):anomalies(sum:azure.eventhub_namespaces.server_busy_errors{__SCOPE__} by {namespace}.as_rate(), 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [namespace]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-messaging-delivery
+    runbook: eventhub-server-busy-throttling
+    workflow: diag-messaging
+    failure_domain: messaging
+
+  eventhub-server-errors:
+    title: Event Hubs Server Error Anomaly
+    signal: error_rate
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: stream
+    selector: ""
+    query: "avg(last_15m):anomalies(sum:azure.eventhub_namespaces.internal_server_errors{__SCOPE__} by {namespace}.as_rate(), 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [namespace]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-messaging-delivery
+    runbook: eventhub-server-errors
+    workflow: diag-messaging
+    failure_domain: messaging
+
+  eventhub-ingress-anomaly:
+    title: Event Hubs Incoming Event Anomaly
+    signal: throughput
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: stream
+    selector: ""
+    query: "avg(last_30m):anomalies(sum:azure.eventhub_namespaces.incoming_messages{__SCOPE__} by {namespace}.as_rate(), 'agile', 3) >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [namespace]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-messaging-delivery
+    runbook: eventhub-ingress-anomaly
+    workflow: diag-messaging
+    failure_domain: messaging
+    notes: >
+      Two-sided on purpose: a collapse means producers stopped, a spike means
+      something is replaying or looping. Both are worth a look; neither is
+      inherently an outage.
+
+  eventhub-egress-stalled:
+    title: Event Hubs Outgoing Event Stall
+    signal: availability
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: stream
+    selector: ""
+    query: "sum(last_30m):sum:azure.eventhub_namespaces.outgoing_messages{__SCOPE__} by {namespace}.as_count() < 1"
+    thresholds: { critical: 1 }
+    group_by: [namespace]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-messaging-delivery
+    runbook: eventhub-egress-stalled
+    workflow: diag-messaging
+    failure_domain: messaging
+    rationale_fixed_threshold: >
+      Zero events read across thirty minutes on a namespace that is receiving
+      events means every consumer group has stopped. This is the closest
+      NATIVE signal to consumer lag that Azure publishes — see the runbook and
+      docs/telemetry-gaps.md for why real lag needs the checkpoint-based custom
+      metric that consumer-lag-forecast uses.
+
+  eventhub-capture-backlog:
+    title: Event Hubs Capture Backlog
+    signal: freshness
+    impact_class: risk
+    detection: threshold
+    monitor_type: query alert
+    resource_type: stream
+    selector: ""
+    query: "avg(last_30m):avg:azure.eventhub_namespaces.capture_backlog{__SCOPE__} by {namespace} > 0"
+    thresholds: { critical: 0 }
+    group_by: [namespace]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-data-freshness
+    runbook: eventhub-capture-backlog
+    workflow: diag-data-pipeline
+    failure_domain: messaging
+    rationale_fixed_threshold: >
+      Capture writes events to storage on a fixed window. A sustained backlog
+      means the archive is falling behind the stream, so the durable copy the
+      data platform reads from is incomplete.

@@ -16,7 +16,7 @@
 | Priority | P4 · does not page |
 | SLO | `slo-platform-services` — Shared platform services availability (target 99.9%) |
 | Automation | `auto-finops-review` (fully automatic) |
-| Grouping | `subscription_name` · collapse: none |
+| Grouping | `subscriptionname` · collapse: none |
 | Failure domain | `cloud-finops` |
 
 ## Purpose and monitored condition
@@ -28,12 +28,12 @@ It fires when the signal deviated from its own learned baseline by more than the
 Condition as deployed:
 
 ```
-avg(last_1d):anomalies(sum:azure.usage.cost{__SCOPE__} by {subscription_name}.as_rate(), 'basic', 3, direction='above') >= 1
+avg(last_1d):anomalies(sum:azure.cost.actual{__SCOPE__} by {subscriptionname}.as_rate(), 'basic', 3, direction='above') >= 1
 ```
 
 Thresholds: `critical` = 1.0.
 
-Scope selector: `resource_type:azure_subscription`. The alert is evaluated per `subscription_name`.
+Scope selector: `resource_type:azure_subscription`. The alert is evaluated per `subscriptionname`.
 
 **Reading the trigger.** 'The value looks normal to me' is not a reason to close this — the baseline is what moved. Conversely, a recent step change in traffic can make a healthy service look anomalous for a day while the baseline relearns.
 
@@ -58,7 +58,7 @@ Most frequent first.
 
 ## Investigation steps
 
-1. Read the alert's group tags (`subscription_name`) to establish scope before opening anything else — they name the affected member directly.
+1. Read the alert's group tags (`subscriptionname`) to establish scope before opening anything else — they name the affected member directly.
 2. Break the increase down by resource and owner before acting — cost alerts are only actionable when attributed.
 3. Establish whether usage or unit price moved.
 4. Look for orphaned resources: unattached volumes, idle instances, forgotten environments.
@@ -66,7 +66,7 @@ Most frequent first.
 
 ## Metrics, logs, traces, dashboards and dependencies
 
-**Metrics.** `azure.usage.cost`.
+**Metrics.** `azure.cost.actual`.
 
 **Logs.** `service:cloud-finops env:prod source:azure`
 

@@ -29,7 +29,7 @@ archetypes:
     thresholds: { critical: 3, warning: 2, ok: 1 }
     group_by: [cluster, host]
     evaluation_window: last_4_checks
-    envs: [prod, stage, qa]
+    envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-infra-compute-availability
     runbook: host-unavailable
@@ -195,7 +195,7 @@ archetypes:
     thresholds: { critical: 1 }
     group_by: [cluster, host]
     evaluation_window: last_30m
-    envs: [prod, stage, qa]
+    envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-platform-services
     runbook: host-agent-unhealthy

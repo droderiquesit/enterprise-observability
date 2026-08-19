@@ -22,7 +22,7 @@ archetypes:
     thresholds: { critical: 1, warning: 2 }
     group_by: [kube_cluster_name, kube_namespace, kube_deployment]
     evaluation_window: last_10m
-    envs: [prod, stage, qa]
+    envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-k8s-workload-availability
     runbook: k8s-deployment-unavailable
@@ -70,7 +70,7 @@ archetypes:
     thresholds: { critical: 1 }
     group_by: [kube_cluster_name, kube_namespace, kube_deployment]
     evaluation_window: last_10m
-    envs: [prod, stage, qa]
+    envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-k8s-workload-availability
     runbook: k8s-pod-crashloop
@@ -355,7 +355,7 @@ archetypes:
     thresholds: { critical: 1 }
     group_by: [kube_cluster_name]
     evaluation_window: last_30m
-    envs: [prod, stage, qa]
+    envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-k8s-workload-availability
     runbook: k8s-telemetry-loss

@@ -51,7 +51,7 @@ archetypes:
     thresholds: { critical: 1 }
     group_by: [data_product, pipeline]
     evaluation_window: last_1h
-    envs: [prod, stage, qa]
+    envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-data-freshness
     runbook: pipeline-job-failure
@@ -201,7 +201,7 @@ archetypes:
     thresholds: { critical: 1 }
     group_by: []
     evaluation_window: last_2h
-    envs: [prod, stage, qa]
+    envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-data-freshness
     runbook: data-telemetry-loss

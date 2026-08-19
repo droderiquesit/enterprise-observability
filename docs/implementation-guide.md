@@ -306,7 +306,7 @@ tag parsing, the rate-limit-aware `dd_request`) live in `obs_common.py`.
 | `coverage_report.py` | C1–C17 governance checks; `--gate governance` (nightly, blocks on everything) or `--gate deploy` (blocks on platform-integrity findings only — estate hygiene stays reported, chased by the nightly loop) |
 | `monitor_scorecard.py` | quality score per monitor, team and domain |
 | `generate_matrix.py` | the coverage matrix (generated, CI-checked for staleness) |
-| `generate_runbooks.py` | 151 runbook drafts from the catalog, human sections preserved |
+| `generate_runbooks.py` | 261 runbook drafts from the catalog, human sections preserved |
 | `publish_runbooks.py` | notebook publishing with content-hash drift control |
 | `correlate_events.py` | executable specification of the correlation rules |
 | `refresh_fixtures.py` | regenerates `tests/fixtures/monitors_planned.json` from an offline plan (`make fixtures`) |
