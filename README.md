@@ -66,7 +66,7 @@ raises an incident and a ticket and wakes nobody.
 
 **Every standard is a command.** If a rule cannot be checked mechanically it
 does not belong in the standard: twelve policy-lint rule families, plan-time
-preconditions and budget `check`s, fifteen runtime coverage checks (C1–C15),
+preconditions and budget `check`s, seventeen runtime coverage checks (C1–C17),
 an eight-dimension quality score, and a CI stage that submits every planned
 monitor to Datadog's own validation API.
 
@@ -159,7 +159,7 @@ duplicates policy YAML — read the YAML through `obs_common.load_policy()`.
 | [operating-model.md](docs/operating-model.md) | Ownership, cadences, change-safety, escalation |
 | [migration-strategy.md](docs/migration-strategy.md) | General migration playbook + what remains open in this org |
 | [quality-scorecard.md](docs/quality-scorecard.md) | The 8-dimension monitor quality model |
-| [decision-records.md](docs/decision-records.md) | ADR-001…ADR-017 |
+| [decision-records.md](docs/decision-records.md) | ADR-001…ADR-018 |
 | [monitor-coverage-matrix.md](docs/monitor-coverage-matrix.md) | **Generated** — every archetype instance, staleness-gated in CI |
 | `docs/archive/` | Dated pre-deployment snapshots (evidence, superseded) |
 

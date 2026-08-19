@@ -44,6 +44,7 @@ def test_every_planned_monitor_satisfies_the_contract():
     assert c["C12"] == 0, "expired exceptions"
     assert c["C14"] == 0, "paging discipline violations"
     assert c["C15"] == 0, "monitors with no actionable response"
+    assert c["C17"] == 0, "monitors with no auto-resolve condition"
 
 
 def test_full_coverage_of_the_alertable_estate():
@@ -112,6 +113,50 @@ def test_unactionable_monitor_is_detected():
     bad.update(id=999007, name="mystery alert", query="unique-mystery-query", message="it broke")
     bad["tags"] = [t for t in bad["tags"] if not t.startswith("dedup_key:")]
     assert _run(MONITORS + [bad])["summary"]["check_counts"]["C15"] == 1
+
+
+def test_monitor_without_auto_resolve_is_detected():
+    """`timeout_h: 0` is Datadog's default and means the monitor stays
+    triggered until a human clears it — during which it will not alert again
+    for the same group. It must fail, and it must stop a deploy."""
+    bad = copy.deepcopy(MONITORS[0])
+    bad.update(id=999010, name="never resolves", query="unique-never-resolves-query",
+               options={"timeout_h": 0})
+    bad["tags"] = [t for t in bad["tags"] if not t.startswith("dedup_key:")]
+    s = _run(MONITORS + [bad])["summary"]
+    assert s["check_counts"]["C17"] == 1
+    assert s["deploy_blocking_counts"]["C17"] == 1
+    assert s["deploy_pass"] is False
+
+
+def test_monitor_with_no_options_at_all_is_detected():
+    """A monitor created outside the factory has no options block; absent is
+    the same failure as zero, not a reason to skip the check."""
+    bad = copy.deepcopy(MONITORS[0])
+    bad.update(id=999011, name="no options", query="unique-no-options-query")
+    bad.pop("options", None)
+    bad["tags"] = [t for t in bad["tags"] if not t.startswith("dedup_key:")]
+    assert _run(MONITORS + [bad])["summary"]["check_counts"]["C17"] == 1
+
+
+def test_auto_resolve_window_outside_the_policy_range_is_detected():
+    """A 30-day auto-resolve is 'never' with extra steps."""
+    bad = copy.deepcopy(MONITORS[0])
+    bad.update(id=999012, name="resolves next month", query="unique-long-window-query",
+               options={"timeout_h": 720})
+    bad["tags"] = [t for t in bad["tags"] if not t.startswith("dedup_key:")]
+    assert _run(MONITORS + [bad])["summary"]["check_counts"]["C17"] == 1
+
+
+def test_planned_auto_resolve_windows_match_the_policy_maps():
+    """The fixture is plan-derived, so this grades what Terraform really
+    renders: every window is one of the values policy can produce."""
+    ar = POLICY["global"]["monitor_defaults"]["auto_resolve"]
+    allowed = set(ar["by_priority"].values()) | set(ar["by_signal"].values()) \
+        | set(ar["by_detection"].values())
+    windows = {(m.get("options") or {}).get("timeout_h") for m in MONITORS}
+    assert windows <= allowed, windows - allowed
+    assert None not in windows and 0 not in windows
 
 
 def test_removing_a_pack_creates_a_coverage_gap():

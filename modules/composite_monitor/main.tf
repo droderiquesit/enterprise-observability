@@ -102,12 +102,23 @@ resource "datadog_monitor" "this" {
   renotify_statuses    = var.defaults.renotify_statuses
   renotify_occurrences = var.defaults.renotify_occurrences
   require_full_window  = var.defaults.require_full_window
-  timeout_h            = var.defaults.timeout_h
-  notify_audit         = var.defaults.notify_audit
-  include_tags         = var.defaults.include_tags
-  validate             = var.api_validate
+  # AUTO-RESOLVE. A composite stays triggered for exactly as long as its
+  # members do, so it needs a window of its own; the calling stack resolves one
+  # from priority policy and this is the floor if it ever passes none.
+  timeout_h    = coalesce(each.value.timeout_h, var.defaults.timeout_h)
+  notify_audit = var.defaults.notify_audit
+  include_tags = var.defaults.include_tags
+  validate     = var.api_validate
 
   lifecycle {
+    # --- Auto-resolve contract ----------------------------------------------
+    precondition {
+      condition = (
+        coalesce(each.value.timeout_h, var.defaults.timeout_h) >= var.defaults.auto_resolve_min_hours
+        && coalesce(each.value.timeout_h, var.defaults.timeout_h) <= var.defaults.auto_resolve_max_hours
+      )
+      error_message = "Composite ${each.key}: auto-resolve window is ${coalesce(each.value.timeout_h, var.defaults.timeout_h)}h, outside the policy range ${var.defaults.auto_resolve_min_hours}-${var.defaults.auto_resolve_max_hours}h. 0 means the composite stays triggered forever, and a composite stuck in alert suppresses the next confirmed-impact page."
+    }
     precondition {
       condition     = length(each.value.member_ids) >= 2 && length(each.value.member_ids) <= var.max_members
       error_message = "Composite ${each.key}: needs between 2 and ${var.max_members} members. A composite nobody can reason about is not a safety feature."

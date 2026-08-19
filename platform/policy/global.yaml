@@ -113,9 +113,50 @@ monitor_defaults:
   require_full_window: false
   notify_audit: false
   include_tags: true
-  timeout_h: 0
   notify_by: []                  # set per-archetype to collapse group storms
-  recovery_notification: true    # message contract always includes a recovery section
+
+  # --- AUTO-RESOLVE — Datadog `timeout_h` ------------------------------------
+  # MANDATORY ON EVERY MANAGED MONITOR. This used to be `timeout_h: 0`, which is
+  # Datadog's default and means "stay triggered forever". That is not a neutral
+  # setting: while a group sits in an unresolved triggered state Datadog does
+  # not notify again for the NEXT occurrence of the same condition, so one stuck
+  # alert silently suppresses every future page for that group. The monitors
+  # most likely to get stuck are the ones whose subject can disappear entirely
+  # — a batch run that finished, a deployment event, a host that was retired —
+  # and several of those page.
+  #
+  # WHAT IT IS NOT: `timeout_h` only applies when a monitor STOPS REPORTING DATA
+  # while triggered. It cannot silence a condition that is still true — a
+  # monitor that keeps evaluating keeps alerting, and one whose signal recovers
+  # resolves normally. Absent telemetry is a different contract entirely
+  # (`notify_no_data` / `no_data_timeframe`), which is why the telemetry_health
+  # signal is deliberately NOT shortened below.
+  #
+  # `timeout_h` remains as the org-wide floor for anything that reaches the
+  # monitor factory without a resolved value; the factory REJECTS 0 at plan
+  # time, so this number can never quietly become "never resolves" again.
+  timeout_h: 24
+  auto_resolve:
+    min_hours: 1
+    max_hours: 72
+    # Resolution order, first match wins:
+    #   archetype `auto_resolve_hours` → by_signal → by_detection → by_priority
+    #
+    # Higher priority resolves SOONER, which reads backwards until you remember
+    # what the setting does: a stuck P1 is the one suppressing the page that
+    # matters. An outage that outlives this window is carried by the incident
+    # record and by the monitor re-triggering the moment data returns, not by a
+    # monitor state nobody is looking at.
+    by_priority: { P1: 12, P2: 24, P3: 48, P4: 72 }
+    by_signal:
+      job_failure: 4        # a failed run is over; its group may never report again
+      schedule_miss: 4      # ditto — the window that was missed does not come back
+      change: 2             # a deployment/change is an instant, not a state
+      auth_anomaly: 4       # discrete security events, not a level to recover from
+      backup_age: 12
+    by_detection:
+      event: 2              # event monitors match discrete events and then stick
+      service_check: 12     # a check stops reporting when its host/agent goes away
 
 # -----------------------------------------------------------------------------
 # CARDINALITY & MONITOR-EXPLOSION GUARDRAILS  (hard failures — see ADR-004)

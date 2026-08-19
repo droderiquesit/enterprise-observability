@@ -176,10 +176,14 @@ resource "datadog_monitor" "this" {
   renotify_statuses    = var.defaults.renotify_statuses
   renotify_occurrences = var.defaults.renotify_occurrences
   require_full_window  = coalesce(each.value.require_full_window, var.defaults.require_full_window)
-  timeout_h            = coalesce(each.value.timeout_h, var.defaults.timeout_h)
-  notify_audit         = var.defaults.notify_audit
-  include_tags         = var.defaults.include_tags
-  validate             = var.api_validate
+  # AUTO-RESOLVE (Datadog "automatically resolve from a triggered state after
+  # N hours"). Resolved from policy per monitor by the calling stack; the
+  # org-wide floor applies only if a caller passes nothing, and the precondition
+  # below refuses 0 outright. See platform/policy/global.yaml → auto_resolve.
+  timeout_h    = coalesce(each.value.timeout_h, var.defaults.timeout_h)
+  notify_audit = var.defaults.notify_audit
+  include_tags = var.defaults.include_tags
+  validate     = var.api_validate
 
   # Storm control: evaluate per group, notify per collapse key.
   notify_by = length(each.value.notify_by) > 0 ? each.value.notify_by : null
@@ -193,6 +197,20 @@ resource "datadog_monitor" "this" {
     precondition {
       condition     = length(setintersection(toset(each.value.group_by), toset(var.cardinality.forbidden_group_keys))) == 0
       error_message = "Monitor ${each.key}: group_by uses a banned high-cardinality key. Banned: ${join(", ", var.cardinality.forbidden_group_keys)}."
+    }
+    # --- Auto-resolve contract ----------------------------------------------
+    # Every monitor resolves itself. Datadog's default (timeout_h = 0) keeps a
+    # monitor in the triggered state until a human clears it, and a monitor
+    # stuck in `Alert` does not notify again for the NEXT occurrence of the same
+    # condition — so one forgotten alert on a retired host silently disables
+    # that monitor's page. This is a plan-time failure, not a lint: the estate
+    # must not be able to acquire a monitor that never resolves.
+    precondition {
+      condition = (
+        coalesce(each.value.timeout_h, var.defaults.timeout_h) >= var.defaults.auto_resolve_min_hours
+        && coalesce(each.value.timeout_h, var.defaults.timeout_h) <= var.defaults.auto_resolve_max_hours
+      )
+      error_message = "Monitor ${each.key}: auto-resolve window is ${coalesce(each.value.timeout_h, var.defaults.timeout_h)}h, outside the policy range ${var.defaults.auto_resolve_min_hours}-${var.defaults.auto_resolve_max_hours}h. 0 means the monitor never resolves on its own, which suppresses every later alert for a group already stuck in the triggered state. Set `auto_resolve_hours` on the archetype, or fix the by_signal/by_priority policy in platform/policy/global.yaml."
     }
     # --- Monitor contract ---------------------------------------------------
     precondition {

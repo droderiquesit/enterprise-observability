@@ -913,7 +913,7 @@ time, so a typo fails the plan instead of silently granting nothing.
      │        ↓             │                  │   profile · ALERT BAND │
      │ stacks/coverage      │                  │          ↓             │
      │   monitor_factory ───┼──► 419 packs     │ coverage_report.py     │
-     │   slo            ───┼──► 23 SLOs       │   C1–C15 governance    │
+     │   slo            ───┼──► 23 SLOs       │   C1–C17 governance    │
      │                      │    44 burn       │ monitor_scorecard.py   │
      │   composite_monitor ─┼──► 7 composites  │   quality per team     │
      │   + 4 self-service   │                  │ generate_matrix.py     │
@@ -944,7 +944,7 @@ time, so a typo fails the plan instead of silently granting nothing.
 2. **Discovery (scheduled).** Inventory rebuild → profile assignment → catalog
    convergence. New resources are covered by existing monitors *immediately*;
    the loop only updates ownership records and coverage accounting.
-3. **Governance (scheduled).** Coverage report (C1–C15) + Terraform drift +
+3. **Governance (scheduled).** Coverage report (C1–C17) + Terraform drift +
    runbook drift + quality scorecard. The nightly governance gate blocks on
    every finding and opens an issue; the deploy gate blocks only on
    platform-integrity findings (see docs/deployment.md).

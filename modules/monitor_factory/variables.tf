@@ -138,6 +138,12 @@ variable "defaults" {
     notify_audit         = bool
     include_tags         = bool
     timeout_h            = number
+    # Auto-resolve bounds (platform/policy/global.yaml → monitor_defaults.
+    # auto_resolve). They are the guardrail behind the plan-time precondition:
+    # a window of 0 is "never resolves", and one longer than max_hours is the
+    # same failure wearing a number.
+    auto_resolve_min_hours = number
+    auto_resolve_max_hours = number
   })
 }
 

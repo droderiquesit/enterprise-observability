@@ -84,6 +84,12 @@
         "impact": { "type": "string", "maxLength": 300 },
         "justification": { "type": "string", "minLength": 20 },
         "notify_no_data": { "type": "boolean" },
+        "auto_resolve_hours": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 72,
+          "description": "Hours a triggered monitor waits, with no data arriving, before it resolves itself (Datadog timeout_h). Omit to inherit the signal/priority window from platform/policy/global.yaml. There is no way to disable auto-resolve: a monitor stuck in the triggered state suppresses its own next alert."
+        },
         "evaluation_window": { "type": "string" }
       },
       "allOf": [
