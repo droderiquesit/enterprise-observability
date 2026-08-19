@@ -106,15 +106,24 @@ def _finding_class(cid: str, item) -> str:
     return "all"
 
 
+def _blocks_deploy(cid: str, item) -> bool:
+    """Does THIS finding block the deploy gate?
+
+    Per-finding, not per-check: C3 and C13 each mix a platform defect with an
+    estate observation, and only the platform half may stop a deploy.
+    """
+    if cid in ESTATE_CHECKS:
+        return False
+    if cid == "C3":
+        return _finding_class(cid, item) == "managed_monitors"
+    if cid == "C13":
+        return _finding_class(cid, item) == "live_slo_error"
+    return True
+
+
 def _deploy_blocking(cid: str, items: list) -> int:
     """How many of a check's findings block the DEPLOY gate."""
-    if cid in ESTATE_CHECKS:
-        return 0
-    if cid == "C3":
-        return sum(1 for it in items if _finding_class(cid, it) == "managed_monitors")
-    if cid == "C13":
-        return sum(1 for it in items if _finding_class(cid, it) == "live_slo_error")
-    return len(items)
+    return sum(1 for it in items if _blocks_deploy(cid, it))
 
 
 def acceptances(policy: dict, today: dt.date | None = None) -> dict:
@@ -389,27 +398,40 @@ def run_checks(inventory, assignments, monitors, slos, policy) -> dict:
     # leaving every finding in the report. A run that fails on the same two
     # known findings every night cannot signal a regression, because nobody can
     # tell the new red from yesterday's red.
+    # Acceptance is applied PER FINDING, inside its class, up to the accepted
+    # budget. Subtracting a check-level total would let an accepted estate
+    # finding cancel out a real platform defect in the same check — e.g. the
+    # accepted backup-telemetry dependency silently absorbing a live SLO error.
     accepted_map = acceptances(policy)
-    accepted, unaccepted, accepted_detail = {}, {}, []
+    accepted, unaccepted, deploy_unaccepted, accepted_detail = {}, {}, {}, []
     for cid, items in checks.items():
-        by_class: dict[str, int] = defaultdict(int)
+        by_class: dict[str, list] = defaultdict(list)
         for it in items:
-            by_class[_finding_class(cid, it)] += 1
-        acc_total = 0
-        for klass, n in sorted(by_class.items()):
+            by_class[_finding_class(cid, it)].append(it)
+
+        acc_total, unacc_total, deploy_unacc = 0, 0, 0
+        for klass, group in sorted(by_class.items()):
             rule = accepted_map.get((cid, klass)) or accepted_map.get((cid, "all"))
-            if not rule:
-                continue
-            covered_n = min(n, rule["max"])
-            acc_total += covered_n
-            accepted_detail.append({
-                "check": cid, "class": klass, "findings": n,
-                "accepted": covered_n, "over_budget": max(0, n - rule["max"]),
-                "exception": rule["exception"], "owner": rule["owner"],
-                "expires": rule["expires"],
-            })
+            budget = rule["max"] if rule else 0
+            for i, it in enumerate(group):
+                is_accepted = i < budget
+                if is_accepted:
+                    acc_total += 1
+                else:
+                    unacc_total += 1
+                    if _blocks_deploy(cid, it):
+                        deploy_unacc += 1
+            if rule:
+                accepted_detail.append({
+                    "check": cid, "class": klass, "findings": len(group),
+                    "accepted": min(len(group), budget),
+                    "over_budget": max(0, len(group) - budget),
+                    "exception": rule["exception"], "owner": rule["owner"],
+                    "expires": rule["expires"],
+                })
         accepted[cid] = acc_total
-        unaccepted[cid] = max(0, counts[cid] - acc_total)
+        unaccepted[cid] = unacc_total
+        deploy_unaccepted[cid] = deploy_unacc
     total = assignments["summary"]["total"]
     alertable = assignments["summary"]["alertable"]
     covered = alertable - len(checks["C1"])
@@ -430,9 +452,9 @@ def run_checks(inventory, assignments, monitors, slos, policy) -> dict:
             "deploy_blocking_counts": blocking,
             # `pass` now means "nothing unexpected": every finding is either
             # absent or covered by a live, owned, expiring acceptance.
+            "deploy_unaccepted_counts": deploy_unaccepted,
             "pass": all(v == 0 for v in unaccepted.values()),
-            "deploy_pass": all(
-                max(0, blocking[c] - accepted.get(c, 0)) == 0 for c in blocking),
+            "deploy_pass": all(v == 0 for v in deploy_unaccepted.values()),
         },
         "checks": {k: v[:200] for k, v in checks.items()},
         "accepted_findings": accepted_detail,

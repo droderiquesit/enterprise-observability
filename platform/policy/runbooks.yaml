@@ -136,6 +136,7 @@ runbooks:
     title: "Cloud Cost Anomaly"
     domain: cloud
     source: azure-cost-anomaly.md
+    id: 15214625
   azure-function-execution-stalled:
     title: "Azure Function Stopped Executing"
     domain: cloud
@@ -355,6 +356,7 @@ runbooks:
     title: "Deployment Regression"
     domain: application
     source: deployment-regression.md
+    id: 15208649
   dns-resolution-failure:
     title: "DNS Resolution Failing"
     domain: network
@@ -409,6 +411,7 @@ runbooks:
     title: "Host Unavailable"
     domain: infrastructure
     source: host-unavailable.md
+    id: 15214633
   ingest-pipeline-degraded:
     title: "Telemetry Ingest Pipeline Degraded"
     domain: platform
@@ -663,6 +666,7 @@ runbooks:
     title: "Storage Latency Anomaly"
     domain: infrastructure
     source: storage-latency-anomaly.md
+    id: 15214673
   stream-partition-skew:
     title: "Stream Partition Skew"
     domain: messaging

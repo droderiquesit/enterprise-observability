@@ -50,6 +50,25 @@ jobs:
         with: { fetch-depth: 0 }
       - uses: hashicorp/setup-terraform@v3
         with: { terraform_version: "${{ env.TF_VERSION }}" }
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ env.PYTHON_VERSION }}" }
+      - run: pip install -r tools/requirements.txt
+
+      # Runbooks are published BEFORE the qa/stage apply for the same reason
+      # they are before the prod apply: a monitor's runbook is attached through
+      # its native `assets` field, and the attachment needs the notebook id.
+      #
+      # This step used to exist only in the production job, which left a real
+      # gap: qa and stage applied FIRST, in this job, so a monitor whose runbook
+      # had never been published deployed with no attachment and only production
+      # got one. Six qa/stage monitors shipped that way. Publishing is
+      # idempotent (content-hash compared, no-op when unchanged), so running it
+      # in both jobs costs nothing and makes each job self-sufficient.
+      - name: "Runbooks — publish notebooks and bind ids before applying"
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        run: cd tools && python publish_runbooks.py --write-registry
 
       - name: Plan & apply, one environment at a time — qa first, stage only if qa applied
         env:
