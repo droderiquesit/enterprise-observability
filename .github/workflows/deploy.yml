@@ -185,6 +185,16 @@ jobs:
       - name: "6 · Quality scorecard against the catalog"
         run: cd tools && python monitor_scorecard.py --min-fleet-score 85 --max-failing 0
 
+      # The audit table: one row per deployed monitor with its owner, route,
+      # escalation policy, attached runbook notebook and final status. Written
+      # from the LIVE estate so the ids are real, and uploaded with the rest of
+      # the post-deploy evidence.
+      - name: "7 · Monitor reconciliation against the live estate"
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        run: cd tools && python reconciliation_report.py --live
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
