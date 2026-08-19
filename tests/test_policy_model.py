@@ -76,8 +76,33 @@ def test_standard_and_baseline_bands_never_page():
 
 # --- the estate -------------------------------------------------------------
 
-def test_dev_creates_no_monitors():
-    assert all(i["env"] != "dev" for i in oc.expand_instances(POLICY, ["dev", "qa", "stage", "prod"]))
+def test_dev_instantiates_only_the_baseline_band():
+    """dev is an alerting environment now — narrowly. It exists to tell a
+    developer that what they just deployed is alive and emitting, and it is
+    incapable of doing anything louder."""
+    dev = [i for i in oc.expand_instances(POLICY, ["dev", "qa", "stage", "prod"])
+           if i["env"] == "dev"]
+    assert dev, "dev should instantiate the curated baseline set"
+    assert all(i["band"] == "baseline" for i in dev)
+    assert all(i["priority"] == "P4" for i in dev)
+    assert not any(i["pages"] for i in dev)
+    assert all(i["notification_profile"] == "nonprod_dev" for i in dev)
+
+
+def test_dev_can_never_page_or_raise_a_ticket():
+    envp = POLICY["environments"]["dev"]
+    assert envp["paging_allowed"] is False
+    assert envp["servicenow_allowed"] is False
+    assert envp["incident_creation_allowed"] is False
+    assert envp["slo_impact"] is False
+    assert envp["priority_ceiling"] == "P4"
+
+
+def test_dev_archetypes_are_a_curated_minority():
+    """Opting the whole catalog into dev would be sprawl, not coverage."""
+    total = len(POLICY["archetypes"])
+    dev = [a for a in POLICY["archetypes"].values() if "dev" in a["envs"]]
+    assert 0 < len(dev) < total * 0.15, f"{len(dev)} of {total} archetypes opt into dev"
 
 
 def test_estate_stays_inside_every_budget():

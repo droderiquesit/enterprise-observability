@@ -66,8 +66,16 @@ def lint() -> list[str]:
         for b in a["bands"]:
             if b not in ("baseline", "standard", "critical"):
                 err("SCHEMA", where, f"band {b!r} is not an alerting band")
-        if "dev" in a["envs"]:
-            err("SCHEMA", where, "dev never alerts; remove it from `envs`")
+        # dev is an alerting environment now, but a deliberately narrow one:
+        # baseline band only, P4 only, Teams only (platform/policy/
+        # environments.yaml). An archetype that opts into dev without declaring
+        # the baseline band produces nothing at all, which is a silent no-op
+        # rather than an error at plan time — so it is caught here.
+        if "dev" in a["envs"] and "baseline" not in a["bands"]:
+            err("SCHEMA", where,
+                "declares env `dev` but not the `baseline` band. dev instantiates "
+                "the baseline band only, so this archetype would create no dev "
+                "monitor at all")
 
         # REFERENCE
         if a["slo_id"] not in policy["slos"]:

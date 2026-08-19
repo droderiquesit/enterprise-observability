@@ -16,24 +16,33 @@ environments:
   dev:
     display: Development
     description: >
-      Telemetry, dashboards and events only. Developers see everything in
-      Datadog; nothing alerts, nothing pages, nothing files a ticket.
-      Rationale: a dev CPU anomaly is not an operational event.
-    alerting: false
-    bands_instantiated: []                 # → zero monitors created for dev
-    default_profile: observe_only
-    observe_only_reason: "development environment (global policy)"
-    priority_ceiling: P4
+      ENGINEERING FEEDBACK ONLY. Dev used to instantiate nothing at all, on the
+      reasoning that a dev CPU anomaly is not an operational event — which is
+      true, and which also meant a developer could break a service's liveness,
+      its telemetry or its scheduled jobs and find out in QA.
+
+      Dev now instantiates the BASELINE band only, for the small set of
+      archetypes that answer "is the thing I just deployed alive and emitting?"
+      Everything lands at P4 by the priority ceiling, routes to the team's dev
+      Teams channel, and cannot create a ServiceNow record or page anyone. Dev
+      is also where anomaly detection learns a service's shape before that
+      service reaches production.
+    alerting: true
+    bands_instantiated: [baseline]          # liveness and telemetry health only
+    default_profile: baseline
+    priority_ceiling: P4                    # nothing in dev is ever above P4
     paging_allowed: false
     incident_creation_allowed: false
-    servicenow_allowed: false
-    teams_notifications: false
+    servicenow_allowed: false               # dev never creates a ticket
+    teams_notifications: true
+    teams_channel_suffix: "-dev"
     slo_impact: false
-    recovery_notifications: false
-    sensitivity_multiplier: 1.0
-    window_multiplier: 1.0
+    recovery_notifications: true
+    sensitivity_multiplier: 2.0             # recorded, not auto-applied (see locals_instances.tf §5)
+    window_multiplier: 3.0                  # widest windows in the platform
     escalation: none
-    grouping: none
+    business_hours_only: true
+    grouping: by_service
 
   qa:
     display: Quality Assurance

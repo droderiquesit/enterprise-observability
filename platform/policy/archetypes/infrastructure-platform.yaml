@@ -1,0 +1,239 @@
+# =============================================================================
+# MONITOR ARCHETYPE CATALOG — HOST PLATFORM HEALTH
+#   Swap pressure · hardware health · OS patch and end-of-life drift
+#
+# These three share a property that makes them awkward and makes them matter:
+# none of them is an outage on the day it fires. They are the signals that
+# decide whether next quarter has an outage. That is also why none of them
+# pages — they are risk and hygiene classes by construction, and the priority
+# matrix keeps them at P3/P4 in every environment.
+#
+# TELEMETRY. Swap is a core Agent metric and needs nothing new. Hardware and
+# patch state are NOT metrics anywhere in Datadog: they come from the Agent's
+# IPMI check and from the configuration-management inventory respectively, and
+# both are normalised into `acme.*` metrics by an exporter rather than invented
+# as fake native monitors. docs/telemetry-gaps.md carries both contracts.
+# =============================================================================
+version: 2
+domain: infrastructure
+
+archetypes:
+
+  # --- SWAP -----------------------------------------------------------------
+  # Swap being USED is not a fault; Linux will swap idle pages by design and a
+  # host can run for years at a low, stable swap level. What matters is swap
+  # that is being actively consumed while memory is already tight, which is the
+  # state where the machine starts trading latency for survival.
+  host-swap-pressure:
+    title: Host Swap Pressure
+    signal: saturation
+    impact_class: risk
+    detection: rate_of_change
+    monitor_type: query alert
+    resource_type: host
+    selector: ""
+    query: "pct_change(avg(last_15m),last_4h):avg:system.swap.pct_free{__SCOPE__} by {cluster,host} < -25"
+    thresholds: { critical: -25, warning: -15 }
+    group_by: [cluster, host]
+    notify_by: [cluster]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-infra-compute-availability
+    runbook: host-swap-pressure
+    workflow: diag-host
+    failure_domain: compute
+    notes: >
+      Measured as free swap FALLING against its own recent baseline, never as
+      "swap in use > 0". A host that has always used 10% of its swap is fine;
+      a host that just started consuming swap is one that has run out of real
+      memory, and its latency is about to become somebody's incident.
+
+  host-swap-exhaustion-forecast:
+    title: Host Swap Exhaustion Forecast
+    signal: capacity
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: host
+    selector: ""
+    query: "min(next_1d):forecast(avg:system.swap.pct_free{__SCOPE__} by {cluster,host}, 'linear', 1, interval='30m', history='1d') < 10"
+    thresholds: { critical: 10, warning: 20 }
+    group_by: [cluster, host]
+    notify_by: [cluster]
+    evaluation_window: next_1d
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-infra-compute-availability
+    runbook: host-swap-exhaustion-forecast
+    workflow: auto-capacity-ticket
+    failure_domain: compute
+    notes: >
+      Swap running out after memory has run out is where the OOM killer starts
+      choosing processes. Forecasting it is the difference between a planned
+      resize and an unexplained process death.
+
+  # --- HARDWARE HEALTH ------------------------------------------------------
+  # TELEMETRY GAP, IMPLEMENTED. IPMI sensor names are hardware-specific —
+  # "Inlet Temp" on one vendor, "Ambient Temp" on another — so a monitor
+  # written against a raw sensor metric works on one fleet and silently covers
+  # nothing on the next. The Agent's IPMI check collects the sensors and an
+  # exporter normalises them to `acme.hardware.<component>_health`, where 0 is
+  # healthy and higher values are the IPMI severity. See
+  # docs/telemetry-gaps.md for the sensor mapping.
+  hardware-component-fault:
+    title: Hardware Component Fault
+    signal: availability
+    impact_class: risk
+    detection: threshold
+    monitor_type: query alert
+    resource_type: hardware_node
+    selector: ""
+    query: "max(last_15m):max:acme.hardware.component_health{__SCOPE__} by {host,component} > 0"
+    thresholds: { critical: 2, warning: 1 }
+    group_by: [host, component]
+    notify_by: [host]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-infra-compute-availability
+    runbook: hardware-component-fault
+    workflow: auto-capacity-ticket
+    failure_domain: compute
+    rationale_fixed_threshold: >
+      The normalised scale mirrors IPMI severity: 0 healthy, 1 non-critical
+      (a fan degraded, a redundant PSU lost), 2 critical (a thermal or voltage
+      threshold crossed). A warning is a maintenance window; a critical is a
+      machine that will shut itself down to protect itself.
+
+  hardware-thermal-trend:
+    title: Hardware Thermal Trend
+    signal: capacity
+    impact_class: risk
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: hardware_node
+    selector: ""
+    query: "avg(last_2h):anomalies(avg:acme.hardware.temperature_celsius{__SCOPE__} by {host}, 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [host]
+    evaluation_window: last_2h
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-infra-compute-availability
+    runbook: hardware-thermal-trend
+    workflow: auto-capacity-ticket
+    failure_domain: compute
+    notes: >
+      A host running hotter than its own history — with the same workload and
+      the same room — is a cooling problem: a failing fan, a blocked intake, or
+      a rack neighbour that changed. It shows up here weeks before a thermal
+      shutdown.
+
+  # --- PATCH AND LIFECYCLE DRIFT -------------------------------------------
+  # TELEMETRY GAP, IMPLEMENTED. Patch level and OS support dates are not
+  # observable from telemetry at all — they are inventory facts. The
+  # configuration-management inventory is exported to
+  # `acme.compliance.*` on a daily schedule (docs/telemetry-gaps.md). This is
+  # deliberately an inventory-derived metric rather than a Datadog "monitor" of
+  # something Datadog cannot see.
+  os-critical-patch-missing:
+    title: Critical OS Patches Missing
+    signal: drift
+    impact_class: hygiene
+    detection: threshold
+    monitor_type: query alert
+    resource_type: host
+    selector: ""
+    query: "max(last_1d):max:acme.compliance.missing_critical_patches{__SCOPE__} by {cluster,host} > 0"
+    thresholds: { critical: 0 }
+    group_by: [cluster, host]
+    notify_by: [cluster]
+    evaluation_window: last_1d
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-security-telemetry
+    runbook: os-critical-patch-missing
+    workflow: auto-compliance-ticket
+    failure_domain: compute
+    compliance: true
+    rationale_fixed_threshold: >
+      A missing critical patch is a known exploitable defect with a published
+      fix. There is no tolerance band to tune — the only question is how long
+      it has been missing, which the runbook covers against the patch SLA.
+
+  os-patch-age-excessive:
+    title: OS Patch Age Excessive
+    signal: drift
+    impact_class: hygiene
+    detection: threshold
+    monitor_type: query alert
+    resource_type: host
+    selector: ""
+    query: "max(last_1d):max:acme.compliance.days_since_patch{__SCOPE__} by {cluster,host} > 45"
+    thresholds: { critical: 45, warning: 35 }
+    group_by: [cluster, host]
+    notify_by: [cluster]
+    evaluation_window: last_1d
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-security-telemetry
+    runbook: os-patch-age-excessive
+    workflow: auto-compliance-ticket
+    failure_domain: compute
+    compliance: true
+    rationale_fixed_threshold: >
+      45 days is the monthly patch cycle plus one missed window. Past it the
+      host has skipped a cycle rather than run late, which is a process
+      failure rather than a scheduling one.
+
+  os-end-of-life:
+    title: Operating System Past End of Life
+    signal: drift
+    impact_class: hygiene
+    detection: threshold
+    monitor_type: query alert
+    resource_type: host
+    selector: ""
+    query: "min(last_1d):min:acme.compliance.os_support_days_remaining{__SCOPE__} by {cluster,host} < 90"
+    thresholds: { critical: 90, warning: 180 }
+    group_by: [cluster, host]
+    notify_by: [cluster]
+    evaluation_window: last_1d
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-security-telemetry
+    runbook: os-end-of-life
+    workflow: auto-compliance-ticket
+    failure_domain: compute
+    compliance: true
+    rationale_fixed_threshold: >
+      90 days is the shortest lead time in which an OS upgrade can realistically
+      be planned, tested and rolled through an estate. After end of life there
+      are no security patches at all, so the drift monitors above go quiet
+      precisely when the risk is highest — which is why this one exists
+      separately.
+
+  agent-version-drift:
+    title: Datadog Agent Version Drift
+    signal: drift
+    impact_class: hygiene
+    detection: threshold
+    monitor_type: query alert
+    resource_type: host
+    selector: ""
+    query: "max(last_1d):max:acme.compliance.agent_versions_behind{__SCOPE__} by {cluster} > 3"
+    thresholds: { critical: 3, warning: 2 }
+    group_by: [cluster]
+    evaluation_window: last_1d
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-platform-services
+    runbook: agent-version-drift
+    workflow: auto-drift-ticket
+    failure_domain: observability
+    rationale_fixed_threshold: >
+      Three minor versions behind is roughly two quarters of Agent releases —
+      far enough back that a metric or check the catalog depends on may simply
+      not exist on those hosts, which shows up as coverage that silently
+      returns no data.

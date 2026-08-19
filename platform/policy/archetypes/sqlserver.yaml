@@ -1,0 +1,629 @@
+# =============================================================================
+# MONITOR ARCHETYPE CATALOG — MICROSOFT SQL SERVER (Azure SQL + on-premises)
+#
+# The estate is Azure SQL and on-premises Microsoft SQL Server. Both are
+# covered here because the OPERATIONAL failure modes are the same — blocking,
+# tempdb, log growth, replica health — even though the telemetry arrives from
+# two different places:
+#
+#   on-premises   the Datadog SQL Server integration / DBM agent check
+#                 (`sqlserver.*`, service check `sqlserver.can_connect`)
+#   Azure SQL     the Azure Monitor integration
+#                 (`azure.sql_servers_databases.*`)
+#
+# Every metric named below was taken verbatim from the published metric list of
+# its integration. Where a signal the business wants has NO metric on either
+# side — restore testability is the clearest example — it is implemented as an
+# explicitly-emitted custom metric and documented as such, never faked with a
+# proxy that looks like evidence and is not.
+#
+# BLOCKING IS NOT DEADLOCKING. A deadlock is resolved by the engine in
+# milliseconds by killing a victim; blocking is a queue of sessions waiting on
+# a lock nobody is resolving. They have different causes, different urgency and
+# different remediation, so they are two archetypes, never one.
+# =============================================================================
+version: 2
+domain: database
+
+archetypes:
+
+  # --- ON-PREMISES SQL SERVER — availability -------------------------------
+  sqlserver-instance-unreachable:
+    title: SQL Server Instance Unreachable
+    signal: availability
+    impact_class: customer_impact
+    detection: service_check
+    monitor_type: service check
+    resource_type: sqlserver_instance
+    selector: ""
+    query: '"sqlserver.can_connect".over("__SCOPE__").by("host").last(3).count_by_status()'
+    thresholds: { critical: 2, warning: 1 }
+    group_by: [host]
+    evaluation_window: last_3_checks
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-database-availability
+    runbook: sqlserver-instance-unreachable
+    workflow: diag-database
+    failure_domain: databases
+    mandatory: true
+    rationale_fixed_threshold: >
+      Connectivity is binary. Two consecutive failed check runs separates a
+      dropped connection from an instance that is genuinely gone.
+
+  # --- ON-PREMISES SQL SERVER — contention ---------------------------------
+  sqlserver-blocking-sessions:
+    title: SQL Server Blocking Session Chain
+    signal: saturation
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: sqlserver_instance
+    selector: ""
+    query: "avg(last_15m):anomalies(avg:sqlserver.stats.procs_blocked{__SCOPE__} by {host}, 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [host]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-database-latency
+    runbook: sqlserver-blocking-sessions
+    workflow: diag-database
+    failure_domain: databases
+    notes: >
+      Blocked process count against its own baseline. A static threshold is
+      wrong here because a healthy OLTP instance blocks constantly and briefly;
+      what matters is a chain that stops draining.
+
+  sqlserver-lock-wait-degradation:
+    title: SQL Server Lock Wait Time Degradation
+    signal: latency
+    impact_class: degradation
+    detection: rate_of_change
+    monitor_type: query alert
+    resource_type: sqlserver_instance
+    selector: ""
+    query: "pct_change(avg(last_15m),last_1h):avg:sqlserver.stats.lock_waits{__SCOPE__} by {host} > 200"
+    thresholds: { critical: 200, warning: 100 }
+    group_by: [host]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-database-latency
+    runbook: sqlserver-lock-wait-degradation
+    workflow: diag-database
+    failure_domain: databases
+
+  sqlserver-deadlock-anomaly:
+    title: SQL Server Deadlock Anomaly
+    signal: error_rate
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: sqlserver_instance
+    selector: ""
+    query: "avg(last_30m):anomalies(sum:sqlserver.locks.deadlocks{__SCOPE__} by {host}.as_rate(), 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [host]
+    evaluation_window: last_30m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-database-latency
+    runbook: sqlserver-deadlock-anomaly
+    workflow: diag-database
+    failure_domain: databases
+    notes: >
+      Deliberately separate from sqlserver-blocking-sessions. The engine
+      resolves a deadlock by killing a victim transaction — the application
+      sees an error, not a hang — so the remediation is a code/index change,
+      not a session kill.
+
+  sqlserver-long-running-transaction:
+    title: SQL Server Long-Running Transaction
+    signal: latency
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: sqlserver_instance
+    selector: ""
+    query: "max(last_15m):max:sqlserver.transactions.longest_transaction_running_time{__SCOPE__} by {host} > 1800"
+    thresholds: { critical: 1800, warning: 600 }
+    group_by: [host]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-database-latency
+    runbook: sqlserver-long-running-transaction
+    workflow: diag-database
+    failure_domain: databases
+    rationale_fixed_threshold: >
+      30 minutes is the operational boundary, not a statistical one: an open
+      transaction holds locks and pins the transaction log from truncation for
+      its whole life, so log growth and blocking both start from here.
+
+  # --- ON-PREMISES SQL SERVER — memory and tempdb --------------------------
+  sqlserver-memory-pressure:
+    title: SQL Server Buffer Pool Memory Pressure
+    signal: saturation
+    impact_class: degradation
+    detection: rate_of_change
+    monitor_type: query alert
+    resource_type: sqlserver_instance
+    selector: ""
+    query: "pct_change(avg(last_15m),last_4h):avg:sqlserver.buffer.page_life_expectancy{__SCOPE__} by {host} < -50"
+    thresholds: { critical: -50, warning: -30 }
+    group_by: [host]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-database-latency
+    runbook: sqlserver-memory-pressure
+    workflow: diag-database
+    failure_domain: databases
+    notes: >
+      Page life expectancy collapsing means the buffer pool is being churned —
+      pages are evicted before they are reused, so reads go to disk. Measured
+      as a fall against its own recent baseline because the healthy absolute
+      value depends entirely on how much memory the instance has.
+
+  sqlserver-tempdb-space-exhaustion:
+    title: SQL Server TempDB Space Exhaustion Forecast
+    signal: capacity
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: sqlserver_instance
+    selector: ""
+    query: "min(next_12h):forecast(avg:sqlserver.tempdb.file_space_usage.free_space{__SCOPE__} by {host}, 'linear', 1, interval='30m', history='1d') < 1"
+    thresholds: { critical: 1 }
+    group_by: [host]
+    evaluation_window: next_12h
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-database-availability
+    runbook: sqlserver-tempdb-space-exhaustion
+    workflow: auto-capacity-ticket
+    failure_domain: databases
+    notes: >
+      TempDB filling stops every session that needs a sort, a hash join, a
+      spool or a snapshot version — it is an instance-wide outage, which is why
+      this forecasts rather than waits.
+
+  sqlserver-tempdb-version-store-growth:
+    title: SQL Server TempDB Version Store Growth
+    signal: saturation
+    impact_class: risk
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: sqlserver_instance
+    selector: ""
+    query: "avg(last_30m):anomalies(avg:sqlserver.tempdb.file_space_usage.version_store_space{__SCOPE__} by {host}, 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [host]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-database-availability
+    runbook: sqlserver-tempdb-version-store-growth
+    workflow: diag-database
+    failure_domain: databases
+    notes: >
+      The closest observable proxy for tempdb contention available from the
+      integration: a version store that grows and does not drain means row
+      versions are pinned by a transaction that will not commit.
+
+  # --- ON-PREMISES SQL SERVER — log and files ------------------------------
+  sqlserver-log-flush-wait-degradation:
+    title: SQL Server Transaction Log Flush Wait Degradation
+    signal: latency
+    impact_class: degradation
+    detection: rate_of_change
+    monitor_type: query alert
+    resource_type: sqlserver_instance
+    selector: ""
+    query: "pct_change(avg(last_15m),last_1h):avg:sqlserver.database.log_flush_wait{__SCOPE__} by {host,db} > 150"
+    thresholds: { critical: 150, warning: 75 }
+    group_by: [host, db]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-database-latency
+    runbook: sqlserver-log-flush-wait-degradation
+    workflow: diag-database
+    failure_domain: databases
+    notes: >
+      Every committing transaction waits on the log flush, so this is the
+      earliest instance-wide symptom of log-storage trouble.
+
+  sqlserver-data-file-growth-forecast:
+    title: SQL Server Data File Exhaustion Forecast
+    signal: capacity
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: sqlserver_instance
+    selector: ""
+    query: "max(next_1w):forecast(avg:sqlserver.database.files.space_used{__SCOPE__} by {host,db} / avg:sqlserver.database.files.size{__SCOPE__} by {host,db} * 100, 'linear', 1, interval='1h', history='1w') > 90"
+    thresholds: { critical: 90, warning: 80 }
+    group_by: [host, db]
+    evaluation_window: next_1w
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-database-availability
+    runbook: sqlserver-data-file-growth-forecast
+    workflow: auto-capacity-ticket
+    failure_domain: databases
+
+  sqlserver-connection-saturation:
+    title: SQL Server Connection Exhaustion Forecast
+    signal: saturation
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: sqlserver_instance
+    selector: ""
+    query: "max(next_6h):forecast(avg:sqlserver.stats.connections{__SCOPE__} by {host}, 'linear', 1, interval='15m', history='1d') > 0"
+    thresholds: { critical: 0 }
+    group_by: [host]
+    evaluation_window: next_6h
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-database-availability
+    runbook: sqlserver-connection-saturation
+    workflow: auto-capacity-ticket
+    failure_domain: databases
+    notes: >
+      The threshold is deliberately expressed as "the forecast has a value at
+      all" and refined per instance in the runbook — max worker threads is a
+      function of instance edition and CPU count, so a single org-wide number
+      would be wrong everywhere.
+
+  # --- ALWAYS ON AVAILABILITY GROUPS ---------------------------------------
+  sqlserver-ag-no-primary:
+    title: SQL Server Availability Group Has No Primary Replica
+    signal: availability
+    impact_class: customer_impact
+    detection: threshold
+    monitor_type: query alert
+    resource_type: availability_group
+    selector: ""
+    query: "min(last_10m):sum:sqlserver.ao.is_primary_replica{__SCOPE__} by {availability_group} < 1"
+    thresholds: { critical: 1 }
+    group_by: [availability_group]
+    evaluation_window: last_10m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-database-availability
+    runbook: sqlserver-ag-no-primary
+    workflow: diag-database
+    failure_domain: databases
+    rationale_fixed_threshold: >
+      An availability group with no primary replica accepts no writes. One is
+      not a tuned number, it is the definition of a functioning AG.
+
+  sqlserver-ag-sync-unhealthy:
+    title: SQL Server Availability Group Synchronization Unhealthy
+    signal: replication_lag
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: availability_group
+    selector: ""
+    query: "min(last_15m):min:sqlserver.ao.ag_sync_health{__SCOPE__} by {availability_group} < 1"
+    thresholds: { critical: 1 }
+    group_by: [availability_group]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-database-availability
+    runbook: sqlserver-ag-sync-unhealthy
+    workflow: diag-database
+    failure_domain: databases
+    rationale_fixed_threshold: >
+      SQL Server reports synchronization health as healthy (1) or not (0).
+      Anything below 1 means at least one replica is not in its configured
+      synchronization state, which is the state that makes failover safe.
+
+  sqlserver-replica-not-synchronized:
+    title: SQL Server Replica Not Synchronized
+    signal: replication_lag
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: availability_group
+    selector: ""
+    query: "min(last_15m):min:sqlserver.ao.replica_sync_state{__SCOPE__} by {availability_group,replica_server_name} < 2"
+    thresholds: { critical: 2 }
+    group_by: [availability_group, replica_server_name]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-database-availability
+    runbook: sqlserver-replica-not-synchronized
+    workflow: diag-database
+    failure_domain: databases
+    rationale_fixed_threshold: >
+      SQL Server encodes synchronization state as an enum where 2 is
+      SYNCHRONIZED. A synchronous-commit replica below 2 cannot be failed over
+      to without data loss, which is the entire reason it exists.
+
+  sqlserver-replica-lag:
+    title: SQL Server Secondary Replica Lag
+    signal: replication_lag
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: availability_group
+    selector: ""
+    query: "avg(last_15m):max:sqlserver.ao.secondary_lag_seconds{__SCOPE__} by {availability_group,replica_server_name} > 60"
+    thresholds: { critical: 60, warning: 30 }
+    group_by: [availability_group, replica_server_name]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-database-availability
+    runbook: sqlserver-replica-lag
+    workflow: diag-database
+    failure_domain: databases
+    rationale_fixed_threshold: >
+      60 seconds is the recovery point this platform is willing to lose on an
+      unplanned failover. It is an RPO decision, which is exactly the kind of
+      number a fixed threshold should carry.
+
+  # --- AZURE SQL ------------------------------------------------------------
+  azuresql-unavailable:
+    title: Azure SQL Database Unavailable
+    signal: availability
+    impact_class: customer_impact
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_sql
+    selector: "resource_type:azure_sql"
+    query: "min(last_10m):avg:azure.sql_servers_databases.availability{__SCOPE__} by {subscription_name,resource_group,name} < 99"
+    thresholds: { critical: 99 }
+    group_by: [subscription_name, resource_group, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_10m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-database-availability
+    runbook: azuresql-unavailable
+    workflow: diag-database
+    failure_domain: databases
+    rationale_fixed_threshold: >
+      Azure publishes database availability as a percentage of successful
+      connections over the interval. Below 99% a measurable share of
+      application connections is already failing.
+
+  azuresql-cpu-pressure:
+    title: Azure SQL CPU Pressure
+    signal: saturation
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: azure_sql
+    selector: "resource_type:azure_sql"
+    query: "avg(last_15m):anomalies(avg:azure.sql_servers_databases.cpu_percent{__SCOPE__} by {subscription_name,name}, 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-database-latency
+    runbook: azuresql-cpu-pressure
+    workflow: diag-database
+    failure_domain: databases
+
+  azuresql-log-write-saturation:
+    title: Azure SQL Transaction Log Write Saturation
+    signal: saturation
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_sql
+    selector: "resource_type:azure_sql"
+    query: "avg(last_15m):avg:azure.sql_servers_databases.log_write_percent{__SCOPE__} by {subscription_name,name} > 90"
+    thresholds: { critical: 90, warning: 75 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-database-latency
+    runbook: azuresql-log-write-saturation
+    workflow: diag-database
+    failure_domain: databases
+    rationale_fixed_threshold: >
+      Azure throttles log writes at 100% of the service objective's log rate.
+      At 90% the database is already being paced, and every write transaction
+      is waiting on log governance rather than on storage.
+
+  azuresql-session-saturation:
+    title: Azure SQL Session and Worker Exhaustion
+    signal: saturation
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: azure_sql
+    selector: "resource_type:azure_sql"
+    query: "max(next_6h):forecast(max:azure.sql_servers_databases.sessions_percent{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='15m', history='1d') > 90"
+    thresholds: { critical: 90, warning: 80 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: next_6h
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-database-availability
+    runbook: azuresql-session-saturation
+    workflow: auto-capacity-ticket
+    failure_domain: databases
+
+  azuresql-connection-failures:
+    title: Azure SQL Failed Connection Anomaly
+    signal: error_rate
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: azure_sql
+    selector: "resource_type:azure_sql"
+    query: "avg(last_15m):anomalies(sum:azure.sql_servers_databases.connection_failed{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-database-availability
+    runbook: azuresql-connection-failures
+    workflow: diag-database
+    failure_domain: databases
+
+  azuresql-firewall-blocked-connections:
+    title: Azure SQL Connections Blocked By Firewall
+    signal: auth_anomaly
+    impact_class: risk
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_sql
+    selector: "resource_type:azure_sql"
+    query: "sum(last_30m):sum:azure.sql_servers_databases.blocked_by_firewall{__SCOPE__} by {subscription_name,name}.as_count() > 0"
+    thresholds: { critical: 0 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-database-availability
+    runbook: azuresql-firewall-blocked-connections
+    workflow: diag-database
+    failure_domain: databases
+    rationale_fixed_threshold: >
+      Zero is correct: a legitimate client never reaches a database it is not
+      allowed to reach. Any firewall block is either a misconfigured deployment
+      or something connecting that should not be.
+
+  azuresql-storage-exhaustion-forecast:
+    title: Azure SQL Storage Exhaustion Forecast
+    signal: capacity
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: azure_sql
+    selector: "resource_type:azure_sql"
+    query: "max(next_1w):forecast(avg:azure.sql_servers_databases.storage_percent{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='1h', history='1w') > 90"
+    thresholds: { critical: 90, warning: 80 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: next_1w
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-database-availability
+    runbook: azuresql-storage-exhaustion-forecast
+    workflow: auto-capacity-ticket
+    failure_domain: databases
+
+  azuresql-tempdb-log-saturation:
+    title: Azure SQL TempDB Log Utilization
+    signal: saturation
+    impact_class: risk
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_sql
+    selector: "resource_type:azure_sql"
+    query: "avg(last_15m):avg:azure.sql_servers_databases.tempdb_percent_log_used{__SCOPE__} by {subscription_name,name} > 80"
+    thresholds: { critical: 80, warning: 60 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-database-availability
+    runbook: azuresql-tempdb-log-saturation
+    workflow: diag-database
+    failure_domain: databases
+    rationale_fixed_threshold: >
+      The tempdb log is not user-resizable on Azure SQL. At 80% there is still
+      time to find the offending transaction; at 100% every session using
+      tempdb fails at once.
+
+  azuresql-deadlock-anomaly:
+    title: Azure SQL Deadlock Anomaly
+    signal: error_rate
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: azure_sql
+    selector: "resource_type:azure_sql"
+    query: "avg(last_30m):anomalies(sum:azure.sql_servers_databases.deadlock{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_30m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-database-latency
+    runbook: azuresql-deadlock-anomaly
+    workflow: diag-database
+    failure_domain: databases
+
+  # --- RECOVERABILITY -------------------------------------------------------
+  # TELEMETRY GAP, IMPLEMENTED RATHER THAN FAKED.
+  #
+  # Neither the SQL Server integration nor Azure Monitor can tell you whether a
+  # backup can actually be RESTORED. Backup age proves a file was written; it
+  # proves nothing about whether that file is readable, whether the restore
+  # completes, or how long it takes. Treating age as recoverability evidence is
+  # how organisations discover their backups are useless during an incident.
+  #
+  # The signal therefore comes from the restore-verification job itself, which
+  # restores the latest backup to an isolated target, runs DBCC CHECKDB and
+  # emits `acme.database.restore_verification_age_hours` (and, on failure, a
+  # non-zero `acme.database.restore_verification_failed`). See
+  # docs/telemetry-gaps.md for the emitting contract.
+  sqlserver-restore-verification-stale:
+    title: SQL Server Restore Verification Stale
+    signal: backup_age
+    impact_class: risk
+    detection: threshold
+    monitor_type: query alert
+    resource_type: sqlserver_instance
+    selector: ""
+    query: "max(last_1h):max:acme.database.restore_verification_age_hours{__SCOPE__} by {db} > 168"
+    thresholds: { critical: 168, warning: 96 }
+    group_by: [db]
+    evaluation_window: last_1h
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-infra-backup-success
+    runbook: sqlserver-restore-verification-stale
+    workflow: auto-compliance-ticket
+    failure_domain: databases
+    compliance: true
+    rationale_fixed_threshold: >
+      168 hours is the weekly restore-test cycle the recovery standard commits
+      to. Past it, the most recent PROOF of recoverability is more than a week
+      old regardless of how fresh the backup files are.
+
+  sqlserver-restore-verification-failed:
+    title: SQL Server Restore Verification Failed
+    signal: backup_age
+    impact_class: risk
+    detection: threshold
+    monitor_type: query alert
+    resource_type: sqlserver_instance
+    selector: ""
+    query: "sum(last_6h):sum:acme.database.restore_verification_failed{__SCOPE__} by {db}.as_count() > 0"
+    thresholds: { critical: 0 }
+    group_by: [db]
+    evaluation_window: last_6h
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-infra-backup-success
+    runbook: sqlserver-restore-verification-failed
+    workflow: auto-compliance-ticket
+    failure_domain: databases
+    compliance: true
+    rationale_fixed_threshold: >
+      A restore verification that fails is a database that cannot be recovered.
+      There is no acceptable non-zero rate for that.

@@ -28,7 +28,7 @@ It fires when a fixed threshold was crossed, evaluated over `last_30m`.
 Condition as deployed:
 
 ```
-avg(last_30m):avg:azure.servicebus_namespaces.deadletteredmessages{__SCOPE__} by {namespace,entity} > 100
+avg(last_30m):avg:azure.servicebus_namespaces.count_of_dead_lettered_messages_in_a_queue_topic{__SCOPE__} by {namespace,entity} > 100
 ```
 
 Thresholds: `critical` = 100, `warning` = 10.
@@ -68,7 +68,7 @@ Most frequent first.
 
 ## Metrics, logs, traces, dashboards and dependencies
 
-**Metrics.** `azure.servicebus_namespaces.deadletteredmessages`.
+**Metrics.** `azure.servicebus_namespaces.count_of_dead_lettered_messages_in_a_queue_topic`.
 
 **Logs.** `service:messaging-platform env:prod status:error`
 

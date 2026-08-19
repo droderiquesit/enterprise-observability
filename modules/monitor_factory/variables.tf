@@ -110,10 +110,14 @@ variable "instances" {
     error_message = "alert_band must be one of baseline, standard, critical. Band 'none' never produces a monitor."
   }
   validation {
+    # dev DOES instantiate monitors — the baseline band only, at P4, routed to
+    # a Teams channel with no ServiceNow path (platform/policy/environments.yaml).
+    # What must never happen is a dev monitor that pages or escalates, which the
+    # paging preconditions below enforce for every environment that is not prod.
     condition = alltrue([
-      for k, m in var.instances : m.env != "dev"
+      for k, m in var.instances : m.env != "dev" || m.priority == "P4"
     ])
-    error_message = "Environment policy: dev never instantiates alerting monitors. Fix the calling stack, not this validation."
+    error_message = "Environment policy: a dev monitor may only ever be P4. Fix the environment priority ceiling, not this validation."
   }
   validation {
     condition = alltrue([

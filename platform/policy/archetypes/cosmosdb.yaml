@@ -1,0 +1,236 @@
+# =============================================================================
+# MONITOR ARCHETYPE CATALOG — AZURE COSMOS DB
+#
+# Telemetry source: the Azure Monitor integration (`azure.cosmosdb.*`).
+#
+# The governing idea for Cosmos is that THROUGHPUT IS THE FAILURE MODE. Cosmos
+# rarely goes down; it starts returning 429s because a partition, a container
+# or an account has run past its provisioned request units. So the primary
+# signals here are normalized RU consumption (which is per-partition and
+# therefore sees hot partitions) and 429 rate — not CPU or memory, which do not
+# exist as customer-visible concepts.
+# =============================================================================
+version: 2
+domain: database
+
+archetypes:
+
+  cosmos-service-availability:
+    title: Cosmos DB Service Availability Degraded
+    signal: availability
+    impact_class: customer_impact
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_cosmos_db
+    selector: "resource_type:azure_cosmos_db"
+    query: "min(last_10m):avg:azure.cosmosdb.service_availability{__SCOPE__} by {subscription_name,name} < 99.99"
+    thresholds: { critical: 99.99, warning: 100 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_10m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-database-availability
+    runbook: cosmos-service-availability
+    workflow: diag-database
+    failure_domain: databases
+    rationale_fixed_threshold: >
+      99.99% is the Cosmos DB single-region SLA. Below it Microsoft is in
+      breach of its own commitment, which is the point at which the correct
+      action is to raise a support case rather than to keep investigating.
+
+  cosmos-ru-throttling:
+    title: Cosmos DB Request Throttling (429)
+    signal: saturation
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_cosmos_db
+    selector: "resource_type:azure_cosmos_db"
+    query: "sum(last_15m):sum:azure.cosmosdb.total_requests{__SCOPE__,status_code:429} by {subscription_name,name}.as_count() > 0"
+    thresholds: { critical: 0 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-database-availability
+    runbook: cosmos-ru-throttling
+    workflow: diag-database
+    failure_domain: databases
+    rationale_fixed_threshold: >
+      A 429 is Cosmos refusing work the application asked for. The SDK retries
+      it, so a low rate is survivable — but it is never correct, and the count
+      is the only honest place to start the conversation about provisioning.
+
+  cosmos-normalized-ru-saturation:
+    title: Cosmos DB Normalized RU Saturation (Hot Partition)
+    signal: saturation
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_cosmos_db
+    selector: "resource_type:azure_cosmos_db"
+    query: "avg(last_15m):max:azure.cosmosdb.normalized_ru_consumption{__SCOPE__} by {subscription_name,name} > 90"
+    thresholds: { critical: 90, warning: 80 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-database-availability
+    runbook: cosmos-normalized-ru-saturation
+    workflow: diag-database
+    failure_domain: databases
+    rationale_fixed_threshold: >
+      Normalized RU consumption is reported as the MAXIMUM across physical
+      partitions, which is what makes it the hot-partition detector: 90% on one
+      partition throttles that partition's keys while the account still looks
+      half-idle in aggregate.
+
+  cosmos-server-side-latency-anomaly:
+    title: Cosmos DB Server-Side Latency Anomaly
+    signal: latency
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: azure_cosmos_db
+    selector: "resource_type:azure_cosmos_db"
+    query: "avg(last_15m):anomalies(avg:azure.cosmosdb.server_side_latency{__SCOPE__} by {subscription_name,name}, 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-database-latency
+    runbook: cosmos-server-side-latency-anomaly
+    workflow: diag-database
+    failure_domain: databases
+    notes: >
+      Server-side latency excludes network and SDK time, so a deviation here is
+      genuinely the service — which is what makes it worth separating from the
+      application's own client-observed latency.
+
+  cosmos-replication-latency:
+    title: Cosmos DB Cross-Region Replication Latency
+    signal: replication_lag
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_cosmos_db
+    selector: "resource_type:azure_cosmos_db"
+    query: "avg(last_30m):max:azure.cosmosdb.p99_replication_latency{__SCOPE__} by {subscription_name,name} > 300"
+    thresholds: { critical: 300, warning: 120 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-database-availability
+    runbook: cosmos-replication-latency
+    workflow: diag-database
+    failure_domain: databases
+    rationale_fixed_threshold: >
+      300ms P99 is the point at which a multi-region read starts returning data
+      old enough for users to notice under session consistency, and the point
+      at which an unplanned regional failover would lose visible writes.
+
+  cosmos-region-failover:
+    title: Cosmos DB Region Failover Occurred
+    signal: availability
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_cosmos_db
+    selector: "resource_type:azure_cosmos_db"
+    query: "sum(last_15m):sum:azure.cosmosdb.region_failed_over{__SCOPE__} by {subscription_name,name}.as_count() > 0"
+    thresholds: { critical: 0 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-database-availability
+    runbook: cosmos-region-failover
+    workflow: diag-database
+    failure_domain: databases
+    auto_resolve_hours: 4
+    rationale_fixed_threshold: >
+      A failover is a discrete event, not a level. Any occurrence means the
+      write region moved — planned or not — and the account is running
+      somewhere other than where capacity planning assumed.
+
+  cosmos-regional-availability-loss:
+    title: Cosmos DB Region Taken Offline
+    signal: availability
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_cosmos_db
+    selector: "resource_type:azure_cosmos_db"
+    query: "sum(last_15m):sum:azure.cosmosdb.region_offlined{__SCOPE__} by {subscription_name,name}.as_count() > 0"
+    thresholds: { critical: 0 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-database-availability
+    runbook: cosmos-regional-availability-loss
+    workflow: diag-database
+    failure_domain: databases
+    auto_resolve_hours: 4
+    rationale_fixed_threshold: >
+      Regions going offline is a discrete state change. Whether it was Azure or
+      a deployment removing a region, read locality changed for every client in
+      that region.
+
+  cosmos-storage-growth-forecast:
+    title: Cosmos DB Storage Growth Forecast
+    signal: capacity
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: azure_cosmos_db
+    selector: "resource_type:azure_cosmos_db"
+    query: "max(next_1w):forecast(avg:azure.cosmosdb.data_usage{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='1h', history='1w') > 0"
+    thresholds: { critical: 0 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: next_1w
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-database-availability
+    runbook: cosmos-storage-growth-forecast
+    workflow: auto-capacity-ticket
+    failure_domain: databases
+    notes: >
+      Storage growth in Cosmos is a partition-key problem before it is a cost
+      problem: a container growing faster than its logical partitions can split
+      is heading for a 20GB logical-partition ceiling that cannot be raised.
+
+  cosmos-metadata-request-anomaly:
+    title: Cosmos DB Metadata Request Anomaly
+    signal: error_rate
+    impact_class: risk
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: azure_cosmos_db
+    selector: "resource_type:azure_cosmos_db"
+    query: "avg(last_30m):anomalies(sum:azure.cosmosdb.metadata_requests{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-database-availability
+    runbook: cosmos-metadata-request-anomaly
+    workflow: diag-database
+    failure_domain: databases
+    notes: >
+      A metadata-request spike almost always means SDK clients are recreating
+      connections or re-reading container definitions in a loop — a client
+      defect that shows up as throttling on the account before anyone looks at
+      the application.

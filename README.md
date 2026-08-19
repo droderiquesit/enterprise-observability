@@ -6,9 +6,9 @@ through Terraform and a small set of Python tools, with a bounded number of
 managed Datadog objects, deployed and governed entirely from this repository.
 
 ```
-474 monitors cover a 100,000-service estate.
+655 monitors cover a 100,000-service estate.
 Adding 50,000 more services creates ZERO new Datadog objects.
-67 of those 474 (14%) are permitted to wake a human.
+74 of those 655 (11%) are permitted to wake a human.
 Teams write 5 tags. For anything unique, they write one YAML file.
 ```
 
@@ -27,13 +27,13 @@ YAML file), and reviewers who want the design rationale
 > DECISIONS, not the number of monitored RESOURCES.**
 
 The naive model is `services × environments × signals` — 100,000 × 4 × 20 =
-**~8,000,000 monitors**. This framework produces **474**, with the same
+**~8,000,000 monitors**. This framework produces **655**, with the same
 coverage, because resources are *groups* inside grouped multi-alert monitors,
 selected by tag.
 
 | | |
 |---|---|
-| Archetypes → instances | 151 → 419 (archetype × environment × alert band) |
+| Archetypes → instances | 261 → 655 (archetype × environment × alert band) |
 | SLOs | 21 domain + one per tier0 service → 44 burn-rate monitors |
 | Composites | 7 confirmed-impact patterns |
 | Self-service | 4 (one YAML file each) |
@@ -77,7 +77,7 @@ monitor to Datadog's own validation API.
 | Location | Purpose | Add content here when |
 |---|---|---|
 | `platform/policy/` | The configuration hierarchy — every monitoring decision, as YAML | Changing what is monitored, how loud it is, who is told |
-| `platform/policy/archetypes/` | The monitor catalog (151 definitions, 14 domains) | Adding/tuning a monitor *pattern* for everyone |
+| `platform/policy/archetypes/` | The monitor catalog (261 definitions, 14 domains) | Adding/tuning a monitor *pattern* for everyone |
 | `platform/services/` | Service registrations (golden path, step 1) | Registering a service — one file |
 | `platform/monitors/` | Self-service monitors | A team needs one genuinely unique monitor — one file |
 | `platform/runbooks/` | 152 runbooks (generated frame + human sections) | Filling in the human sections of a runbook |

@@ -28,7 +28,7 @@ It fires when a fixed threshold was crossed, evaluated over `last_30m`.
 Condition as deployed:
 
 ```
-sum(last_30m):sum:postgresql.connections{__SCOPE__} by {db_instance}.as_count() < 1
+sum(last_30m):sum:sqlserver.stats.connections{__SCOPE__} by {db_instance}.as_count() < 1
 ```
 
 Thresholds: `critical` = 1.
@@ -70,7 +70,7 @@ Most frequent first.
 
 ## Metrics, logs, traces, dashboards and dependencies
 
-**Metrics.** `postgresql.connections`.
+**Metrics.** `sqlserver.stats.connections`.
 
 **Logs.** `service:databases env:prod source:database`
 

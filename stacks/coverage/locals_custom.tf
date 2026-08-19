@@ -140,6 +140,7 @@ locals {
       resource_type = try(r.m.resource_type, try(local.custom_base[k].resource_type, "service"))
       region        = ""
       notification_profile = try(r.m.notification_profile,
+        r.env == "dev" ? "nonprod_dev" :
         contains(local.nonprod_envs, r.env) ? "nonprod_standard" :
         local.custom_band[k] == "critical" ? "production_critical" : "production_standard"
       )

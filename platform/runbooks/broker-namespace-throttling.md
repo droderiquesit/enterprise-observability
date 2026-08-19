@@ -28,7 +28,7 @@ It fires when a fixed threshold was crossed, evaluated over `last_15m`.
 Condition as deployed:
 
 ```
-sum(last_15m):sum:azure.servicebus_namespaces.throttledrequests{__SCOPE__} by {namespace}.as_count() > 0
+sum(last_15m):sum:azure.servicebus_namespaces.throttled_requests{__SCOPE__} by {namespace}.as_count() > 0
 ```
 
 Thresholds: `critical` = 0.
@@ -69,7 +69,7 @@ Most frequent first.
 
 ## Metrics, logs, traces, dashboards and dependencies
 
-**Metrics.** `azure.servicebus_namespaces.throttledrequests`.
+**Metrics.** `azure.servicebus_namespaces.throttled_requests`.
 
 **Logs.** `service:messaging-platform env:prod status:error`
 

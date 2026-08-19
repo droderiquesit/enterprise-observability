@@ -188,7 +188,10 @@ slos:
     type: monitor
     target: 99.95
     timeframe: 30d
-    member_archetypes: [db-availability, db-replication-lag, azuresql-connection-failures]
+    member_archetypes:
+      [db-availability, sqlserver-instance-unreachable, sqlserver-ag-sync-unhealthy,
+       azuresql-unavailable, cosmos-service-availability,
+       snowflake-connectivity-failure]
     burn_alerts: [fast, medium, slow]
 
   slo-database-latency:

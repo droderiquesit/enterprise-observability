@@ -132,6 +132,7 @@ locals {
   notification_profile_for = {
     for k, r in local.resolved : k => (
       r.a.domain == "security" ? "security_operational" :
+      r.env == "dev" ? "nonprod_dev" :
       contains(local.nonprod_envs, r.env) ? "nonprod_standard" :
       r.band == "critical" ? "production_critical" :
       r.band == "standard" ? "production_standard" :

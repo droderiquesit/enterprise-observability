@@ -71,9 +71,12 @@ def test_matrix_row_count_matches_the_planned_estate():
 
 # --- runbooks ---------------------------------------------------------------
 
-def test_every_archetype_has_a_runbook_file():
-    for aid in POLICY["archetypes"]:
-        assert (generate_runbooks.RUNBOOK_DIR / f"{aid}.md").exists(), aid
+def test_every_archetype_reaches_a_runbook_file():
+    """Via its runbook id, which an archetype may SHARE with another (
+    api-latency-seasonal points at api-latency-p99). The file is named for the
+    runbook, not for the archetype."""
+    for aid, a in POLICY["archetypes"].items():
+        assert (generate_runbooks.RUNBOOK_DIR / f"{a['runbook']}.md").exists(), aid
 
 
 def test_every_runbook_has_all_mandatory_sections():
@@ -89,6 +92,8 @@ def test_runbook_registry_and_files_agree():
 
 def test_runbook_drafts_are_not_stale():
     for aid, a in POLICY["archetypes"].items():
+        if a["runbook"] != aid:
+            continue          # shared runbook — owned and rendered by its own archetype
         path = generate_runbooks.RUNBOOK_DIR / f"{aid}.md"
         generated = generate_runbooks.render(POLICY, aid, a)
         assert path.read_text() == generate_runbooks.merge(path.read_text(), generated), (

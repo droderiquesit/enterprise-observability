@@ -1,0 +1,300 @@
+# =============================================================================
+# MONITOR ARCHETYPE CATALOG — AZURE CACHE FOR REDIS AND CONTAINER REGISTRY
+#
+# Two shared services with the same operational shape: nobody owns them, both
+# are on the critical path of everything else, and both fail in ways that get
+# blamed on the application.
+#
+#   Redis     an eviction storm or a server-load spike appears as application
+#             latency and database load. The cache is the last place anyone
+#             looks, which is why it is monitored on its own terms here.
+#   Registry  a registry that cannot serve pulls stops every deployment and
+#             every pod restart in the estate — including the ones trying to
+#             recover from an unrelated incident.
+# =============================================================================
+version: 2
+domain: cloud
+
+archetypes:
+
+  # --- AZURE CACHE FOR REDIS ------------------------------------------------
+  redis-server-load-saturation:
+    title: Redis Server Load Saturation
+    signal: saturation
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: azure_redis
+    selector: "resource_type:azure_redis"
+    query: "avg(last_15m):anomalies(avg:azure.cache_redis.server_load{__SCOPE__} by {subscription_name,name}, 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-cloud-platform-availability
+    runbook: redis-server-load-saturation
+    workflow: diag-azure-resource
+    failure_domain: caching
+    notes: >
+      Server load is the share of time the Redis event loop is busy. Because
+      Redis is single-threaded per shard, this saturates long before CPU does
+      and it is the metric that actually predicts latency.
+
+  redis-cpu-saturation-forecast:
+    title: Redis CPU Saturation Forecast
+    signal: saturation
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: azure_redis
+    selector: "resource_type:azure_redis"
+    query: "max(next_12h):forecast(avg:azure.cache_redis.percent_processor_time{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='30m', history='1d') > 80"
+    thresholds: { critical: 80, warning: 70 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: next_12h
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-cloud-platform-availability
+    runbook: redis-cpu-saturation-forecast
+    workflow: auto-capacity-ticket
+    failure_domain: caching
+
+  redis-memory-pressure-forecast:
+    title: Redis Memory Pressure Forecast
+    signal: capacity
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: azure_redis
+    selector: "resource_type:azure_redis"
+    query: "max(next_12h):forecast(avg:azure.cache_redis.usedmemorypercentage{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='30m', history='1d') > 85"
+    thresholds: { critical: 85, warning: 75 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: next_12h
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-cloud-platform-availability
+    runbook: redis-memory-pressure-forecast
+    workflow: auto-capacity-ticket
+    failure_domain: caching
+    notes: >
+      Crossing the memory limit does not fail the cache — it starts EVICTING,
+      which is worse because it is silent. Forecasting the limit is what makes
+      eviction a planned resize instead of a mystery latency incident.
+
+  redis-eviction-anomaly:
+    title: Redis Key Eviction Anomaly
+    signal: saturation
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: azure_redis
+    selector: "resource_type:azure_redis"
+    query: "avg(last_15m):anomalies(sum:azure.cache_redis.evictedkeys{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-cloud-platform-availability
+    runbook: redis-eviction-anomaly
+    workflow: diag-azure-resource
+    failure_domain: caching
+    notes: >
+      Evictions mean the cache is discarding data the application still wants.
+      Every eviction becomes a database read, so this is the earliest warning
+      that cache pressure is about to become database pressure.
+
+  redis-cache-hit-ratio-degradation:
+    title: Redis Cache Hit Ratio Degradation
+    signal: saturation
+    impact_class: degradation
+    detection: rate_of_change
+    monitor_type: query alert
+    resource_type: azure_redis
+    selector: "resource_type:azure_redis"
+    query: "pct_change(avg(last_30m),last_4h):(sum:azure.cache_redis.cachehits{__SCOPE__} by {subscription_name,name} / (sum:azure.cache_redis.cachehits{__SCOPE__} by {subscription_name,name} + sum:azure.cache_redis.cachemisses{__SCOPE__} by {subscription_name,name})) < -20"
+    thresholds: { critical: -20, warning: -10 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-cloud-platform-availability
+    runbook: redis-cache-hit-ratio-degradation
+    workflow: diag-azure-resource
+    failure_domain: caching
+    notes: >
+      Replaces the previous db-cache-hit-ratio-degradation archetype, which was
+      written against the self-hosted Redis integration (`redis.stats.*`) that
+      this estate does not run.
+
+  redis-connection-saturation-forecast:
+    title: Redis Connection Exhaustion Forecast
+    signal: saturation
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: azure_redis
+    selector: "resource_type:azure_redis"
+    query: "max(next_6h):forecast(avg:azure.cache_redis.connectedclients{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='15m', history='1d') > 0"
+    thresholds: { critical: 0 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: next_6h
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-cloud-platform-availability
+    runbook: redis-connection-saturation-forecast
+    workflow: auto-capacity-ticket
+    failure_domain: caching
+    notes: >
+      The connection ceiling is a function of the cache tier, so the comparison
+      number lives in the runbook. A client leak is the usual cause and it
+      climbs linearly, which is exactly what a linear forecast catches.
+
+  redis-latency-anomaly:
+    title: Redis Latency Anomaly
+    signal: latency
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: azure_redis
+    selector: "resource_type:azure_redis"
+    query: "avg(last_15m):anomalies(avg:azure.cache_redis.cache_latency{__SCOPE__} by {subscription_name,name}, 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-cloud-platform-availability
+    runbook: redis-latency-anomaly
+    workflow: diag-azure-resource
+    failure_domain: caching
+
+  redis-error-anomaly:
+    title: Redis Error Anomaly
+    signal: error_rate
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: azure_redis
+    selector: "resource_type:azure_redis"
+    query: "avg(last_15m):anomalies(sum:azure.cache_redis.errors{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-cloud-platform-availability
+    runbook: redis-error-anomaly
+    workflow: diag-azure-resource
+    failure_domain: caching
+    notes: >
+      Includes failover and unresponsive-node errors, which is the closest
+      Azure gets to telling you a shard moved.
+
+  redis-geo-replication-unhealthy:
+    title: Redis Geo-Replication Unhealthy
+    signal: replication_lag
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: azure_redis
+    selector: "resource_type:azure_redis"
+    query: "min(last_15m):min:azure.cache_redis.geo_replication_healthy{__SCOPE__} by {subscription_name,name} < 1"
+    thresholds: { critical: 1 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_15m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-cloud-platform-availability
+    runbook: redis-geo-replication-unhealthy
+    workflow: diag-azure-resource
+    failure_domain: caching
+    rationale_fixed_threshold: >
+      Azure publishes geo-replication health as healthy (1) or not (0). Below
+      1 the secondary is no longer a usable failover target, which is the only
+      reason it is being paid for.
+
+  # --- AZURE CONTAINER REGISTRY --------------------------------------------
+  acr-pull-failure-anomaly:
+    title: Container Registry Pull Failure Anomaly
+    signal: error_rate
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: azure_container_registry
+    selector: "resource_type:azure_container_registry"
+    query: "avg(last_30m):anomalies(sum:azure.containerregistry_registries.total_pull_count{__SCOPE__} by {subscription_name,name}.as_rate() - sum:azure.containerregistry_registries.successful_pull_count{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_30m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-cloud-platform-availability
+    runbook: acr-pull-failure-anomaly
+    workflow: diag-azure-resource
+    failure_domain: registry
+    notes: >
+      Total minus successful is the failed-pull rate — the registry publishes
+      no failure counter directly. Failed pulls are almost always
+      authentication (an expired pull secret or managed identity) or a
+      throttled registry, and both stop every deployment at once.
+
+  acr-push-failure-anomaly:
+    title: Container Registry Push Failure Anomaly
+    signal: error_rate
+    impact_class: risk
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: azure_container_registry
+    selector: "resource_type:azure_container_registry"
+    query: "avg(last_30m):anomalies(sum:azure.containerregistry_registries.total_push_count{__SCOPE__} by {subscription_name,name}.as_rate() - sum:azure.containerregistry_registries.successful_push_count{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: last_30m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-cloud-platform-availability
+    runbook: acr-push-failure-anomaly
+    workflow: diag-azure-resource
+    failure_domain: registry
+    notes: >
+      Push failures break the delivery pipeline rather than production, which
+      is why this is risk rather than degradation — but it breaks it for
+      everyone at once.
+
+  acr-storage-growth-forecast:
+    title: Container Registry Storage Growth Forecast
+    signal: capacity
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: azure_container_registry
+    selector: "resource_type:azure_container_registry"
+    query: "max(next_1w):forecast(avg:azure.containerregistry_registries.storage_used{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='1h', history='1w') > 0"
+    thresholds: { critical: 0 }
+    group_by: [subscription_name, name]
+    notify_by: [subscription_name]
+    evaluation_window: next_1w
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-cloud-platform-availability
+    runbook: acr-storage-growth-forecast
+    workflow: auto-capacity-ticket
+    failure_domain: registry
+    notes: >
+      Registry storage grows until a retention policy is applied — it never
+      shrinks on its own. The tier quota is in the runbook because Basic,
+      Standard and Premium differ by an order of magnitude.

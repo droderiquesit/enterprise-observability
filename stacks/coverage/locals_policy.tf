@@ -86,12 +86,12 @@ locals {
   # the environment is staging.
   # ---------------------------------------------------------------------------
   window_scale = {
-    "last_5m"  = { prod = "last_5m", stage = "last_10m", qa = "last_10m" }
-    "last_10m" = { prod = "last_10m", stage = "last_15m", qa = "last_30m" }
-    "last_15m" = { prod = "last_15m", stage = "last_30m", qa = "last_30m" }
-    "last_30m" = { prod = "last_30m", stage = "last_1h", qa = "last_1h" }
-    "last_1h"  = { prod = "last_1h", stage = "last_2h", qa = "last_2h" }
-    "last_2h"  = { prod = "last_2h", stage = "last_4h", qa = "last_4h" }
+    "last_5m"  = { prod = "last_5m", stage = "last_10m", qa = "last_10m", dev = "last_30m" }
+    "last_10m" = { prod = "last_10m", stage = "last_15m", qa = "last_30m", dev = "last_1h" }
+    "last_15m" = { prod = "last_15m", stage = "last_30m", qa = "last_30m", dev = "last_1h" }
+    "last_30m" = { prod = "last_30m", stage = "last_1h", qa = "last_1h", dev = "last_2h" }
+    "last_1h"  = { prod = "last_1h", stage = "last_2h", qa = "last_2h", dev = "last_4h" }
+    "last_2h"  = { prod = "last_2h", stage = "last_4h", qa = "last_4h", dev = "last_4h" }
   }
 
   # ---------------------------------------------------------------------------
@@ -150,5 +150,9 @@ locals {
   # NOTIFICATION PROFILE RESOLUTION (first match wins, per notification_profiles.yaml)
   # ---------------------------------------------------------------------------
   # Implemented as a function-shaped local consumed by locals_instances.tf.
-  nonprod_envs = ["qa", "stage"]
+  # Every environment that is NOT production. dev is included so custom and
+  # composite monitors treat it as non-production; the notification profile
+  # for dev is resolved separately (nonprod_dev) because dev is the one
+  # environment with no ServiceNow path at all.
+  nonprod_envs = ["dev", "qa", "stage"]
 }

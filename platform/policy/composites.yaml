@@ -95,20 +95,20 @@ composites:
   database-saturation-impacting-application:
     title: Database Saturation Is Impacting Applications
     description: >
-      Connection-pool saturation forecasts are P3 capacity work. The same
-      forecast while queries on that instance are already slowing is an outage
-      in progress: the pool is not just filling, it is failing to drain.
+      A connection-exhaustion forecast is P3 capacity work. The same forecast
+      while sessions on that instance are already blocking is an outage in
+      progress: the pool is not just filling, it is failing to drain.
     owner_team: data-engineering
     cc_teams: []
-    members: [db-connection-saturation, db-query-latency-anomaly]
+    members: [sqlserver-connection-saturation, sqlserver-blocking-sessions]
     operator: AND
-    group_by: [db_instance]
+    group_by: [host]
     domain: database
     impact_class: customer_impact
     envs: [prod]
     bands: [critical]
     slo_id: slo-database-availability
-    runbook: db-connection-saturation
+    runbook: sqlserver-connection-saturation
     workflow: diag-database
     failure_domain: databases
     demote_members: false

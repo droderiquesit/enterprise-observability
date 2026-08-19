@@ -1,0 +1,278 @@
+# =============================================================================
+# MONITOR ARCHETYPE CATALOG — APPLICATION RUNTIME AND USER EXPERIENCE
+#   Core Web Vitals · connection pools · garbage collection · deployment metadata
+#
+# RUNTIME AWARENESS IS EXPRESSED BY THE METRIC, NOT BY A TAG FILTER.
+# A .NET service never emits `jvm.gc.major_collection_time` and a JVM service
+# never emits `runtime.dotnet.gc.pause_time`. Because the metric namespace is
+# the runtime, a JVM archetype simply produces no groups for .NET services and
+# vice versa — no selector, no per-language monitor duplication, and no risk of
+# a monitor quietly grading a service against another runtime's behaviour.
+#
+# Runtime metrics require APM runtime metric collection to be enabled
+# (DD_RUNTIME_METRICS_ENABLED); Core Web Vitals require RUM with view metrics
+# generated. Both are recorded in docs/telemetry-gaps.md with the exact
+# instrumentation each one needs.
+# =============================================================================
+version: 2
+domain: application
+
+archetypes:
+
+  # --- CORE WEB VITALS ------------------------------------------------------
+  # Percentile-based on purpose. Core Web Vitals are defined by Google as a
+  # 75th-percentile experience over a 28-day window; alerting on a single slow
+  # session would be alerting on one user's laptop.
+  web-vitals-lcp-degradation:
+    title: Core Web Vitals — Largest Contentful Paint Degraded
+    signal: latency
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: service
+    selector: ""
+    query: "avg(last_1h):p75:rum.view.largest_contentful_paint{__SCOPE__} by {service} > 2500"
+    thresholds: { critical: 2500, warning: 2000 }
+    group_by: [service]
+    evaluation_window: last_1h
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-web-availability
+    runbook: web-vitals-lcp-degradation
+    workflow: diag-app-health
+    failure_domain: frontend
+    rationale_fixed_threshold: >
+      2500ms at p75 is the published boundary between "good" and "needs
+      improvement" for Largest Contentful Paint. It is an external standard
+      that search ranking and user-perceived speed are both measured against,
+      which is exactly the kind of number a fixed threshold should carry.
+
+  web-vitals-inp-degradation:
+    title: Core Web Vitals — Interaction to Next Paint Degraded
+    signal: latency
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: service
+    selector: ""
+    query: "avg(last_1h):p75:rum.view.interaction_to_next_paint{__SCOPE__} by {service} > 200"
+    thresholds: { critical: 200, warning: 100 }
+    group_by: [service]
+    evaluation_window: last_1h
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-web-availability
+    runbook: web-vitals-inp-degradation
+    workflow: diag-app-health
+    failure_domain: frontend
+    rationale_fixed_threshold: >
+      200ms at p75 is the published "good" boundary for Interaction to Next
+      Paint — the point beyond which a click stops feeling instant. INP
+      replaced First Input Delay because it measures every interaction in the
+      session, not just the first.
+
+  web-vitals-cls-degradation:
+    title: Core Web Vitals — Cumulative Layout Shift Degraded
+    signal: correctness
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: service
+    selector: ""
+    query: "avg(last_1h):p75:rum.view.cumulative_layout_shift{__SCOPE__} by {service} > 0.1"
+    thresholds: { critical: 0.1, warning: 0.05 }
+    group_by: [service]
+    evaluation_window: last_1h
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-web-availability
+    runbook: web-vitals-cls-degradation
+    workflow: diag-app-health
+    failure_domain: frontend
+    rationale_fixed_threshold: >
+      0.1 at p75 is the published "good" boundary for Cumulative Layout Shift.
+      A regression here is almost always a deployment that changed an image,
+      font or ad slot without reserving its space — cheap to fix, and invisible
+      to every other monitor.
+
+  # --- CONNECTION POOLS -----------------------------------------------------
+  # TELEMETRY GAP, IMPLEMENTED. Neither APM runtime metrics nor the database
+  # integrations can see the CLIENT side of a connection pool — the pool lives
+  # inside the application process. Applications emit the four numbers below
+  # from their pool implementation (HikariCP, Npgsql, System.Data.SqlClient,
+  # node-mssql) as `acme.app.db_pool.*`; the exact contract, including the
+  # required tags, is in docs/telemetry-gaps.md.
+  #
+  # Pool exhaustion is worth this effort because it is the single most common
+  # cause of "the database looks fine but the application is timing out": the
+  # database sees a light load precisely BECAUSE the application cannot get a
+  # connection to send it work.
+  app-connection-pool-saturation:
+    title: Application Connection Pool Saturation
+    signal: saturation
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: service
+    selector: ""
+    query: "avg(last_10m):avg:acme.app.db_pool.active{__SCOPE__} by {service,pool} / avg:acme.app.db_pool.max{__SCOPE__} by {service,pool} * 100 > 90"
+    thresholds: { critical: 90, warning: 75 }
+    group_by: [service, pool]
+    evaluation_window: last_10m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-app-availability
+    runbook: app-connection-pool-saturation
+    workflow: diag-app-health
+    failure_domain: application
+    rationale_fixed_threshold: >
+      A pool at 90% of maximum has almost no headroom for a traffic spike or a
+      slow query, and the next request queues. The ratio is used rather than an
+      absolute count because pool sizes differ per service by design.
+
+  app-connection-acquisition-latency:
+    title: Application Connection Acquisition Latency
+    signal: latency
+    impact_class: degradation
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: service
+    selector: ""
+    query: "avg(last_15m):anomalies(avg:acme.app.db_pool.acquire_wait_ms{__SCOPE__} by {service,pool}, 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [service, pool]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-app-latency
+    runbook: app-connection-acquisition-latency
+    workflow: diag-app-health
+    failure_domain: application
+    notes: >
+      Acquisition wait is the honest symptom of exhaustion: it rises before the
+      pool is technically full, because threads are already queueing for the
+      connections that exist.
+
+  # --- GARBAGE COLLECTION ---------------------------------------------------
+  app-jvm-gc-pause-degradation:
+    title: JVM Garbage Collection Pause Degradation
+    signal: latency
+    impact_class: degradation
+    detection: rate_of_change
+    monitor_type: query alert
+    resource_type: service
+    selector: ""
+    query: "pct_change(avg(last_15m),last_4h):sum:jvm.gc.major_collection_time{__SCOPE__} by {service}.as_rate() > 100"
+    thresholds: { critical: 100, warning: 50 }
+    group_by: [service]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-app-latency
+    runbook: app-jvm-gc-pause-degradation
+    workflow: diag-app-health
+    failure_domain: application
+    notes: >
+      Major (old-generation) collection time only. Minor collections are
+      constant and cheap; it is the major collections that stop the world long
+      enough for callers to time out.
+
+  app-jvm-heap-pressure:
+    title: JVM Heap Pressure
+    signal: saturation
+    impact_class: risk
+    detection: forecast
+    monitor_type: query alert
+    resource_type: service
+    selector: ""
+    query: "max(next_6h):forecast(avg:jvm.heap_memory{__SCOPE__} by {service} / avg:jvm.heap_memory_max{__SCOPE__} by {service} * 100, 'linear', 1, interval='15m', history='1d') > 90"
+    thresholds: { critical: 90, warning: 80 }
+    group_by: [service]
+    evaluation_window: next_6h
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-app-availability
+    runbook: app-jvm-heap-pressure
+    workflow: diag-app-health
+    failure_domain: application
+    notes: >
+      Heap used against heap max, forecast forward. A JVM approaching its
+      ceiling spends progressively more time collecting and less time working,
+      so the failure is gradual latency before it is an OutOfMemoryError.
+
+  app-dotnet-gc-pause-degradation:
+    title: .NET Garbage Collection Pause Degradation
+    signal: latency
+    impact_class: degradation
+    detection: rate_of_change
+    monitor_type: query alert
+    resource_type: service
+    selector: ""
+    query: "pct_change(avg(last_15m),last_4h):avg:runtime.dotnet.gc.pause_time{__SCOPE__} by {service} > 100"
+    thresholds: { critical: 100, warning: 50 }
+    group_by: [service]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-app-latency
+    runbook: app-dotnet-gc-pause-degradation
+    workflow: diag-app-health
+    failure_domain: application
+    notes: >
+      The .NET counterpart to app-jvm-gc-pause-degradation. Kept as a separate
+      archetype rather than a shared one because the metric, the collector
+      generations and the remediation are all different — a shared monitor
+      would have to be vague enough to be useless to both.
+
+  app-dotnet-gen2-collection-anomaly:
+    title: .NET Gen2 Collection Anomaly
+    signal: saturation
+    impact_class: risk
+    detection: anomaly
+    monitor_type: query alert
+    resource_type: service
+    selector: ""
+    query: "avg(last_30m):anomalies(sum:runtime.dotnet.gc.count.gen2{__SCOPE__} by {service}.as_rate(), 'agile', 3, direction='above') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [service]
+    evaluation_window: last_30m
+    envs: [prod]
+    bands: [critical]
+    slo_id: slo-app-availability
+    runbook: app-dotnet-gen2-collection-anomaly
+    workflow: diag-app-health
+    failure_domain: application
+    notes: >
+      Gen2 collections are the expensive ones. A rising gen2 rate against the
+      service's own baseline is the .NET signature of a leak or of large-object
+      churn, well before memory looks alarming.
+
+  # --- DEPLOYMENT METADATA --------------------------------------------------
+  # The platform has deployment-regression and deployment-error-spike
+  # archetypes that group by `version`. A service that does not send the
+  # version tag is therefore INVISIBLE to both of them — and looked monitored.
+  # This archetype closes that loop by detecting the missing tag itself rather
+  # than trusting that instrumentation happened.
+  deployment-version-tag-missing:
+    title: Service Emitting Traces Without a Version Tag
+    signal: drift
+    impact_class: hygiene
+    detection: threshold
+    monitor_type: query alert
+    resource_type: service
+    selector: ""
+    query: "sum(last_1h):sum:trace.span.hits{__SCOPE__,!version:*} by {service}.as_count() > 0"
+    thresholds: { critical: 0 }
+    group_by: [service]
+    evaluation_window: last_1h
+    envs: [prod, stage]
+    bands: [critical]
+    slo_id: slo-platform-services
+    runbook: deployment-version-tag-missing
+    workflow: auto-drift-ticket
+    failure_domain: application
+    rationale_fixed_threshold: >
+      Any traced request without a version tag is a request that cannot be
+      attributed to a deployment. Zero is the target because the tag comes from
+      DD_VERSION in the deployment pipeline — either the pipeline sets it for
+      every service or the deployment-correlation story is fiction.
