@@ -11,6 +11,14 @@ on:
     - cron: "0 6 * * *"     # drift, nightly
     - cron: "0 7 * * 1-5"   # coverage & quality, weekday mornings
   workflow_dispatch:
+    inputs:
+      purge_unmanaged:
+        description: >-
+          Delete catalog entries and runbook notebooks this repository does not
+          manage. Leave false to report only. Destructive; read the dry-run
+          report from a previous run first.
+        type: boolean
+        default: false
 # Each cron fires ONE job (gated per job below) — GitHub itself triggers the
 # whole workflow on every schedule, so without the gates both jobs would run
 # on both crons. workflow_dispatch runs both.
@@ -120,6 +128,25 @@ jobs:
           python build_inventory.py --live
           python profile_engine.py
           python coverage_report.py --live --gate governance
+
+      # THE MIRROR-IMAGE QUESTION (§6). Coverage asks whether everything we
+      # declared is deployed. This asks whether everything deployed is
+      # something we declared — catalog entries and runbooks left behind by
+      # pilots, superseded repositories and vendor agents, each of which looks
+      # exactly like a real one in the UI.
+      #
+      # Reports by default; deletes only when a human dispatches the workflow
+      # with purge_unmanaged. It never gates: drift in someone else's objects
+      # is not a reason to fail this repository's governance run.
+      - name: "Catalog reconciliation — entries and runbooks nothing owns (§6)"
+        continue-on-error: true
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        run: |
+          cd tools
+          python catalog_reconcile.py \
+            ${{ (github.event_name == 'workflow_dispatch' && inputs.purge_unmanaged) && '--delete' || '' }}
 
       # Fleet compliance decays exactly the way coverage does — an agent that
       # stops, a VM built without the extension, an integration switched off
