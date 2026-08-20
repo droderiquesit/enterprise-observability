@@ -40,6 +40,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_impacting
     runbook: frontdoor-origin-unhealthy
     workflow: diag-azure-resource
     failure_domain: edge
@@ -66,6 +67,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-api-latency
+    slo_relation: slo_impacting
     runbook: frontdoor-total-latency-degradation
     workflow: diag-azure-resource
     failure_domain: edge
@@ -91,6 +93,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-api-latency
+    slo_relation: slo_impacting
     runbook: frontdoor-backend-latency-anomaly
     workflow: diag-azure-resource
     failure_domain: edge
@@ -112,6 +115,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: diagnostic
     runbook: frontdoor-traffic-anomaly
     workflow: diag-azure-resource
     failure_domain: edge
@@ -137,6 +141,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-security-telemetry
+    slo_relation: security
     runbook: frontdoor-waf-block-surge
     workflow: diag-security-control
     failure_domain: edge
@@ -164,6 +169,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_supporting
     runbook: cdn-cache-hit-ratio-degradation
     workflow: diag-azure-resource
     failure_domain: edge
@@ -190,6 +196,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-api-availability
+    slo_relation: slo_supporting
     runbook: apim-capacity-saturation
     workflow: auto-capacity-ticket
     failure_domain: edge
@@ -215,6 +222,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-api-availability
+    slo_relation: slo_impacting
     runbook: apim-failed-request-anomaly
     workflow: diag-azure-resource
     failure_domain: edge
@@ -240,6 +248,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-api-latency
+    slo_relation: slo_impacting
     runbook: apim-gateway-latency-degradation
     workflow: diag-azure-resource
     failure_domain: edge
@@ -261,6 +270,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-api-latency
+    slo_relation: slo_impacting
     runbook: apim-backend-latency-degradation
     workflow: diag-dependency
     failure_domain: edge
@@ -286,6 +296,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-api-availability
+    slo_relation: slo_impacting
     runbook: apim-connectivity-degraded
     workflow: diag-network
     failure_domain: edge
@@ -312,6 +323,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-security-telemetry
+    slo_relation: security
     runbook: apim-unauthorized-spike
     workflow: diag-security-control
     failure_domain: edge
@@ -338,6 +350,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_impacting
     runbook: trafficmanager-endpoint-down
     workflow: diag-network
     failure_domain: edge
@@ -364,6 +377,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: diagnostic
     runbook: trafficmanager-traffic-distribution-anomaly
     workflow: diag-network
     failure_domain: edge

@@ -18,6 +18,8 @@ Checks, in the order the CI pipeline reports them:
   PACKS         service archetypes reference archetypes that exist
   ENTITY        entity kinds are real, resolvable and consistent with archetype
   SLO           every archetype maps to a real SLO; members exist
+  SLO_PROFILE   profiles, the resolution chain, and every service's own
+                objectives resolve to a measurable SLI (§12)
   EXCEPTION     required fields, expiry, maximum lifetime, approver
   AUTOMATION    workflow classes carry their required safeguards
   BUDGET        the estate stays inside the monitor and paging budgets
@@ -31,6 +33,7 @@ import sys
 
 import entity_resolver as er
 import obs_common as oc
+import slo_resolver
 
 REQUIRED_ARCHETYPE_FIELDS = [
     "title", "signal", "impact_class", "detection", "monitor_type",
@@ -300,6 +303,54 @@ def lint() -> list[str]:
             err("SCHEMA", where, "metric SLOs require a query")
         if s["type"] == "monitor" and not s.get("member_archetypes"):
             err("SCHEMA", where, "monitor SLOs require member_archetypes")
+
+    # ------------------------------------------------- SLO profiles (§12, §15)
+    # The profile catalog, the resolution chain and every service's own `slo:`
+    # block. Implemented in tools/slo_resolver.py, which is the same resolver
+    # the coverage report and the tests use — a rule that only the linter knows
+    # is a rule the platform does not actually follow.
+    errors.extend(slo_resolver.validate(policy))
+
+    relations = policy["slo_profiles_doc"]["slo_relations"]
+    slo_members = {
+        m for s in policy["slos"].values() if s["type"] == "monitor"
+        for m in s.get("member_archetypes", [])
+    }
+    for aid, a in policy["archetypes"].items():
+        where = f"archetype {aid}"
+        rel = a.get("slo_relation")
+        if not rel:
+            err("SCHEMA", where, "missing `slo_relation` — every monitor must state HOW it "
+                                 "relates to an objective, not just which one (§15)")
+            continue
+        if rel not in relations:
+            err("SCHEMA", where, f"slo_relation {rel!r} is not in the vocabulary "
+                                 f"({', '.join(sorted(relations))})")
+            continue
+        # `sli_producing` is the only relation with a mechanical definition:
+        # the monitor IS a member of a monitor-based SLO, so its state consumes
+        # that budget directly. Both directions are checked, because the
+        # dangerous drift is the quiet one — an archetype dropped from an SLO's
+        # membership while still claiming to produce its SLI.
+        if rel == "sli_producing" and aid not in slo_members:
+            err("REFERENCE", where, "declares slo_relation `sli_producing` but is not a member "
+                                    "of any monitor-based SLO, so it produces no SLI")
+        if rel != "sli_producing" and aid in slo_members:
+            err("REFERENCE", where, f"is a member of a monitor-based SLO (its state consumes an "
+                                    f"error budget) but declares slo_relation {rel!r}")
+        # A security detection is one either by domain or by signal: a WAF block
+        # surge on the cloud platform and a failed-login anomaly on a database
+        # are security findings that happen to live in another team's catalog
+        # file, and classifying them as diagnostics would hide them from the
+        # security operating model.
+        if rel == "security" and a["domain"] != "security" and a["signal"] != "auth_anomaly":
+            err("SCHEMA", where, "slo_relation `security` is for the security domain or an "
+                                 "auth_anomaly signal; a security-adjacent monitor elsewhere is "
+                                 "still supporting or diagnostic")
+        if rel == "compliance" and not a.get("compliance"):
+            err("SCHEMA", where, "slo_relation `compliance` without `compliance: true` — the "
+                                 "classification claims audit evidence the monitor is not tagged "
+                                 "as producing")
 
     # ---------------------------------------------------------------- exceptions
     today = dt.date.today()

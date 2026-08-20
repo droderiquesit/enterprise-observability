@@ -39,6 +39,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-web-availability
+    slo_relation: slo_impacting
     runbook: web-vitals-lcp-degradation
     workflow: diag-app-health
     failure_domain: frontend
@@ -64,6 +65,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-web-availability
+    slo_relation: slo_impacting
     runbook: web-vitals-inp-degradation
     workflow: diag-app-health
     failure_domain: frontend
@@ -89,6 +91,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-web-availability
+    slo_relation: slo_impacting
     runbook: web-vitals-cls-degradation
     workflow: diag-app-health
     failure_domain: frontend
@@ -126,6 +129,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-app-availability
+    slo_relation: slo_supporting
     runbook: app-connection-pool-saturation
     workflow: diag-app-health
     failure_domain: application
@@ -150,6 +154,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-app-latency
+    slo_relation: slo_impacting
     runbook: app-connection-acquisition-latency
     workflow: diag-app-health
     failure_domain: application
@@ -175,6 +180,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-app-latency
+    slo_relation: slo_impacting
     runbook: app-jvm-gc-pause-degradation
     workflow: diag-app-health
     failure_domain: application
@@ -199,6 +205,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-app-availability
+    slo_relation: slo_supporting
     runbook: app-jvm-heap-pressure
     workflow: diag-app-health
     failure_domain: application
@@ -223,6 +230,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-app-latency
+    slo_relation: slo_impacting
     runbook: app-dotnet-gc-pause-degradation
     workflow: diag-app-health
     failure_domain: application
@@ -248,6 +256,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-app-availability
+    slo_relation: slo_supporting
     runbook: app-dotnet-gen2-collection-anomaly
     workflow: diag-app-health
     failure_domain: application
@@ -278,6 +287,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-platform-services
+    slo_relation: informational
     runbook: deployment-version-tag-missing
     workflow: auto-drift-ticket
     failure_domain: application

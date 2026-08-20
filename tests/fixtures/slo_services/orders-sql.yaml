@@ -1,0 +1,19 @@
+# A tier0 datastore. It exists to prove the two things a datastore does
+# differently from a service:
+#
+#   1. Its availability is a SERVICE CHECK, so the objective is monitor-based,
+#      not a request ratio. The old tier0 template would have measured it with
+#      `trace.http.request.*` — a query that returns nothing, and therefore an
+#      SLO that is permanently, silently green.
+#   2. Datadog rejects burn_rate() on a monitor SLO with a non-metric member, so
+#      the tier's three burn windows must be dropped. That is an INVARIANT, not
+#      a layer: no tier may override it, and the resolver records why.
+service:
+  name: orders-sql
+  team: data-engineering
+  tier: tier0
+  service_archetype: datastore
+  description: Primary order-of-record database for the ordering platform.
+  envs: [dev, qa, stage, prod]
+  slo:
+    profile: datastore-critical

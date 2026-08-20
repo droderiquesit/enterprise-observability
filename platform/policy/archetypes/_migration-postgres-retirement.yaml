@@ -57,6 +57,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-database-latency
+    slo_relation: diagnostic
     runbook: db-availability
     workflow: diag-database
     failure_domain: databases
@@ -78,6 +79,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: slo_supporting
     runbook: db-availability
     workflow: diag-database
     failure_domain: databases
@@ -99,6 +101,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: slo_supporting
     runbook: db-availability
     workflow: diag-database
     failure_domain: databases

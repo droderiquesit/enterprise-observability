@@ -52,6 +52,7 @@ archetypes:
     envs: [prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-platform-services
+    slo_relation: informational
     runbook: azure-budget-utilization
     workflow: auto-finops-review
     failure_domain: finops
@@ -78,6 +79,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-platform-services
+    slo_relation: informational
     runbook: azure-budget-breach
     workflow: auto-finops-review
     failure_domain: finops
@@ -104,6 +106,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-platform-services
+    slo_relation: informational
     runbook: azure-cost-forecast-overrun
     workflow: auto-finops-review
     failure_domain: finops
@@ -129,6 +132,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-platform-services
+    slo_relation: informational
     runbook: azure-cost-burn-rate
     workflow: auto-finops-review
     failure_domain: finops

@@ -24,6 +24,7 @@ archetypes:
     envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-api-availability
+    slo_relation: slo_impacting
     runbook: api-availability
     workflow: diag-api-health
     failure_domain: api-services
@@ -50,6 +51,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-api-latency
+    slo_relation: slo_impacting
     runbook: api-latency-p99
     workflow: diag-api-health
     failure_domain: api-services
@@ -75,6 +77,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-api-latency
+    slo_relation: slo_impacting
     runbook: api-latency-p99
     workflow: diag-api-health
     failure_domain: api-services
@@ -96,6 +99,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-api-availability
+    slo_relation: slo_impacting
     runbook: api-5xx-anomaly
     workflow: diag-api-health
     failure_domain: api-services
@@ -117,6 +121,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-api-availability
+    slo_relation: slo_impacting
     runbook: api-4xx-anomaly
     workflow: diag-api-health
     failure_domain: api-services
@@ -142,6 +147,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-api-availability
+    slo_relation: slo_impacting
     runbook: api-traffic-anomaly
     workflow: diag-api-health
     failure_domain: api-services
@@ -167,6 +173,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-api-latency
+    slo_relation: slo_impacting
     runbook: api-dependency-latency
     workflow: diag-dependency
     failure_domain: api-services
@@ -188,6 +195,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-api-availability
+    slo_relation: slo_supporting
     runbook: api-rate-limit-saturation
     workflow: auto-capacity-ticket
     failure_domain: api-gateway
@@ -209,6 +217,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-api-availability
+    slo_relation: slo_impacting
     runbook: api-gateway-backend-unhealthy
     workflow: diag-api-health
     failure_domain: api-gateway

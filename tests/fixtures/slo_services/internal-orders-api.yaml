@@ -1,0 +1,16 @@
+# §59 PROOF, service 2 of 2. See partner-orders-api.yaml.
+#
+# Technically the same service: same archetype, same tier, same team, same
+# environments, and therefore the same monitors, the same routing and the same
+# on-call. Its users are internal, so it promises a tenth of a percent less and
+# does not page anyone on a medium burn.
+service:
+  name: internal-orders-api
+  team: application-development
+  tier: tier0
+  service_archetype: api
+  description: Internal order submission API used by back-office tooling.
+  envs: [dev, qa, stage, prod]
+  dependencies: [orders-sql, identity-api]
+  slo:
+    profile: api-standard

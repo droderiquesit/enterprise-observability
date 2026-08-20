@@ -27,6 +27,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-data-freshness
+    slo_relation: sli_producing
     runbook: pipeline-output-stale
     workflow: diag-data-pipeline
     failure_domain: data-pipelines
@@ -56,6 +57,7 @@ archetypes:
     envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-data-freshness
+    slo_relation: slo_supporting
     runbook: pipeline-job-failure
     workflow: remediate-rerun-job
     failure_domain: data-pipelines
@@ -78,6 +80,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-data-freshness
+    slo_relation: slo_supporting
     runbook: pipeline-duration-anomaly
     workflow: diag-data-pipeline
     failure_domain: data-pipelines
@@ -103,6 +106,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-data-freshness
+    slo_relation: sli_producing
     runbook: pipeline-volume-anomaly
     workflow: diag-data-pipeline
     failure_domain: data-quality
@@ -127,6 +131,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-data-freshness
+    slo_relation: sli_producing
     runbook: data-quality-check-failure
     workflow: diag-data-pipeline
     failure_domain: data-quality
@@ -149,6 +154,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-data-freshness
+    slo_relation: diagnostic
     runbook: data-schema-drift
     workflow: diag-data-pipeline
     failure_domain: data-quality
@@ -171,6 +177,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-data-freshness
+    slo_relation: slo_supporting
     runbook: warehouse-queue-saturation
     workflow: remediate-scale-workload
     failure_domain: data-warehouse
@@ -192,6 +199,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-data-freshness
+    slo_relation: slo_supporting
     runbook: streaming-consumer-lag-forecast
     workflow: remediate-scale-workload
     failure_domain: data-pipelines
@@ -213,6 +221,7 @@ archetypes:
     envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-data-freshness
+    slo_relation: slo_supporting
     runbook: data-telemetry-loss
     workflow: diag-data-pipeline
     failure_domain: data-pipelines

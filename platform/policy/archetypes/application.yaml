@@ -30,6 +30,7 @@ archetypes:
     envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-web-availability
+    slo_relation: sli_producing
     runbook: web-synthetic-availability
     workflow: diag-app-health
     failure_domain: web-frontends
@@ -55,6 +56,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-web-availability
+    slo_relation: slo_impacting
     runbook: web-page-load-degradation
     workflow: diag-app-health
     failure_domain: web-frontends
@@ -76,6 +78,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-web-availability
+    slo_relation: slo_impacting
     runbook: web-js-error-anomaly
     workflow: diag-app-health
     failure_domain: web-frontends
@@ -97,6 +100,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-web-availability
+    slo_relation: sli_producing
     runbook: web-origin-5xx-anomaly
     workflow: diag-app-health
     failure_domain: web-frontends
@@ -119,6 +123,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-worker-throughput
+    slo_relation: slo_impacting
     runbook: worker-throughput-anomaly
     workflow: diag-app-health
     failure_domain: worker-platform
@@ -140,6 +145,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-worker-throughput
+    slo_relation: slo_impacting
     runbook: worker-processing-latency
     workflow: diag-app-health
     failure_domain: worker-platform
@@ -161,6 +167,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-worker-throughput
+    slo_relation: sli_producing
     runbook: worker-error-anomaly
     workflow: diag-app-health
     failure_domain: worker-platform
@@ -182,6 +189,7 @@ archetypes:
     envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-worker-throughput
+    slo_relation: sli_producing
     runbook: worker-stalled
     workflow: diag-app-health
     failure_domain: worker-platform
@@ -209,6 +217,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-app-availability
+    slo_relation: slo_impacting
     runbook: app-crash-anomaly
     workflow: diag-app-health
     failure_domain: application-platform
@@ -230,6 +239,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-app-availability
+    slo_relation: slo_supporting
     runbook: app-saturation-threadpool
     workflow: diag-app-health
     failure_domain: application-platform
@@ -251,6 +261,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-app-availability
+    slo_relation: slo_supporting
     runbook: app-memory-leak-forecast
     workflow: remediate-recycle-app-pool
     failure_domain: application-platform
@@ -272,6 +283,7 @@ archetypes:
     envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-app-availability
+    slo_relation: slo_supporting
     runbook: app-telemetry-loss
     workflow: diag-app-health
     failure_domain: application-platform
@@ -299,6 +311,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-app-availability
+    slo_relation: dependency
     runbook: dependency-error-anomaly
     workflow: diag-dependency
     failure_domain: application-platform
@@ -320,6 +333,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-app-latency
+    slo_relation: dependency
     runbook: dependency-latency-degradation
     workflow: diag-dependency
     failure_domain: application-platform
@@ -342,6 +356,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-app-availability
+    slo_relation: slo_impacting
     runbook: deployment-regression
     workflow: auto-enrich-change
     failure_domain: application-platform
@@ -364,6 +379,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-app-availability
+    slo_relation: slo_impacting
     runbook: deployment-error-spike
     workflow: auto-enrich-change
     failure_domain: application-platform

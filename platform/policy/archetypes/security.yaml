@@ -34,6 +34,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-security-telemetry
+    slo_relation: sli_producing
     runbook: security-log-source-missing
     workflow: diag-security-control
     failure_domain: security-telemetry
@@ -62,6 +63,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-security-telemetry
+    slo_relation: compliance
     runbook: security-telemetry-volume-drop
     workflow: diag-security-control
     failure_domain: security-telemetry
@@ -87,6 +89,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-security-telemetry
+    slo_relation: compliance
     runbook: security-agent-coverage-gap
     workflow: diag-security-control
     failure_domain: security-controls
@@ -112,6 +115,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-security-telemetry
+    slo_relation: sli_producing
     runbook: security-control-failure
     workflow: auto-compliance-ticket
     failure_domain: security-controls
@@ -135,6 +139,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-security-telemetry
+    slo_relation: security
     runbook: auth-failure-anomaly
     workflow: diag-security-control
     failure_domain: identity-security
@@ -159,6 +164,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-security-telemetry
+    slo_relation: security
     runbook: privileged-action-anomaly
     workflow: diag-security-control
     failure_domain: identity-security
@@ -180,6 +186,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-security-telemetry
+    slo_relation: compliance
     runbook: certificate-expiry
     workflow: auto-cert-renewal-ticket
     failure_domain: security-controls
@@ -205,6 +212,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-security-telemetry
+    slo_relation: compliance
     runbook: secret-rotation-overdue
     workflow: auto-compliance-ticket
     failure_domain: security-controls
@@ -228,6 +236,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-security-telemetry
+    slo_relation: sli_producing
     runbook: audit-log-continuity-gap
     workflow: auto-compliance-ticket
     failure_domain: security-telemetry

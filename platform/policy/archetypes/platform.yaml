@@ -28,6 +28,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-platform-services
+    slo_relation: sli_producing
     runbook: platform-service-unavailable
     workflow: diag-app-health
     failure_domain: observability-platform
@@ -52,6 +53,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-platform-services
+    slo_relation: slo_supporting
     runbook: monitor-estate-budget-exceeded
     workflow: auto-ticket-sustained
     failure_domain: observability-platform
@@ -76,6 +78,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-platform-services
+    slo_relation: informational
     runbook: clickops-monitor-detected
     workflow: auto-drift-ticket
     failure_domain: observability-platform
@@ -100,6 +103,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-platform-services
+    slo_relation: sli_producing
     runbook: ingest-pipeline-degraded
     workflow: auto-major-incident
     failure_domain: observability-platform
@@ -125,6 +129,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-platform-services
+    slo_relation: informational
     runbook: exception-expired
     workflow: auto-ticket-sustained
     failure_domain: observability-platform
@@ -149,6 +154,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-platform-services
+    slo_relation: informational
     runbook: unowned-resource-backlog
     workflow: auto-ticket-sustained
     failure_domain: observability-platform
@@ -173,6 +179,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-platform-services
+    slo_relation: slo_supporting
     runbook: cicd-pipeline-failure
     workflow: auto-ticket-sustained
     failure_domain: ci-cd

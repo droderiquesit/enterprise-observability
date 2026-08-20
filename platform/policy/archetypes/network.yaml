@@ -25,6 +25,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-network-availability
+    slo_relation: sli_producing
     runbook: network-device-unreachable
     workflow: diag-network
     failure_domain: network-core
@@ -48,6 +49,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-network-availability
+    slo_relation: slo_supporting
     runbook: network-interface-errors
     workflow: diag-network
     failure_domain: network-core
@@ -73,6 +75,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-network-availability
+    slo_relation: slo_supporting
     runbook: network-interface-saturation-forecast
     workflow: auto-capacity-ticket
     failure_domain: network-core
@@ -96,6 +99,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-network-availability
+    slo_relation: dependency
     runbook: network-packet-loss
     workflow: diag-network
     failure_domain: connectivity
@@ -121,6 +125,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: dependency
     runbook: network-path-latency-degradation
     workflow: diag-network
     failure_domain: connectivity
@@ -143,6 +148,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-network-availability
+    slo_relation: sli_producing
     runbook: dns-resolution-failure
     workflow: diag-network
     failure_domain: dns
@@ -167,6 +173,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-network-availability
+    slo_relation: sli_producing
     runbook: vpn-tunnel-down
     workflow: diag-network
     failure_domain: connectivity
@@ -191,6 +198,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-network-availability
+    slo_relation: slo_impacting
     runbook: loadbalancer-pool-degraded
     workflow: diag-network
     failure_domain: network-edge
@@ -213,6 +221,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: informational
     runbook: network-config-change
     workflow: auto-drift-ticket
     failure_domain: network-core

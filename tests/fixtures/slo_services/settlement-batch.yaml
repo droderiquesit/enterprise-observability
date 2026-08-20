@@ -1,0 +1,20 @@
+# Two things this fixture proves that the API pair cannot.
+#
+#   1. OPT-IN. It is tier1, whose SLO scope is `domain` — so it would carry no
+#      objectives of its own. Declaring an `slo:` block is what materializes
+#      them, which is how a service with one contractual output gets a promise
+#      without being relabelled tier0 to obtain one.
+#   2. A DIFFERENT ENTITY TYPE resolves a different objective SET. A batch job
+#      has no request ratio and no latency percentile; what it owes is a
+#      completed run and a fresh output, and the entity-type layer is what
+#      knows that.
+service:
+  name: settlement-batch
+  team: application-development
+  tier: tier1
+  service_archetype: batch_job
+  description: Nightly settlement extract delivered to the clearing partner.
+  envs: [qa, stage, prod]
+  dependencies: [orders-sql, partner-sftp]
+  slo:
+    profile: batch-standard

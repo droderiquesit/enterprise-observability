@@ -36,6 +36,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: sli_producing
     runbook: snowflake-connectivity-failure
     workflow: diag-database
     failure_domain: analytics
@@ -61,6 +62,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-database-latency
+    slo_relation: slo_impacting
     runbook: snowflake-query-latency-anomaly
     workflow: diag-database
     failure_domain: analytics
@@ -85,6 +87,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-database-latency
+    slo_relation: slo_supporting
     runbook: snowflake-warehouse-queueing
     workflow: diag-database
     failure_domain: analytics
@@ -108,6 +111,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-database-latency
+    slo_relation: diagnostic
     runbook: snowflake-warehouse-provisioning-delay
     workflow: diag-database
     failure_domain: analytics
@@ -132,6 +136,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-database-latency
+    slo_relation: slo_supporting
     runbook: snowflake-query-blocked
     workflow: diag-database
     failure_domain: analytics
@@ -155,6 +160,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-platform-services
+    slo_relation: informational
     runbook: snowflake-credit-consumption-anomaly
     workflow: auto-finops-review
     failure_domain: analytics
@@ -179,6 +185,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-platform-services
+    slo_relation: slo_supporting
     runbook: snowflake-storage-growth-forecast
     workflow: auto-capacity-ticket
     failure_domain: analytics
@@ -203,6 +210,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-platform-services
+    slo_relation: slo_supporting
     runbook: snowflake-failsafe-growth
     workflow: auto-finops-review
     failure_domain: analytics
@@ -227,6 +235,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-security-telemetry
+    slo_relation: security
     runbook: snowflake-login-failure-anomaly
     workflow: diag-security-control
     failure_domain: analytics
@@ -247,6 +256,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-data-freshness
+    slo_relation: slo_impacting
     runbook: snowflake-pipe-ingestion-stalled
     workflow: diag-data-pipeline
     failure_domain: analytics
@@ -277,6 +287,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-data-freshness
+    slo_relation: slo_supporting
     runbook: snowflake-task-failure
     workflow: remediate-rerun-job
     failure_domain: analytics

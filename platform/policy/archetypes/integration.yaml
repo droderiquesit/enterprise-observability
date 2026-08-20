@@ -27,6 +27,7 @@ archetypes:
     envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-batch-completion
+    slo_relation: sli_producing
     runbook: batch-job-failure
     workflow: remediate-rerun-job
     failure_domain: batch-platform
@@ -49,6 +50,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-batch-completion
+    slo_relation: slo_supporting
     runbook: batch-duration-anomaly
     workflow: diag-batch-job
     failure_domain: batch-platform
@@ -73,6 +75,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-batch-completion
+    slo_relation: sli_producing
     runbook: batch-output-freshness
     workflow: remediate-rerun-job
     failure_domain: batch-platform
@@ -97,6 +100,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-batch-completion
+    slo_relation: slo_supporting
     runbook: batch-backlog-growth
     workflow: auto-capacity-ticket
     failure_domain: batch-platform
@@ -118,6 +122,7 @@ archetypes:
     envs: [prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-integration-delivery
+    slo_relation: sli_producing
     runbook: schedule-missed-run
     workflow: remediate-rerun-job
     failure_domain: scheduler
@@ -144,6 +149,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-integration-delivery
+    slo_relation: slo_supporting
     runbook: schedule-job-failure
     workflow: remediate-rerun-job
     failure_domain: scheduler
@@ -166,6 +172,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-integration-delivery
+    slo_relation: slo_supporting
     runbook: schedule-overrun
     workflow: diag-batch-job
     failure_domain: scheduler
@@ -190,6 +197,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-integration-delivery
+    slo_relation: sli_producing
     runbook: integration-flow-failure
     workflow: diag-dependency
     failure_domain: integration-platform
@@ -211,6 +219,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-integration-delivery
+    slo_relation: slo_impacting
     runbook: integration-transformation-errors
     workflow: diag-dependency
     failure_domain: integration-platform
@@ -235,6 +244,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-integration-delivery
+    slo_relation: slo_impacting
     runbook: integration-delivery-latency
     workflow: diag-dependency
     failure_domain: integration-platform
@@ -256,6 +266,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-integration-delivery
+    slo_relation: sli_producing
     runbook: partner-file-delivery-missed
     workflow: diag-dependency
     failure_domain: partner-integration

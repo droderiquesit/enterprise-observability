@@ -41,6 +41,7 @@ def load_policy() -> dict:
         "service_archetypes_doc": _yaml(POLICY_DIR / "service_archetypes.yaml"),
         "slos": _yaml(POLICY_DIR / "slos.yaml")["slos"],
         "slos_doc": _yaml(POLICY_DIR / "slos.yaml"),
+        "slo_profiles_doc": _yaml(POLICY_DIR / "slo_profiles.yaml"),
         "exceptions_doc": _yaml(POLICY_DIR / "exceptions.yaml"),
         "exceptions": _yaml(POLICY_DIR / "exceptions.yaml")["exceptions"],
         "runbooks_doc": _yaml(POLICY_DIR / "runbooks.yaml"),

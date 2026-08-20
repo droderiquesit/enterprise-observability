@@ -27,6 +27,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-vmware-cluster-availability
+    slo_relation: sli_producing
     runbook: vmware-host-disconnected
     workflow: diag-vmware
     failure_domain: virtualization
@@ -50,6 +51,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-vmware-cluster-availability
+    slo_relation: sli_producing
     runbook: vmware-cluster-ha-degraded
     workflow: diag-vmware
     failure_domain: vmware-cluster
@@ -74,6 +76,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-vmware-cluster-availability
+    slo_relation: slo_supporting
     runbook: vmware-datastore-capacity-forecast
     workflow: auto-capacity-ticket
     failure_domain: datastore
@@ -98,6 +101,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-vmware-cluster-availability
+    slo_relation: slo_impacting
     runbook: vmware-datastore-latency
     workflow: diag-vmware
     failure_domain: datastore
@@ -119,6 +123,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-vmware-cluster-availability
+    slo_relation: slo_supporting
     runbook: vmware-cpu-ready-contention
     workflow: diag-vmware
     failure_domain: virtualization
@@ -144,6 +149,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-vmware-cluster-availability
+    slo_relation: slo_supporting
     runbook: vmware-memory-ballooning
     workflow: diag-vmware
     failure_domain: virtualization
@@ -169,6 +175,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-vmware-cluster-availability
+    slo_relation: slo_impacting
     runbook: vmware-vm-powered-off-unexpectedly
     workflow: diag-vmware
     failure_domain: virtualization
@@ -191,6 +198,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-vmware-cluster-availability
+    slo_relation: slo_supporting
     runbook: vmware-snapshot-age
     workflow: auto-capacity-ticket
     failure_domain: datastore

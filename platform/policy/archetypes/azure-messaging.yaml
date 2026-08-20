@@ -38,6 +38,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_impacting
     runbook: servicebus-server-errors
     workflow: diag-messaging
     failure_domain: messaging
@@ -61,6 +62,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_impacting
     runbook: servicebus-publish-volume-collapse
     workflow: diag-messaging
     failure_domain: messaging
@@ -85,6 +87,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_supporting
     runbook: servicebus-namespace-cpu-saturation
     workflow: auto-capacity-ticket
     failure_domain: messaging
@@ -114,6 +117,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_impacting
     runbook: servicebus-message-age
     workflow: diag-messaging
     failure_domain: messaging
@@ -139,6 +143,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_supporting
     runbook: eventhub-throughput-exhaustion
     workflow: diag-messaging
     failure_domain: messaging
@@ -163,6 +168,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_supporting
     runbook: eventhub-server-busy-throttling
     workflow: diag-messaging
     failure_domain: messaging
@@ -183,6 +189,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_impacting
     runbook: eventhub-server-errors
     workflow: diag-messaging
     failure_domain: messaging
@@ -203,6 +210,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_impacting
     runbook: eventhub-ingress-anomaly
     workflow: diag-messaging
     failure_domain: messaging
@@ -227,6 +235,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_impacting
     runbook: eventhub-egress-stalled
     workflow: diag-messaging
     failure_domain: messaging
@@ -253,6 +262,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-data-freshness
+    slo_relation: slo_supporting
     runbook: eventhub-capture-backlog
     workflow: diag-data-pipeline
     failure_domain: messaging

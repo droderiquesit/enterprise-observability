@@ -26,6 +26,47 @@
           "items": { "enum": ["dev", "qa", "stage", "prod"] }
         },
         "dependencies": { "type": "array", "items": { "type": "string" } },
+        "slo": {
+          "description": "Optional per-service objectives (§11, §12). `profile` names a set from platform/policy/slo_profiles.yaml; `objectives` overrides individual fields of it and is the LAST word in the resolution chain. Declaring this block also opts a service below tier0 into per-service SLOs. Everything omitted is inherited — a service states what is different about its promise, never the SLI that measures it.",
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "profile": { "type": "string" },
+            "objectives": {
+              "type": "object",
+              "additionalProperties": false,
+              "propertyNames": { "enum": ["availability", "latency", "freshness"] },
+              "patternProperties": {
+                "^(availability|latency|freshness)$": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": { "type": "boolean" },
+                    "target": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 100 },
+                    "timeframe": { "enum": ["7d", "30d", "90d"] },
+                    "type": { "enum": ["metric", "monitor"] },
+                    "burn_alerts": {
+                      "type": "array",
+                      "items": { "enum": ["fast", "medium", "slow", "trend"] }
+                    },
+                    "threshold": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "statistic": { "type": "string" },
+                        "operator": { "type": "string" },
+                        "value": { "type": ["number", "string"] },
+                        "unit": { "type": "string" }
+                      }
+                    },
+                    "rationale": { "type": "string", "minLength": 10 }
+                  }
+                }
+              }
+            }
+          }
+        },
         "compliance_scope": { "enum": ["sox", "pci", "hipaa", "gdpr"] },
         "idempotent": { "type": "boolean" },
         "links": {

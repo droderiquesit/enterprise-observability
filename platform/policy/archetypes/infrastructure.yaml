@@ -33,6 +33,7 @@ archetypes:
     envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-infra-compute-availability
+    slo_relation: sli_producing
     runbook: host-unavailable
     workflow: diag-host
     failure_domain: compute
@@ -63,6 +64,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-infra-compute-availability
+    slo_relation: slo_supporting
     runbook: host-cpu-baseline-deviation
     workflow: diag-host
     failure_domain: compute
@@ -90,6 +92,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-infra-compute-availability
+    slo_relation: slo_supporting
     runbook: host-memory-pressure
     workflow: diag-host
     failure_domain: compute
@@ -112,6 +115,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-infra-compute-availability
+    slo_relation: slo_supporting
     runbook: host-disk-exhaustion-forecast
     workflow: auto-capacity-ticket
     failure_domain: storage
@@ -138,6 +142,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-infra-compute-availability
+    slo_relation: sli_producing
     runbook: host-filesystem-readonly
     workflow: diag-host
     failure_domain: storage
@@ -161,6 +166,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-infra-compute-availability
+    slo_relation: slo_supporting
     runbook: host-inode-exhaustion-forecast
     workflow: auto-capacity-ticket
     failure_domain: storage
@@ -183,6 +189,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-infra-compute-availability
+    slo_relation: slo_impacting
     runbook: host-process-down
     workflow: diag-host
     failure_domain: compute
@@ -206,6 +213,7 @@ archetypes:
     envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-platform-services
+    slo_relation: slo_supporting
     runbook: host-agent-unhealthy
     workflow: diag-host
     failure_domain: compute
@@ -231,6 +239,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-platform-services
+    slo_relation: slo_supporting
     runbook: host-clock-drift
     workflow: diag-host
     failure_domain: compute
@@ -257,6 +266,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-infra-compute-availability
+    slo_relation: slo_impacting
     runbook: storage-latency-anomaly
     workflow: diag-host
     failure_domain: storage
@@ -279,6 +289,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-infra-backup-success
+    slo_relation: compliance
     runbook: backup-age-exceeded
     workflow: auto-compliance-ticket
     failure_domain: backup-platform
