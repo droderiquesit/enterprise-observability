@@ -1129,11 +1129,12 @@ def q_estate(state, p):
 # ===========================================================================
 # 25–30 · fleet, telemetry, noise, ownership, routing
 # ===========================================================================
-@question("broken_agents", "Which agents are broken or stale?", "partial",
+@question("broken_agents", "Which agents are broken or stale?", "runtime",
           params={"stale_hours": "int, default 2"},
           patterns=["broken agents", "agent health", "agents down", "stale hosts",
-                    "hosts not reporting"],
-          note="Agent HEALTH is observable; fleet COMPLIANCE percentage is not (§36/§39).")
+                    "hosts not reporting", "agent coverage", "fleet compliance"],
+          note="Agent HEALTH from the host surface, plus fleet COMPLIANCE measured "
+               "against the inventory (agent_profiles.yaml).")
 def q_agents(state, p):
     a = _new(state, "broken_agents")
     hosts = state.runtime.get("hosts")
@@ -1164,56 +1165,120 @@ def q_agents(state, p):
     a.cite(f"{POLICY}/archetypes/infrastructure.yaml", "archetype",
            [aid for aid in state.policy["archetypes"] if "agent" in aid],
            note="the archetypes that alert on this condition in production")
-    a.caveat(
-        f"{TRACEABILITY} §36/§39: FLEET COMPLIANCE PERCENTAGE CANNOT BE COMPUTED. Nothing "
-        "declares which hosts are REQUIRED to run an agent, so there is no denominator — "
-        "only hosts Datadog can already see appear above. A host with no agent at all is "
-        "invisible to this answer by construction.")
+    # FLEET COMPLIANCE. Everything above is health, and health is measured over
+    # hosts Datadog can already see — a denominator that makes a host with no
+    # agent at all invisible, and any percentage built on it 100% by
+    # construction. This used to be disclosed as an unfixable limit. It is not
+    # one any more: agent_profiles.yaml declares the required fleet and
+    # tools/fleet_compliance.py measures against the INVENTORY, so a host that
+    # never reported is a finding rather than an absence.
+    inventory = state.inventory if getattr(state, "inventory", None) else None
+    if inventory:
+        import fleet_compliance
+        fc = fleet_compliance.evaluate(inventory, hosts, state.policy,
+                                       oc.load_agent_profiles(), now)
+        s = fc["summary"]
+        a.data["fleet_compliance"] = {
+            "measured": fc["measured"],
+            "hosts_required": s["hosts_required"],
+            "hosts_compliant": s["hosts_compliant"],
+            "hosts_exempt": s["hosts_exempt"],
+            "compliance_pct": s["compliance_pct"],
+            "target_pct": s["target_pct"],
+            "finding_counts": s["finding_counts"],
+            "minimum_agent_version": s["minimum_agent_version"],
+        }
+        if fc["measured"]:
+            a.summary += (f" Fleet compliance {s['compliance_pct']}% "
+                          f"({s['hosts_compliant']}/{s['hosts_required']} required hosts, "
+                          f"target {s['target_pct']}%).")
+        else:
+            # A denominator of zero is not 100%. Say which of the two it is.
+            a.summary += (" Fleet compliance is NOT MEASURED: the inventory names no host "
+                          "that is required to run an agent, so there is no denominator.")
+        a.cite(f"{POLICY}/agent_profiles.yaml", "policy_rule",
+               ["fleet", "compliance.checks"])
+    else:
+        a.caveat("Fleet compliance is not included: this mode has no inventory, and "
+                 "compliance must be measured against the inventory rather than against "
+                 "the hosts Datadog already sees — the latter is 100% by construction.")
     return a
 
 
-@question("missing_integrations", "Which integrations are missing?", "partial",
+@question("missing_integrations", "Which integrations are missing?", "runtime",
           patterns=["missing integrations", "integrations not installed",
                     "which integrations do we need"],
-          note="INFERRED from the metric namespaces archetype queries reference (§38: "
-               "archetypes declare no telemetry requirement).")
+          note="Read from each archetype's DECLARED `telemetry:` requirement.")
 def q_missing_integrations(state, p):
     a = _new(state, "missing_integrations")
     observed = set(state.runtime.get("integrations") or [])
+    vocab = oc.telemetry_sources(state.policy)
+
+    # DECLARED, not inferred. This answer used to extract the metric-namespace
+    # prefix of every archetype query and call the result a required
+    # integration, because at the time no archetype declared what it needed.
+    # Every archetype now does, so the heuristic is gone: a namespace prefix
+    # could not tell `azure.cost.*` (Cloud Cost Management, separately licensed)
+    # from the rest of `azure.*`, and it named `acme` as an integration nobody
+    # can install.
     required: dict[str, list] = {}
-    for aid, arch in state.policy["archetypes"].items():
-        for metric in _metrics_in(arch.get("query")):
-            ns = metric.split(".", 1)[0]
-            required.setdefault(ns, []).append(aid)
-    # `acme.*` are the platform's OWN custom metrics with an emission contract in
-    # docs/telemetry-gaps.md — not an integration anybody installs.
-    custom = {ns: aids for ns, aids in required.items() if ns == "acme"}
-    integrations = {ns: aids for ns, aids in required.items() if ns != "acme"}
-    missing = {ns: sorted(set(aids)) for ns, aids in sorted(integrations.items())
-               if ns not in observed}
+    for aid, arch in sorted(state.policy["archetypes"].items()):
+        for src in oc.archetype_telemetry(state.policy, arch):
+            required.setdefault(src, []).append(aid)
+
+    # Three buckets, because "missing" is only meaningful for a source whose
+    # presence this surface can actually see. `datadog_app` is the name a source
+    # reports under; a source without one (a Datadog product enabled at the
+    # account, a separately-licensed add-on) cannot be confirmed or denied from
+    # a host's app list, and reporting it as missing would manufacture 8 gaps.
+    installed, missing, unverifiable, custom = {}, {}, {}, {}
+    for src, aids in sorted(required.items()):
+        spec = vocab.get(src, {})
+        aids = sorted(set(aids))
+        if spec.get("kind") == "custom_emitter":
+            custom[src] = aids                       # this platform deploys it
+        elif not spec.get("datadog_app"):
+            unverifiable[src] = aids
+        elif spec["datadog_app"] in observed:
+            installed[src] = aids
+        else:
+            missing[src] = aids
+
     a.data = {
         "observed_integrations": sorted(observed),
-        "namespaces_required_by_archetypes": sorted(integrations),
-        "not_observed": missing,
-        "custom_metric_namespaces": {k: sorted(set(v)) for k, v in custom.items()},
-        "inference": "metric namespace prefix of every archetype query",
+        "installed": installed,
+        "not_installed": missing,
+        "not_verifiable_from_this_surface": unverifiable,
+        "custom_emitters": custom,
+        "archetypes_blocked_by_a_missing_integration":
+            sorted({aid for aids in missing.values() for aid in aids}),
+        "source": "each archetype's declared `telemetry:` requirement",
+        "archetypes_declaring": sum(1 for x in state.policy["archetypes"].values()
+                                    if x.get("telemetry")),
+        "archetypes_total": len(state.policy["archetypes"]),
     }
-    a.summary = (f"{len(integrations)} metric namespaces are referenced by archetype "
-                 f"queries; {len(missing)} have no matching integration in the observed "
-                 f"set ({', '.join(sorted(observed)) or 'none observed'}).")
-    a.cite(f"{POLICY}/archetypes/", "archetype", sorted(integrations),
-           count=len(integrations), note="namespaces extracted from the catalog's queries")
+    blocked = len(a.data["archetypes_blocked_by_a_missing_integration"])
+    a.summary = (
+        f"{len(missing)} required integration(s) are not installed, blocking {blocked} "
+        f"archetype(s): {', '.join(sorted(missing)) or 'none'}. "
+        f"{len(installed)} confirmed present. {len(unverifiable)} cannot be checked from "
+        f"the host app list. {len(custom)} custom emitter(s) are this platform's own "
+        f"deployments, contracted in docs/telemetry-gaps.md.")
+    a.cite(f"{POLICY}/archetypes/", "archetype", sorted(required), count=len(required),
+           note="each archetype's declared `telemetry:` requirement")
+    a.cite(f"{POLICY}/global.yaml", "policy_rule", ["telemetry_sources"])
     a.cite(state.runtime_source if state.mode == "fixtures"
            else "datadog:/api/v1/hosts (apps)", "integration", sorted(observed))
-    a.caveat(
-        f"{TRACEABILITY} §38: ARCHETYPES DECLARE NO `telemetry:` REQUIREMENT, so 'required "
-        "integration' is INFERRED here from the metric namespace each query reads. That is "
-        "a heuristic, not policy. The real fix is a telemetry requirement on every "
-        "archetype and an applicability engine — until then treat this list as a lead, "
-        "not an inventory.")
+    if unverifiable:
+        a.caveat(
+            f"{len(unverifiable)} source(s) report no app name and are NOT counted as "
+            f"missing: {', '.join(sorted(unverifiable))}. They are enabled at the account "
+            "(APM, RUM, Synthetics, DBM) or separately licensed (Cloud Cost Management), "
+            "so their absence from a host's app list is not evidence of anything. Check "
+            "them in the Datadog integrations page.")
     a.caveat("The observed set comes from host `apps`, which only sees integrations on "
-             "hosts that already run an agent. Account-level integrations (Azure, "
-             "Snowflake) may be present and not appear here.")
+             "hosts already running an agent. An account-level integration present in the "
+             "org may still not appear here.")
     return a
 
 

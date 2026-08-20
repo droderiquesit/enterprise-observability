@@ -161,10 +161,34 @@ def test_what_changed_discloses_the_missing_deployment_metadata(state):
     assert any("DD_VERSION" in c for c in a["caveats"])
 
 
-def test_missing_integrations_declares_itself_an_inference(state):
+def test_missing_integrations_reads_declared_telemetry_not_metric_prefixes(state):
+    """It used to infer the requirement from each query's metric-namespace
+    prefix, because no archetype declared one. They all do now, and the
+    heuristic could not tell a separately-licensed product from the integration
+    that shares its prefix."""
     a = obs_ask.answer(state, "missing_integrations", {})
-    assert a["data"]["inference"]
-    assert any("§38" in c for c in a["caveats"])
+    d = a["data"]
+    assert d["source"] == "each archetype's declared `telemetry:` requirement"
+    assert d["archetypes_declaring"] == d["archetypes_total"]
+    # `acme` was named as an integration nobody can install. Custom emitters
+    # are now their own bucket, never counted as missing.
+    assert "acme" not in d["not_installed"]
+    assert d["custom_emitters"]
+    assert not (set(d["not_installed"]) & set(d["custom_emitters"]))
+
+
+def test_missing_integrations_does_not_call_an_unverifiable_source_missing(state):
+    """A Datadog product enabled at the account reports no host app. Counting
+    its absence from a host's app list as a missing integration manufactures
+    gaps that no one can close."""
+    a = obs_ask.answer(state, "missing_integrations", {})
+    d = a["data"]
+    assert "apm" in d["not_verifiable_from_this_surface"]
+    assert "apm" not in d["not_installed"]
+    # Cloud Cost Management shares the `azure` prefix and is separately
+    # licensed; the Azure integration being present is not evidence for it.
+    assert "azure_cost_management" in d["not_verifiable_from_this_surface"]
+    assert any("NOT counted as" in c for c in a["caveats"])
 
 
 def test_noisy_monitors_declares_that_the_threshold_is_not_policy(state):
@@ -173,9 +197,20 @@ def test_noisy_monitors_declares_that_the_threshold_is_not_policy(state):
     assert any("NOT POLICY" in c for c in a["caveats"])
 
 
-def test_broken_agents_declares_that_fleet_compliance_is_unavailable(state):
+def test_broken_agents_reports_fleet_compliance_against_the_inventory(state):
+    """This was disclosed as uncomputable: nothing declared which hosts were
+    REQUIRED to run an agent, so health could only be measured over hosts
+    Datadog already saw — a denominator that is 100% by construction and makes
+    a host with no agent invisible. agent_profiles.yaml now declares the fleet.
+    """
     a = obs_ask.answer(state, "broken_agents", {})
-    assert any("FLEET COMPLIANCE" in c for c in a["caveats"])
+    fc = a["data"]["fleet_compliance"]
+    assert fc["measured"] is True
+    # The denominator is the INVENTORY, so it must exceed the hosts observed.
+    assert fc["hosts_required"] > a["data"]["hosts_seen"]
+    assert "agent_missing" in fc["finding_counts"]
+    assert not any("FLEET COMPLIANCE" in c.upper() and "CANNOT" in c.upper()
+                   for c in a["caveats"])
 
 
 def test_an_unknown_subject_is_a_refusal_not_an_invention(state):

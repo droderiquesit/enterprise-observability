@@ -265,6 +265,12 @@ detection_policy:
 #   kind: agent | datadog_product | cloud_integration | agent_integration
 #         | custom_emitter | log_derived | inventory_export
 # =============================================================================
+# `datadog_app` is the name this source appears under in a host's `apps` list,
+# or in the integration list for an account-level integration. Only sources that
+# HAVE one can be checked against what is actually installed; a Datadog product
+# (APM, RUM, Synthetics) is enabled at the account, reports no app, and its
+# absence from that list is not evidence of anything. Sources with no
+# `datadog_app` are reported as unverifiable rather than as missing.
 telemetry_sources:
 
   # --- Datadog Agent and Datadog products ----------------------------------
@@ -272,6 +278,11 @@ telemetry_sources:
     display: Datadog Agent (core checks)
     kind: agent
     metric_namespaces: ["system.", "process.", "ntp.", "datadog.agent."]
+    # Deliberately NO `datadog_app`. The Agent is not an app in a host's app
+    # list — a host appearing in that list AT ALL is the evidence that it runs
+    # one. Agent presence is measured against the INVENTORY, by
+    # tools/fleet_compliance.py, because a denominator built from hosts that
+    # already report is 100% compliant by construction.
     provided_by: Agent installed and reporting on the host.
 
   apm:
@@ -329,6 +340,7 @@ telemetry_sources:
     display: Network Device Monitoring (SNMP)
     kind: agent_integration
     metric_namespaces: ["snmp."]
+    datadog_app: snmp
     provided_by: NDM configured with device profiles and SNMP credentials.
 
   # --- Cloud and technology integrations ------------------------------------
@@ -340,24 +352,31 @@ telemetry_sources:
     # Enabled PER SUBSCRIPTION. "Azure is integrated" org-wide is not the unit
     # that matters — one unregistered subscription silences every `azure.*`
     # monitor for everything inside it.
+    datadog_app: azure
     provided_by: App registration + Datadog integration enabled on the subscription.
 
   azure_cost_management:
     display: Cloud Cost Management (Azure)
     kind: cloud_integration
     metric_namespaces: ["azure.cost."]
+    # Deliberately NO `datadog_app`. CCM is separately licensed and separately
+    # enabled; the `azure` app proves the Azure integration is on and proves
+    # nothing about cost ingestion. Naming it here would report cost coverage
+    # as verified on the strength of an unrelated integration.
     provided_by: CCM enabled with billing export access; separate from the Azure integration.
 
   sqlserver_integration:
     display: SQL Server integration
     kind: agent_integration
     metric_namespaces: ["sqlserver."]
+    datadog_app: sqlserver
     provided_by: Agent sqlserver check with a monitoring login on the instance.
 
   snowflake_integration:
     display: Snowflake integration
     kind: agent_integration
     metric_namespaces: ["snowflake."]
+    datadog_app: snowflake
     provided_by: Agent snowflake check with a role able to read SNOWFLAKE.ACCOUNT_USAGE.
 
   vmware_integration:
@@ -365,18 +384,21 @@ telemetry_sources:
     kind: agent_integration
     metric_namespaces: ["vsphere."]
     event_sources: [vsphere]
+    datadog_app: vsphere
     provided_by: Agent vsphere check pointed at vCenter with a read-only account.
 
   kubernetes_integration:
     display: Kubernetes integration (kubelet / cluster agent)
     kind: agent_integration
     metric_namespaces: ["kubernetes."]
+    datadog_app: kubernetes
     provided_by: Datadog Agent DaemonSet with the kubelet check enabled.
 
   kube_state_metrics:
     display: Kubernetes State Metrics Core
     kind: agent_integration
     metric_namespaces: ["kubernetes_state."]
+    datadog_app: kubernetes_state
     provided_by: kube-state-metrics core check enabled on the cluster agent.
 
   # --- Custom emitters — the contracts in docs/telemetry-gaps.md ------------
