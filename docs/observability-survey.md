@@ -23,7 +23,7 @@ back down.
 |---|---|
 | **When** | Once at onboarding, then at the annual tier review, or whenever an answer changes |
 | **Who answers** | The service owner, in one sitting — not a workshop |
-| **Where it goes** | Answers that change platform behaviour become entries in `platform/services/<service>.yaml`, `platform/policy/exceptions.yaml`, or a Datadog downtime. Everything else is context recorded on the Service Catalog entry |
+| **Where it goes** | Answers that change platform behaviour become entries in `platform/entities/<name>.yaml`, `platform/policy/exceptions.yaml`, or a Datadog downtime. Everything else is context recorded on the Service Catalog entry |
 | **How long** | If it takes more than 20 minutes, something is wrong with the survey, not with you |
 
 Each question states **why it cannot be inferred**. If you can show that one of
@@ -208,7 +208,7 @@ too late.*
 
 | Answer | Where it lands | Effect |
 |---|---|---|
-| 1, 2 | tier decision, `platform/services/<service>.yaml` | Alert band, paging, SLO scope, error-budget policy |
+| 1, 2 | tier decision, `platform/entities/<name>.yaml` | Alert band, paging, SLO scope, error-budget policy |
 | 3 | `compliance_scope` on the service | Moves to the `regulated` monitoring profile |
 | 4, 5, 12 | Service Catalog dependencies, `telemetry_dependency` on the SLO | Correlation, and an honest gap instead of a silent one |
 | 6 | Review date on the catalog entry | Stops us building a full pack for something being retired |

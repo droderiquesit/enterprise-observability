@@ -77,18 +77,21 @@ monitor to Datadog's own validation API.
 | Location | Purpose | Add content here when |
 |---|---|---|
 | `platform/policy/` | The configuration hierarchy — every monitoring decision, as YAML | Changing what is monitored, how loud it is, who is told |
-| `platform/policy/archetypes/` | The monitor catalog (261 definitions, 14 domains) | Adding/tuning a monitor *pattern* for everyone |
-| `platform/services/` | Service registrations (golden path, step 1) | Registering a service — one file |
+| `platform/policy/archetypes/` | The monitor catalog (270 definitions, 14 domains) | Adding/tuning a monitor *pattern* for everyone |
+| `platform/entities/` | Entity registrations (golden path, step 1) — every kind, not just services | Registering anything — one file |
+| `platform/services/` | The **superseded** registration format, still read | Never; use `platform/entities/` |
 | `platform/monitors/` | Self-service monitors | A team needs one genuinely unique monitor — one file |
-| `platform/runbooks/` | 152 runbooks (generated frame + human sections) | Filling in the human sections of a runbook |
+| `platform/runbooks/` | 270 runbooks (generated frame + human sections) | Filling in the human sections of a runbook |
 | `platform/schemas/` | JSON Schema for the two hand-written formats | Only when the manifest format itself changes |
 | `platform/events/` | Correlation policy | Changing how alerts group into incidents |
-| `modules/` | Reusable Terraform (9 modules) | A genuinely reusable capability — not a one-resource wrapper |
+| `modules/` | Reusable Terraform (10 modules) | A genuinely reusable capability — not a one-resource wrapper |
 | `stacks/foundation/` | Terraform: teams, on-call, routing, RBAC, dashboards, workflows | Changing org-level plumbing |
 | `stacks/coverage/` | Terraform: monitors, SLOs, burn alerts, composites | Rarely — it interprets policy; change the YAML instead |
 | `tools/` | Python/shell tooling: validate · discover · measure · generate · publish | Adding a check or a generator (shared helpers: `obs_common.py`) |
 | `tests/` | Pytest suite incl. a 1.2M-resource scale test; plan-derived fixtures | Adding or changing checked behavior |
 | `docs/` | Maintained docs + the **generated** coverage matrix + `archive/` (dated snapshots) | A subject that outgrows this README |
+| `mcp/` | The MCP server — Ask (grounded answers) · Act (proposes PRs) · governance | Adding a question, a tool, or a governance rule |
+| `portal/` | The executive portal — read-only, offline-capable web view | Changing what leadership sees |
 | `.github/workflows/` | `ci` (PR gate) · `deploy` (promotion) · `governance` (nightly/weekday loops) | Only when adding an approved automation path |
 
 Generated output goes to `generated/` (gitignored) — never commit it. The two
@@ -130,10 +133,16 @@ make matrix           # regenerate docs/monitor-coverage-matrix.md
 make runbooks         # regenerate runbook drafts from the catalog
 make fixtures         # regenerate the plan-derived test fixture
 make inventory coverage   # live inventory + coverage report (needs DD keys)
+make test-mcp         # MCP server: contracts, governance refusals, grounding
+make portal           # serve the executive portal offline at :8787
+make reports          # the report families, offline against the fixtures
+make fleet            # agent fleet compliance, measured against the inventory
+make entities         # entity-kind census: what platform/entities/ becomes in Datadog
 ```
 
-To **add**: a service → one file in `platform/services/` (see
-[golden-path](docs/golden-path.md)); a custom monitor → one file in
+To **add**: anything you want monitored → one file in `platform/entities/`
+(see [golden-path](docs/golden-path.md)) — declare its `kind`, and for a
+datastore its `platform`, which is what selects the technology monitor packs; a custom monitor → one file in
 `platform/monitors/`; a monitor pattern → `platform/policy/archetypes/`; a
 team → `platform/policy/teams.yaml`; an SLO → `platform/policy/slos.yaml`; an
 environment or band → `platform/policy/environments.yaml` +
@@ -163,6 +172,9 @@ duplicates policy YAML — read the YAML through `obs_common.load_policy()`.
 | [tagging-standard.md](docs/tagging-standard.md) | The six tags a service owner applies, and how |
 | [telemetry-gaps.md](docs/telemetry-gaps.md) | Every `acme.*` metric's emission contract |
 | [decision-records.md](docs/decision-records.md) | ADR-001…ADR-018 |
+| [`mcp/README.md`](mcp/README.md) | The MCP server: the question catalog, the write fence, the governance model |
+| [`portal/README.md`](portal/README.md) | The executive portal: what it reads, live vs fixture, why it can only GET |
+| [`docs/presentation/`](docs/presentation/) | The executive deck (55 slides) and its speaker notes |
 | [monitor-coverage-matrix.md](docs/monitor-coverage-matrix.md) | **Generated** — every archetype instance, staleness-gated in CI |
 | `docs/archive/` | Dated pre-deployment snapshots (evidence, superseded) |
 
