@@ -28,8 +28,8 @@ repository-wide search that returned zero matches.
 
 | Status | Sections |
 |---|---|
-| OK | 42 |
-| IMPROVE | 7 |
+| OK | 43 |
+| IMPROVE | 6 |
 | PARTIAL | 8 |
 | MISSING | 1 |
 | OBSOLETE | 1 (resolved) |
@@ -96,7 +96,7 @@ not fix that; §8 does.
 | § | Requirement | Status | Where | Gap → Remediation | Validation |
 |---|---|---|---|---|---|
 | 5 | Correct entity types | **OK** | `platform/entities/`, `platform/policy/entity_kinds.yaml`, `modules/catalog_entity`, `tools/entity_resolver.py` | Registration declares `kind:`; the resolver maps it to the v3 entity union. **Scope correction:** that union is `service, datastore, queue, system, api` — there is no Frontend App or Repository kind. A frontend registers as a `service` of `spec.type: web` and says so in the catalog rather than inventing a kind the API rejects | `test_entity_model.py`; kind census via `make entities` |
-| 6 | Catalog = actual managed estate | **IMPROVE** | `platform/entities/` (6), `tools/build_inventory.py` | Every managed entity is registered with the correct kind. The live catalog still holds demo entries from before this platform; they are reported, not adopted | live census vs `platform/entities/` |
+| 6 | Catalog = actual managed estate | **OK** | `platform/entities/` (6), `tools/catalog_reconcile.py` | Every check ran forward — is what we declared deployed? — and none ran backward. The reconciler answers the backward question for catalog entries AND runbooks, reports by default and deletes only on an explicit dispatch. It found 22 catalog services from a superseded repository with no telemetry, 4 orphan notebooks, and 62 authored by Datadog's own agent | `make reconcile`; `test_catalog_reconcile.py` |
 | 7 | Reconcile discovered vs managed, do not duplicate | **OK** | `tools/build_inventory.py`, `tools/reconciliation_report.py` | Discovered telemetry enriches a registration rather than creating a second object; unregistered discoveries land in the unowned pool with an SLA | reconciliation report; `test_reconciliation.py` |
 
 ---
@@ -273,6 +273,18 @@ audit becomes misleading.
 
 Two smaller ones, recorded so they are not lost: VMware HA/DRS and orphaned-VM
 detection (§23), and orphan-resource detection as a CI gate (§54).
+
+**One defect in this platform's own pipeline.** `publish_runbooks --write-registry`
+writes notebook ids into `platform/policy/runbooks.yaml` in the CI checkout, which
+is then discarded, so the committed registry permanently trails production — today
+by 9, the Control-M runbooks. Nothing breaks, because publishing re-adopts by name
+each run, but the repository never records what it published. It is called out here
+rather than papered over because the catalog reconciler had to be built around it:
+matching notebooks by id alone would have classified the newest runbooks as
+unmanaged and deleted them. The reconciler counts the drift
+(`notebooks_published_but_unrecorded`) so a fallback that quietly covers for it
+cannot hide it. The real fix is for the deploy to commit the registry back, or for
+the ids to live with state rather than inside intent.
 
 ---
 
