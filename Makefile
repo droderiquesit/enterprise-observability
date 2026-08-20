@@ -4,7 +4,8 @@ STACKS := stacks/coverage stacks/foundation
 MODULES := $(wildcard modules/*)
 
 .PHONY: setup fmt fmt-check validate test tf-validate matrix entities runbooks \
-        fixtures applicability fleet inventory coverage plan-offline clean
+        fixtures applicability fleet reports reports-live inventory coverage \
+        plan-offline clean
 
 # --- developer entry points --------------------------------------------------
 setup:
@@ -61,6 +62,15 @@ coverage:          ## coverage & compliance report against the live org
 ## until the first rollout wave completes; pass --min-compliance to gate.
 fleet:
 	cd tools && $(PY) fleet_compliance.py --live
+
+# --- reports (offline by default; §34) ---------------------------------------
+## reports — the five report families. Offline against tests/fixtures so it runs
+## in a pull request with no credentials; `make reports-live` for the runtime
+## half (never-triggered, noisy, flapping) that only the running estate answers.
+reports:
+	cd tools && $(PY) reports.py --fixtures ../tests/fixtures
+reports-live:      ## report families against the live org (credentialed)
+	cd tools && $(PY) reports.py --live
 
 clean:
 	find . -name ".terraform" -type d -prune -exec rm -rf {} +

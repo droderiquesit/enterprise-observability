@@ -1,0 +1,263 @@
+# =============================================================================
+# ENTITY-AWARE SCORECARD RULES (§41)
+#
+# THE PROBLEM THIS SOLVES. One scoring model graded a database instance, a
+# customer-facing API and a rack of hosts against the same seven weights, and
+# the model was written for the API. That is why the old scorecard was PARTIAL
+# in the traceability matrix: it graded MONITORS, not the entities they watch,
+# so it asked a datastore to justify itself as though it were a request path.
+#
+#   A service      exists to serve requests. It is judged by whether there is an
+#                  objective, whether that objective is real, and whether the
+#                  thing that pages a human is confirmed customer impact.
+#   A datastore    exists to hold state. It is judged by whether we would see
+#                  loss coming: backups, replication, and a capacity horizon.
+#                  Its own availability objective matters far less — it is
+#                  almost always covered by the SLO of the services it backs,
+#                  and grading it on a per-datastore objective punishes the
+#                  correct design.
+#   Infrastructure exists in numbers. One monitor covers thousands of identical
+#                  things, so grouping discipline is not hygiene, it is the
+#                  entire difference between a usable alert and a notification
+#                  storm. Its detection is legitimately absolute in places
+#                  (a filesystem is full at 100%, no baseline required).
+#
+# WHY THIS IS A SECOND SCORE AND NOT A REPLACEMENT. The fleet quality score in
+# tools/monitor_scorecard.py gates the deploy pipeline at ≥ 85. Re-weighting
+# that model in place would silently change what the gate MEANS without anybody
+# deciding to change it: the same estate would score differently on Monday than
+# it did on Friday, and nobody could tell a real regression from the reweight.
+# So the fleet model is left exactly as it was and the entity model is added
+# alongside it, with its own per-kind minimums below. Both are published; the
+# fleet number gates deploys, the entity numbers drive the monthly review.
+#
+# KEEPING IT USEFUL RATHER THAN BUREAUCRATIC. There are three kinds, not eight.
+# There is one extra dimension in the whole model (`durability`, datastores
+# only). The kind-specific rules are four, and every one of them was checked
+# against the real catalog before being written: three of them find nothing
+# today and exist as regression guards, one finds a genuine backlog. A rule
+# that can never fire and a rule that fires on everything are both noise.
+# =============================================================================
+version: 2
+
+# --- the three kinds ---------------------------------------------------------
+#
+# `weights` re-weight the SAME seven dimensions the fleet model scores, so a
+# monitor's dimension scores are computed once and read twice. `durability` is
+# the only additional dimension, and only datastores carry it.
+#
+# Every weight block must total 100 — asserted by validate_policy.py, because a
+# block that totals 97 produces grades that quietly cannot reach an A.
+entity_kinds:
+
+  service:
+    display: Service
+    judged_on: >
+      Does it have an objective, is the objective real, and does anything that
+      pages a human represent confirmed customer impact?
+    weights:
+      actionability: 25
+      ownership: 20
+      detection: 15
+      slo_linkage: 20      # +5 — a service without an objective cannot be prioritised
+      cardinality: 5       # -5 — service monitors fan out by service, which is bounded
+      paging: 10
+      metadata: 5
+    min_score: 85
+
+  datastore:
+    display: Datastore
+    judged_on: >
+      Would we see data loss or exhaustion coming? Backups, replication lag and
+      a capacity horizon matter more than a per-datastore availability number.
+    weights:
+      actionability: 25
+      ownership: 20
+      detection: 15
+      slo_linkage: 5       # -10 — datastores are covered by the SLOs of what they back
+      durability: 10       # NEW — see durability_signals below
+      cardinality: 15      # +5 — one monitor fans out per instance/database/container
+      paging: 5            # -5 — a datastore rarely pages directly; its services do
+      metadata: 5
+    min_score: 80          # deliberately below service: the durability backlog is real
+
+  infrastructure:
+    display: Infrastructure
+    judged_on: >
+      One monitor covers thousands of identical things. Does it group tightly
+      enough to be readable during an incident, and does it page only when the
+      failure is genuinely a failure of the whole?
+    weights:
+      actionability: 25
+      ownership: 20
+      detection: 10        # -5 — a full filesystem needs no baseline; absolute is correct
+      slo_linkage: 5       # -10 — the workload's objective, not the host's
+      cardinality: 20      # +10 — the dimension that decides usability at fleet scale
+      paging: 15           # +5 — fleet-wide paging is the classic self-inflicted outage
+      metadata: 5
+    min_score: 85
+
+# A datastore earns its `durability` points when the catalog can answer "would
+# we see it coming?" for that TECHNOLOGY — not for that one monitor. The unit is
+# the resource_type, because durability coverage is a property of the archetype
+# set, and a single monitor cannot be blamed for a missing sibling.
+#
+# Either of these counts:
+#   detection: forecast    a capacity horizon — it tells you WHEN, not just THAT
+#   signal in the list     the durability and consistency signals themselves
+durability_signals: [backup_age, replication_lag, freshness]
+
+# --- kind-specific rules -----------------------------------------------------
+#
+# Each rule was run against the committed catalog before it was written; the
+# `today` note records what it found, so a future reader can tell a regression
+# guard from an open backlog.
+rules:
+
+  service_objective_resolves:
+    kind: service
+    description: >
+      A customer_impact service monitor must resolve to a real SLO. Without one,
+      a responder has no way to tell "degraded" from "breaching a promise".
+    today: 0 violations — every archetype's slo_id resolves. Regression guard.
+
+  datastore_durability_horizon:
+    kind: datastore
+    description: >
+      Every datastore technology must have at least one archetype that would see
+      loss or exhaustion coming: a forecast, a backup check, replication lag, or
+      freshness. Availability alone hides the failure that actually loses data.
+    today: >
+      3 technologies short — azure_storage, snowflake_warehouse, storage_volume.
+      Open backlog, which is why datastore min_score is 80 and not 85.
+
+  datastore_capacity_does_not_page:
+    kind: datastore
+    description: >
+      A capacity or saturation signal on a datastore has lead time by
+      definition. Paging on it chooses to wake somebody for work that could have
+      waited for the morning, and trains them to ignore the pages that could not.
+    today: 0 violations. Regression guard.
+
+  infrastructure_collapse_key:
+    kind: infrastructure
+    description: >
+      Two or more group keys on a fleet resource must declare a notify_by
+      collapse key. Without one, a single rack event notifies once per host.
+    today: 0 violations. Regression guard.
+
+# --- resource_type → entity kind --------------------------------------------
+#
+# EXPLICIT, EXHAUSTIVE, AND VALIDATED. Every `resource_type` used by any
+# archetype must appear here; validate_policy.py fails on one that does not.
+# The alternative — defaulting the unknown to `service` — is how a new datastore
+# technology would silently get graded as a request path and never be asked for
+# a backup check. Classifying a new resource_type is a one-line decision, and it
+# should be a decision.
+#
+# The boundaries that took an argument, recorded so they are not relitigated:
+#   pipeline        → service. A pipeline is a running workload that fails; the
+#                     data it produces is the `data_product`, and that is where
+#                     freshness and correctness are judged.
+#   data_product    → datastore. It IS the state. Freshness is its durability.
+#   queue / stream  → service. A queue holds messages, but its failure mode is
+#                     delivery, and delivery is a request path with a consumer.
+#   azure_front_door,
+#   azure_cdn, load
+#   balancers, DNS  → infrastructure. Shared edge plumbing: one object in front
+#                     of hundreds of services, judged on fanout, not objectives.
+#   certificate,
+#   secret          → service. They gate a request path, and their expiry is
+#                     experienced by customers as an outage of that path.
+#   backup_job      → datastore. It is the durability mechanism itself.
+resource_type_kind:
+
+  # --- service: a request path with consumers --------------------------------
+  api_gateway: service
+  azure_apim: service
+  azure_app_service: service
+  azure_function: service
+  azure_key_vault: service
+  batch_job: service
+  certificate: service
+  identity_provider: service
+  integration_flow: service
+  kube_cronjob: service
+  kube_deployment: service
+  kube_pod: service
+  log_source: service
+  messaging_namespace: service
+  pipeline: service
+  queue: service
+  saas_vendor: service
+  scheduled_job: service
+  secret: service
+  security_control: service
+  service: service
+  stream: service
+  stream_consumer: service
+  synthetic_check: service
+
+  # --- datastore: it holds state, and losing it is unrecoverable -------------
+  availability_group: datastore
+  azure_container_registry: datastore
+  azure_cosmos_db: datastore
+  azure_redis: datastore
+  azure_sql: datastore
+  azure_storage: datastore
+  backup_job: datastore
+  data_product: datastore
+  db_instance: datastore
+  kube_pvc: datastore
+  snowflake_account: datastore
+  snowflake_warehouse: datastore
+  sqlserver_instance: datastore
+  storage_volume: datastore
+  vsphere_datastore: datastore
+  warehouse: datastore
+
+  # --- infrastructure: it exists in numbers ----------------------------------
+  azure_app_service_plan: infrastructure
+  azure_application_gateway: infrastructure
+  azure_cdn: infrastructure
+  azure_front_door: infrastructure
+  azure_load_balancer: infrastructure
+  azure_private_endpoint: infrastructure
+  azure_subscription: infrastructure
+  azure_traffic_manager: infrastructure
+  azure_vm: infrastructure
+  dns_zone: infrastructure
+  esxi_host: infrastructure
+  hardware_node: infrastructure
+  host: infrastructure
+  kube_cluster: infrastructure
+  kube_hpa: infrastructure
+  kube_node: infrastructure
+  load_balancer: infrastructure
+  monitoring_platform: infrastructure
+  network_circuit: infrastructure
+  network_device: infrastructure
+  network_firewall: infrastructure
+  network_path: infrastructure
+  network_security_group: infrastructure
+  network_tunnel: infrastructure
+  vsphere_cluster: infrastructure
+  vsphere_vm: infrastructure
+
+# The service-archetype view of the same question. profile_engine.py assigns
+# every RESOURCE a service_archetype; the scorecard grades ARCHETYPES by
+# resource_type. Both must land on the same three kinds or a report can claim a
+# datastore is covered by a monitor the scorecard grades as a service.
+service_archetype_kind:
+  api: service
+  web: service
+  worker: service
+  event_consumer: service
+  batch_job: service
+  scheduled_job: service
+  integration_flow: service
+  saas_dependency: service
+  external_endpoint: service
+  platform_service: service
+  datastore: datastore
+  infrastructure_resource: infrastructure

@@ -1,0 +1,330 @@
+# =============================================================================
+# REPORT CATALOG (§34)
+#
+# The catalog is DATA, not a directory listing of scripts, for the same reason
+# every other layer of this platform is data: a report that exists only as code
+# has no audience, no cadence and no stated question, so nobody can tell whether
+# it is still worth running. Every entry here names the question a human is
+# actually asking, who asks it, how often, and which existing telemetry answers
+# it.
+#
+# THE RULE THAT KEEPS THIS SMALL: a report answers a question from telemetry and
+# platform data that ALREADY EXISTS. No report may require a new dashboard, a
+# new monitor, or a new metric — if a question cannot be answered from what the
+# estate already emits, that is a telemetry gap (docs/telemetry-gaps.md), not a
+# report. This is the rule that stopped §34 from becoming twenty more dashboards
+# in the same breath as §33 removed fifteen.
+#
+# tools/reports.py implements exactly the ids listed here, and tests assert the
+# catalog and the implementation agree in BOTH directions: a catalogued report
+# with no implementation is a promise nobody keeps, and an implemented report
+# with no catalog entry has no owner and no cadence.
+#
+# FIELDS
+#   family        executive | operations | platform | database | azure
+#   audience      who reads it — a role, never a person
+#   question      the question in the reader's own words. If this cannot be
+#                 written as one sentence, it is not a report.
+#   data_source   which existing sources answer it (see `data_sources` below)
+#   cadence       how often it is produced
+#   requires_live whether the LIVE estate is needed for the full answer. Reports
+#                 marked true still run offline and say what they can from
+#                 structural evidence, labelled as such in the output — a report
+#                 that silently degrades is worse than one that says so.
+#   action        what the reader is expected to DO. A report with no action is
+#                 a dashboard with extra steps.
+# =============================================================================
+version: 2
+
+data_sources:
+  policy: platform/policy/*.yaml — the declared intent
+  monitors: the planned or live monitor estate, read through its governance tags
+  slos: the SLO catalog and, live, each objective's status
+  inventory: generated/inventory.json — the authoritative resource denominator
+  assignments: generated/assignments.json — profile engine output (owner, tier, band)
+  runbooks: platform/runbooks/*.md and the notebook registry
+  teams: team, on-call and notification-routing policy
+  live_monitor_state: Datadog monitor overall_state and last transition time
+  live_metrics: datadog.monitor.alert_count and SLO history
+
+# Thresholds live here, not in the code, so a team can argue about the number
+# without touching Python. Each is the point at which a human is asked to do
+# something, so each is deliberately generous: a report that flags half the
+# estate gets ignored, and an ignored report is worse than no report.
+thresholds:
+  silent_monitor_days: 90            # OK and never triggered this long = probably dead
+  noisy_monitor_alerts_30d: 60       # ~2/day sustained is not a signal, it is weather
+  flapping_transitions_per_hour: 4   # matches the flap rule in docs/quality-scorecard.md
+  runbook_unfinished_sections: 0     # any TODO in an ATTACHED runbook is a defect
+  pages_per_team_per_week: 5         # the burnout metric from docs/quality-scorecard.md
+  flap_prone_window_minutes: 10      # below this, a behavioural signal will oscillate
+
+families:
+
+  executive:
+    display: Executive
+    audience: executive-leadership
+    cadence: monthly
+    framing: >
+      Three questions answered with numbers a non-engineer can act on: are we
+      meeting our promises, what is our exposure, and is the team carrying the
+      pager still standing.
+
+  operations:
+    display: Operations & Reliability
+    audience: sre-and-oncall
+    cadence: weekly
+    framing: >
+      The reports that decide whether on-call is sustainable, and the family
+      that was genuinely missing. Everything else in this repository measures
+      whether monitors EXIST; nothing measured whether they WORK.
+
+  platform:
+    display: Observability Platform
+    audience: observability-platform
+    cadence: weekly
+    framing: >
+      The platform team grading its own estate — quality, detection mix, budget
+      consumption, and the governance debt it has agreed to carry.
+
+  database:
+    display: Database & Data Platform
+    audience: data-engineering
+    cadence: weekly
+    framing: >
+      Datastores are not services and fail differently: they fill up, they fall
+      behind, and their backups quietly stop. An availability percentage says
+      nothing about any of those, so they get their own family.
+
+  azure:
+    display: Azure & Infrastructure
+    audience: cloud-engineering
+    cadence: weekly
+    framing: >
+      The cloud estate is billed, quota-limited and shared. These answer the
+      questions an availability board cannot: what will run out, what is
+      throttled, and what are we paying for but not watching.
+
+reports:
+
+  # --- executive -------------------------------------------------------------
+  exec-service-health:
+    family: executive
+    audience: executive-leadership
+    question: Are the services the business depends on meeting the promises we made about them?
+    data_source: [slos, policy, monitors]
+    cadence: monthly
+    requires_live: true
+    action: >
+      A tier0 objective without live telemetry is escalated to the owning
+      director in the same meeting. A breached objective triggers the tier's
+      error-budget policy — a feature freeze — not a discussion.
+
+  exec-risk-posture:
+    family: executive
+    audience: executive-leadership
+    question: What part of the estate is unmonitored, unowned or unactionable, and who is accountable for closing it?
+    data_source: [inventory, assignments, policy]
+    cadence: monthly
+    requires_live: false
+    action: >
+      Every finding carries an owning team, never a domain. Unowned resources
+      have a 14-day SLA from teams.yaml; anything older is reported by name.
+
+  exec-alert-load:
+    family: executive
+    audience: executive-leadership
+    question: Is on-call sustainable, or are we burning out the teams that keep this running?
+    data_source: [monitors, teams, live_metrics]
+    cadence: monthly
+    requires_live: true
+    action: >
+      A team over the weekly page budget gets alert-reduction scheduled as
+      committed work, not as best-effort cleanup between incidents.
+
+  # --- operations ------------------------------------------------------------
+  ops-silent-monitors:
+    family: operations
+    audience: sre-and-oncall
+    question: Which monitors have never fired, because they are watching something that is not there?
+    data_source: [monitors, assignments, slos, live_monitor_state]
+    cadence: weekly
+    requires_live: true
+    action: >
+      Confirm the subject still exists. If it does not, delete the monitor. If it
+      does, the query is wrong and the monitor is providing false assurance,
+      which is worse than having no monitor at all.
+
+  ops-noisy-monitors:
+    family: operations
+    audience: sre-and-oncall
+    question: Which monitors alert so often that people have stopped reading them?
+    data_source: [monitors, policy, live_metrics]
+    cadence: weekly
+    requires_live: true
+    action: >
+      Retune the threshold, widen the window, or delete. A monitor over the noise
+      threshold for two review cycles is deleted under the retirement rule in
+      docs/quality-scorecard.md.
+
+  ops-flapping-monitors:
+    family: operations
+    audience: sre-and-oncall
+    question: Which monitors oscillate between alert and OK, so every page is already stale when it arrives?
+    data_source: [monitors, policy, live_metrics]
+    cadence: weekly
+    requires_live: true
+    action: >
+      Flapping is an evaluation-window defect, not a threshold defect. Widen the
+      window or require a full window. Muting is a stopgap and must be ticketed.
+
+  ops-services-without-telemetry:
+    family: operations
+    audience: sre-and-oncall
+    question: Which registered services have nothing watching them, and which have monitors but no signal arriving?
+    data_source: [policy, monitors, assignments, slos]
+    cadence: weekly
+    requires_live: true
+    action: >
+      A registered service with no telemetry is an onboarding that did not
+      finish. Ask the owning team for the instrumentation date, not for an
+      explanation.
+
+  ops-missing-ownership:
+    family: operations
+    audience: sre-and-oncall
+    question: Which resources and monitors have no owner who would actually answer for them?
+    data_source: [assignments, monitors, teams]
+    cadence: weekly
+    requires_live: false
+    action: >
+      An inferred owner is not an owner. Every row is either tagged by its team
+      or moved into the unowned pool with an expiry date.
+
+  ops-runbook-coverage:
+    family: operations
+    audience: sre-and-oncall
+    question: When a monitor pages at 3am, is a runbook really attached — and does it say anything?
+    data_source: [monitors, runbooks, policy]
+    cadence: weekly
+    requires_live: false
+    action: >
+      A named-but-unattached runbook is a promise the monitor makes in its own
+      alert body and cannot keep. Attach it, or remove the claim.
+
+  ops-oncall-coverage:
+    family: operations
+    audience: sre-and-oncall
+    question: For every monitor that can page, is there a rotation, an escalation path, and a route that ends at a human?
+    data_source: [monitors, teams, policy]
+    cadence: weekly
+    requires_live: false
+    action: >
+      A paging monitor owned by a team with no rotation is a page into the void.
+      Either the team takes the rotation, or the monitor stops paging.
+
+  # --- platform --------------------------------------------------------------
+  plat-monitor-quality:
+    family: platform
+    audience: observability-platform
+    question: Is monitor quality improving or eroding — per team, and per entity kind?
+    data_source: [policy, monitors]
+    cadence: weekly
+    requires_live: false
+    action: Anything below grade C enters the review queue; two cycles below C is deletion.
+
+  plat-detection-mix:
+    family: platform
+    audience: observability-platform
+    question: How much of the estate is predictive, rather than a fixed number somebody guessed once?
+    data_source: [policy]
+    cadence: weekly
+    requires_live: false
+    action: >
+      A domain drifting towards fixed thresholds is drifting towards per-service
+      threshold tuning, which does not survive scale.
+
+  plat-estate-budget:
+    family: platform
+    audience: observability-platform
+    question: How much of the monitor and paging budget have we spent, and on what?
+    data_source: [policy, monitors]
+    cadence: weekly
+    requires_live: false
+    action: Budget pressure is answered by deleting monitors, never by raising the budget first.
+
+  plat-governance-debt:
+    family: platform
+    audience: observability-platform
+    question: Which exceptions and accepted findings are about to expire, or already have?
+    data_source: [policy]
+    cadence: weekly
+    requires_live: false
+    action: >
+      An expired exception stops suppressing its finding the moment it expires,
+      so this is the last warning before a governance gate turns red.
+
+  # --- database --------------------------------------------------------------
+  db-datastore-coverage:
+    family: database
+    audience: data-engineering
+    question: Which datastore technologies in the estate are actually covered, and by what?
+    data_source: [policy, monitors, assignments]
+    cadence: weekly
+    requires_live: false
+    action: An uncovered datastore technology is an archetype gap, raised as a catalog pull request.
+
+  db-durability:
+    family: database
+    audience: data-engineering
+    question: For each datastore technology, do we detect backup failure, replication lag and running out of space BEFORE they become an outage?
+    data_source: [policy, monitors]
+    cadence: weekly
+    requires_live: false
+    action: >
+      This is the report an availability percentage hides. A datastore can be
+      100% available and one silent backup failure away from data loss.
+
+  db-slo-attachment:
+    family: database
+    audience: data-engineering
+    question: Which database objectives depend on telemetry that may not be arriving at all?
+    data_source: [slos, policy]
+    cadence: weekly
+    requires_live: true
+    action: A declared telemetry dependency needs an owner and a date, not another acceptance renewal.
+
+  # --- azure / infrastructure ------------------------------------------------
+  azure-resource-coverage:
+    family: azure
+    audience: cloud-engineering
+    question: Which Azure resource types are we monitoring, and which are we paying for but not watching?
+    data_source: [policy, monitors, assignments]
+    cadence: weekly
+    requires_live: false
+    action: >
+      An Azure resource type with no archetype is either added to the catalog or
+      explicitly declared out of scope. Silence is not a third option.
+
+  azure-cost-and-quota:
+    family: azure
+    audience: cloud-engineering
+    question: What will run out — budget, quota or throughput — and how long do we have?
+    data_source: [policy, monitors]
+    cadence: weekly
+    requires_live: false
+    action: >
+      Every row here is a forecast, so every row has a lead time. Quota
+      exhaustion is scheduled work; discovering it during the outage is not.
+
+  infra-fleet-health:
+    family: azure
+    audience: cloud-engineering
+    question: Does fleet-wide infrastructure alerting group tightly enough to be usable during a real incident?
+    data_source: [policy, monitors, assignments]
+    cadence: weekly
+    requires_live: false
+    action: >
+      One infrastructure monitor covers thousands of hosts. Without a collapse
+      key it produces thousands of notifications, which is operationally the
+      same as producing none.

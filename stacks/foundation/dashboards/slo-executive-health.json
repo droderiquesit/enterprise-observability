@@ -1,0 +1,111 @@
+{
+  "title": "SLO & Executive Health",
+  "description": "Managed by Terraform (stacks/foundation). The promises this organisation made, and whether it is keeping them. One board for the monthly executive review and the error-budget conversation — no engineering detail, because a board that answers both audiences answers neither.",
+  "layout_type": "ordered",
+  "reflow_type": "auto",
+  "tags": ["team:observability-platform"],
+  "template_variables": [
+    { "name": "domain", "prefix": "domain", "default": "*" }
+  ],
+  "widgets": [
+    {
+      "definition": {
+        "type": "note",
+        "content": "## How to read this board\n\nEvery row below is a **promise**, not a metric. An objective at 99.9% over 30 days means we accepted roughly 43 minutes of failure a month and told people so.\n\n- **Green** — inside the error budget. Nothing to discuss.\n- **Amber** — budget is being consumed faster than the month can absorb. The owning team is expected to have a plan, not an explanation.\n- **Red** — budget exhausted. The tier's error-budget policy applies automatically: a feature freeze for the owning team until the budget recovers above 25%, with a documented exception required to deploy.\n\nAn objective showing **no data** is worse than one showing red: it means we cannot tell whether the promise is being kept. Those are listed by name in the monthly report (`tools/reports.py --report exec-service-health`) and escalate to the owning director in the same meeting.",
+        "background_color": "blue",
+        "font_size": "14",
+        "text_align": "left",
+        "show_tick": false
+      }
+    },
+    {
+      "definition": {
+        "title": "Every objective, worst first",
+        "type": "slo_list",
+        "requests": [
+          {
+            "request_type": "slo_list",
+            "query": {
+              "query_string": "tags:(managed_by:terraform)",
+              "limit": 100,
+              "sort": [ { "column": "status.sli", "order": "asc" } ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "title": "Tier 0 objectives — the ones an outage makes a company event",
+        "type": "slo_list",
+        "requests": [
+          {
+            "request_type": "slo_list",
+            "query": {
+              "query_string": "tags:(managed_by:terraform AND tier:tier0)",
+              "limit": 50,
+              "sort": [ { "column": "status.sli", "order": "asc" } ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "title": "Error budget burning now (multi-window burn-rate monitors)",
+        "type": "manage_status",
+        "summary_type": "monitors",
+        "display_format": "countsAndList",
+        "color_preference": "background",
+        "hide_zero_counts": true,
+        "query": "tag:(managed_by:terraform AND detection:slo_burn) tag:($domain.value)",
+        "sort": "priority,asc",
+        "count": 50,
+        "start": 0
+      }
+    },
+    {
+      "definition": {
+        "title": "Customer impact right now — anything paging in production",
+        "type": "manage_status",
+        "summary_type": "monitors",
+        "display_format": "countsAndList",
+        "color_preference": "background",
+        "hide_zero_counts": true,
+        "query": "tag:(managed_by:terraform AND pages:true AND env:prod) tag:($domain.value)",
+        "sort": "priority,asc",
+        "count": 50,
+        "start": 0
+      }
+    },
+    {
+      "definition": {
+        "title": "P1 volume (90d) — is the trend up or down?",
+        "type": "timeseries",
+        "requests": [
+          {
+            "q": "sum:datadog.monitor.alert_count{priority:p1,managed_by:terraform,env:prod}.as_count()",
+            "display_type": "bars",
+            "style": { "palette": "warm" }
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "title": "Objectives with a live status error (we cannot tell)",
+        "type": "query_value",
+        "precision": 0,
+        "requests": [
+          {
+            "q": "max:acme.observability.slo_status_errors{*}",
+            "conditional_formats": [
+              { "comparator": ">", "value": 0, "palette": "white_on_red" },
+              { "comparator": "<=", "value": 0, "palette": "white_on_green" }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

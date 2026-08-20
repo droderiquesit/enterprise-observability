@@ -31,6 +31,66 @@ request (asserted by the CI test suite), so quality cannot erode one merge at a 
 
 ---
 
+## Entity-aware scoring (§41)
+
+The model above grades every monitor against one set of weights, and that set
+was written for a request-path service. A database instance and a rack of hosts
+fail differently, so each monitor is **also** scored against the rules for the
+kind of entity it watches. The weights live in
+[`platform/policy/scorecards.yaml`](../platform/policy/scorecards.yaml); there
+are three kinds, deliberately, and one extra dimension in the whole model.
+
+| | **Service** | **Datastore** | **Infrastructure** |
+|---|---|---|---|
+| What it is for | Serving requests | Holding state | Existing in numbers |
+| The question | Is there an objective, is it real, and does anything that pages represent confirmed customer impact? | Would we see loss or exhaustion coming? | Does it group tightly enough to be readable during an incident? |
+| SLO linkage | **20** | 5 | 5 |
+| Cardinality | 5 | 15 | **20** |
+| Paging | 10 | 5 | **15** |
+| Detection | 15 | 15 | 10 |
+| Durability | — | **10** | — |
+| Minimum | 85 | 80 | 85 |
+
+*Actionability (25), ownership (20) and metadata (5) are weighted identically
+for all three: a runbook that says nothing and an owner who does not exist are
+equally useless whatever the monitor is watching.*
+
+**Why the weights move the way they do.**
+
+- A **datastore** is almost always covered by the SLOs of the services it backs.
+  Grading it on a per-datastore availability objective punishes the correct
+  design, so `slo_linkage` drops from 15 to 5 and those points move to
+  `durability` and `cardinality` — the two things that actually decide whether a
+  datastore failure is survivable.
+- **Infrastructure** monitors fan out across the fleet: one monitor covers
+  thousands of identical hosts. Grouping discipline is not hygiene there, it is
+  the difference between a usable alert and a notification storm, so
+  `cardinality` doubles to 20. Its detection weight drops because an absolute
+  threshold is often *correct* — a filesystem is full at 100% and needs no
+  baseline.
+- A **service** without an objective cannot be prioritised at all, so
+  `slo_linkage` rises to 20. Its grouping is bounded by the service dimension
+  already, so `cardinality` gives up the points.
+
+**Durability** is the one new dimension, and it is judged per *technology*, not
+per monitor: a datastore resource type earns it when the catalog has a capacity
+forecast, a backup check, a replication-lag check or a freshness check for that
+type. One monitor cannot be blamed for a missing sibling. Three technologies do
+not have it today — `azure_storage`, `snowflake_warehouse`, `storage_volume` —
+which is why the datastore minimum is 80 and not 85. That is a recorded backlog,
+not a rounding allowance.
+
+**Why this is a second score and not a replacement.** The fleet number gates the
+deploy pipeline at ≥ 85. Re-weighting that model in place would have changed
+what the gate *means* without anybody deciding to change it — the same estate
+would score differently on Monday than it did on Friday, and nobody could tell a
+real regression from the reweight. Both numbers are published in
+`generated/scorecard.md`. The fleet score gates deploys; the per-kind scores are
+enforced by the test suite and by the governance run
+(`monitor_scorecard.py --enforce-entity-minimums`), and drive the monthly review.
+
+---
+
 ## Current state
 
 The current numbers live in the generated artifact, not here: run
@@ -77,10 +137,19 @@ on-call is actually sustainable:
 | **Auto-resolved without action** | < 20% | Alerts that recovered on their own. Higher means the threshold or window is wrong |
 | **Flap rate** | 0 monitors | Anything transitioning > 4× per hour is muted and ticketed automatically |
 
-Published on the **Alert Quality** dashboard
-(`stacks/foundation/dashboards/alert-quality.json`), which also tracks the
-detection mix (predictive vs fixed), the noisiest monitors, unmanaged monitor
-count, and the managed-monitor budget.
+Published on the **Enterprise Observability Overview** dashboard
+(`stacks/foundation/dashboards/enterprise-observability-overview.json`), which
+also tracks the detection mix (predictive vs fixed), the noisiest monitors,
+unmanaged monitor count, and the managed-monitor budget. It used to be a
+separate *Alert Quality* board; those widgets were folded in when the estate
+went from 18 dashboards to 3 (ADR-010), because splitting them let coverage look
+green on one board while the estate was unreadable on the other.
+
+The same four signals are produced as **reports** rather than only as widgets —
+`ops-noisy-monitors`, `ops-flapping-monitors` and `ops-silent-monitors` in
+[`platform/policy/reports.yaml`](../platform/policy/reports.yaml). A dashboard
+shows you the number; a report names the monitors and states what to do about
+them, and runs offline in a pull request where the widget cannot.
 
 ---
 

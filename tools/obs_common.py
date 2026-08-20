@@ -51,6 +51,13 @@ def load_policy() -> dict:
         "entity_kinds_doc": _yaml(POLICY_DIR / "entity_kinds.yaml"),
         "composites_doc": _yaml(POLICY_DIR / "composites.yaml"),
         "composites": _yaml(POLICY_DIR / "composites.yaml")["composites"],
+        # The report catalog and the entity-aware scorecard rules are policy
+        # like everything else: tools/reports.py implements exactly the ids in
+        # reports.yaml, and the scorecard reads its weights from scorecards.yaml
+        # rather than carrying a second copy in Python.
+        "reports_doc": _yaml(POLICY_DIR / "reports.yaml"),
+        "reports": _yaml(POLICY_DIR / "reports.yaml")["reports"],
+        "scorecards": _yaml(POLICY_DIR / "scorecards.yaml"),
         "archetypes": {},
     }
     for f in sorted((POLICY_DIR / "archetypes").glob("*.yaml")):
@@ -253,7 +260,7 @@ def expand_instances(policy: dict, environments: list[str] | None = None) -> lis
     return out
 
 
-# =============================================================================
+# ======================================================================
 # BEGIN telemetry requirements (§38) — derive what an archetype needs to exist
 #
 # The vocabulary and the namespace→source mapping both live in
@@ -326,6 +333,47 @@ def archetype_telemetry(policy: dict, archetype: dict) -> list[str]:
 
 # END telemetry requirements (§38)
 # =============================================================================
+=======
+# -----------------------------------------------------------------------------
+# ENTITY KIND (§41). Implemented ONCE, here, for the same reason resolve_priority
+# is: the scorecard, the reports and the tests must not each carry their own
+# opinion about whether an Azure Storage account is a datastore.
+# -----------------------------------------------------------------------------
+def entity_kind(policy: dict, resource_type: str) -> str:
+    """`resource_type` -> service | datastore | infrastructure.
+
+    Raises on an unclassified type rather than defaulting. A silent default is
+    how a new datastore technology gets graded as a request path and is never
+    asked for a backup check; validate_policy.py catches it before this can.
+    """
+    try:
+        return policy["scorecards"]["resource_type_kind"][resource_type]
+    except KeyError:
+        raise KeyError(
+            f"resource_type {resource_type!r} is not classified in "
+            "platform/policy/scorecards.yaml -> resource_type_kind"
+        ) from None
+
+
+def entity_kind_of_service_archetype(policy: dict, service_archetype: str) -> str:
+    """The same three kinds, seen from the RESOURCE side (profile engine output)."""
+    return policy["scorecards"]["service_archetype_kind"].get(
+        service_archetype, "service")
+
+
+def durability_covered_types(policy: dict) -> set[str]:
+    """Datastore resource_types whose catalog answers "would we see it coming?".
+
+    Judged per TECHNOLOGY, not per monitor: durability coverage is a property of
+    the archetype set for a resource_type, and one monitor cannot be blamed for
+    a missing sibling.
+    """
+    signals = set(policy["scorecards"]["durability_signals"])
+    covered: set[str] = set()
+    for a in policy["archetypes"].values():
+        if a["detection"] == "forecast" or a["signal"] in signals:
+            covered.add(a["resource_type"])
+    return covered
 
 
 def tags_to_map(tags: list[str] | None) -> dict:

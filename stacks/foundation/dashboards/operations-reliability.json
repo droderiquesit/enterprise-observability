@@ -1,0 +1,112 @@
+{
+  "title": "Operations & Reliability",
+  "description": "Managed by Terraform (stacks/foundation). The board a responder opens during a page and the board the weekly reliability review runs from: what is firing, what changed, and how each domain is behaving. Per-domain drill-down is the native monitor list filtered by domain: — see ADR-010.",
+  "layout_type": "ordered",
+  "reflow_type": "auto",
+  "tags": ["team:observability-platform"],
+  "template_variables": [
+    { "name": "env", "prefix": "env", "available_values": ["prod", "stage", "qa"], "default": "prod" },
+    { "name": "team", "prefix": "team", "default": "*" }
+  ],
+  "widgets": [
+    {
+      "definition": {
+        "type": "note",
+        "content": "## Responder crib sheet\n\n1. Ack the page (5/10 min SLA by severity).\n2. Open the **runbook** attached to the alert as a monitor asset — the diagnostics workflow output is attached to the event.\n3. Check *Recent changes* below: most pages resolve to a deployment.\n4. Escalation: an ack timeout auto-escalates via the team escalation policy; manual handles are in the runbook.\n5. Sev1: the incident is created automatically — join the incident channel.\n\nFor a specific service, use the **Service Catalog** entry rather than looking for a dashboard: it already has the APM, log, infrastructure and dependency views, and it stays correct when the service changes.",
+        "background_color": "yellow",
+        "font_size": "14",
+        "text_align": "left",
+        "show_tick": false
+      }
+    },
+    {
+      "definition": {
+        "title": "Active pages (paging monitors only)",
+        "type": "manage_status",
+        "summary_type": "combined",
+        "display_format": "countsAndList",
+        "color_preference": "background",
+        "hide_zero_counts": true,
+        "query": "status:(alert OR warn) tag:(pages:true) tag:($team.value)",
+        "sort": "priority,asc",
+        "count": 50,
+        "start": 0
+      }
+    },
+    {
+      "definition": {
+        "title": "Alerting monitors by domain",
+        "type": "manage_status",
+        "summary_type": "groups",
+        "display_format": "countsAndList",
+        "color_preference": "background",
+        "hide_zero_counts": true,
+        "query": "tag:(managed_by:terraform) tag:($env.value) tag:($team.value)",
+        "sort": "status,asc",
+        "count": 50,
+        "start": 0
+      }
+    },
+    {
+      "definition": {
+        "title": "Correlated event stream (deduplicated by correlation_key)",
+        "type": "event_stream",
+        "query": "source:alert tags:managed_by:terraform tags:$team.value",
+        "event_size": "l"
+      }
+    },
+    {
+      "definition": {
+        "title": "Recent deployments & config changes (most pages resolve to one of these)",
+        "type": "event_stream",
+        "query": "tags:(deployment OR audit) tags:$team.value",
+        "event_size": "s"
+      }
+    },
+    {
+      "definition": {
+        "title": "Infrastructure — host fleet",
+        "type": "timeseries",
+        "requests": [
+          { "display_type": "line", "queries": [ { "data_source": "metrics", "name": "q1", "query": "sum:datadog.host.count{*}" } ], "response_format": "timeseries" }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "title": "Cloud — Kubernetes workload availability",
+        "type": "timeseries",
+        "requests": [
+          { "display_type": "line", "queries": [ { "data_source": "metrics", "name": "q1", "query": "sum:kubernetes_state.deployment.replicas_available{$env} by {kube_cluster_name}" } ], "response_format": "timeseries" }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "title": "Data — pipeline freshness (minutes)",
+        "type": "timeseries",
+        "requests": [
+          { "display_type": "line", "queries": [ { "data_source": "metrics", "name": "q1", "query": "max:acme.data.pipeline.freshness_minutes{$env} by {pipeline}" } ], "response_format": "timeseries" }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "title": "Security — log sources reporting",
+        "type": "timeseries",
+        "requests": [
+          { "display_type": "bars", "queries": [ { "data_source": "metrics", "name": "q1", "query": "sum:acme.security.log_sources_reporting{$env} by {log_source}" } ], "response_format": "timeseries" }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "title": "SRE — service error rate",
+        "type": "timeseries",
+        "requests": [
+          { "display_type": "line", "queries": [ { "data_source": "metrics", "name": "q1", "query": "sum:trace.http.request.errors{$env} by {service}.as_rate()" } ], "response_format": "timeseries" }
+        ]
+      }
+    }
+  ]
+}

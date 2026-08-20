@@ -21,11 +21,17 @@ On-call routing              automatic
 Ownership + service catalog  automatic
 Event correlation            automatic
 Predictive baselines         start learning immediately
-Dashboard visibility         automatic   (domain board + Datadog-native views)
+Dashboard visibility         automatic   (Service Catalog + Datadog-native views)
 ```
 
 **No monitor configuration is required.** If your telemetry carries the five
 tags, the monitors that cover you already exist — you join them as a group.
+
+The one thing a machine cannot derive is the handful of facts only you know:
+what actually breaks for a customer, what you depend on that is not
+instrumented, and what looks alarming but is fine. Those are the sixteen
+questions in [the observability survey](observability-survey.md) — most teams
+answer four of them and skip the rest.
 
 ### What registration adds over just tagging
 

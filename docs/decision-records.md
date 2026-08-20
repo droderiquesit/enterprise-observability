@@ -130,12 +130,43 @@ only.
 
 ---
 
-## ADR-010 — Four dashboards plus one per domain, not four thousand
+## ADR-010 — Three dashboards, not eighteen and not four thousand
 
-Enterprise overview, operations overview, on-call board, **alert quality**, and
-one generated drill-down per domain (18 total). Per-service views are
-Datadog-native. A custom dashboard per service at 100k services is
-unmaintainable and redundant.
+**Original decision.** Four hand-authored boards plus one generated drill-down
+per domain — 18 total. Per-service views stayed Datadog-native, because a custom
+dashboard per service at 100k services is unmaintainable and redundant.
+
+**Revised.** The per-domain generator was the mistake, and it was a tempting one:
+a per-domain board *looks* like a service to the domain that owns it. In
+practice the 14 generated boards were the same five widgets with `domain:x`
+substituted, and during an incident people went to the monitor list instead —
+it filters faster than a dashboard loads and it shows what is firing rather than
+a fixed panel set. Datadog already ships the per-domain view (the filtered
+monitor list, Service Catalog, APM, Infrastructure, SLO list, and the
+Kubernetes/Azure integration dashboards), maintained by Datadog and correct the
+day a new resource type appears. A hand-built copy is strictly worse: it is a
+snapshot of what we knew about that domain on the day it was generated.
+
+Three boards survive, one per audience:
+
+| Board | Audience | Answers |
+|---|---|---|
+| Enterprise Observability Overview | observability-platform | Is the platform itself healthy — coverage, ownership, alert quality, budget |
+| Operations & Reliability | responders, weekly review | What is firing, what changed, how each domain is behaving |
+| SLO & Executive Health | leadership | The promises, and whether we are keeping them |
+
+**The rule that replaces the generator.** A dashboard exists only where the
+answer spans domains. Anything scoped to one domain, service or resource is a
+native Datadog view; anything that is a periodic question rather than a live one
+is a **report** (ADR-019), which is where the five §34 report families went
+instead of becoming twenty more boards.
+
+**Consequence.** The on-call board's widgets moved into Operations &
+Reliability and the Alert Quality board's into Enterprise Observability
+Overview; both boards and all 14 domain boards are destroyed on the next apply.
+`moved` blocks keep the two surviving boards' ids and URLs. A test asserts the
+estate holds at most four dashboards and that no dashboard *template* remains —
+a template left behind is a generator waiting to be re-enabled.
 
 ---
 
@@ -300,3 +331,82 @@ Both monitor modules refuse to **plan** a monitor whose window falls outside the
 policy range, and coverage check C17 grades the deployed estate the same way, so
 the guarantee cannot be lost either by a Terraform change or by an out-of-band
 edit in the UI.
+
+---
+
+## ADR-019 — Reports are a catalog of questions, not a folder of scripts
+
+**Gap.** §34 asks for five report families — executive, operations, platform,
+database, Azure. The obvious implementation is a dashboard per question, which
+is exactly the failure ADR-010 had just finished undoing.
+
+**Decision.** A report is a **catalogued question**, and the catalog is data:
+`platform/policy/reports.yaml` holds the id, family, audience, the question in
+the reader's own words, its data sources, cadence, and what the reader is
+expected to DO. `tools/reports.py` implements exactly those ids, and the test
+suite asserts the two agree in both directions — a catalogued report with no
+code is a promise nobody keeps, and code with no catalog entry has no audience
+and no cadence.
+
+Two constraints keep it small:
+
+1. **No new telemetry.** Every report answers from data the estate already
+   emits. A question that cannot be answered from existing telemetry is a
+   telemetry gap, not a report.
+2. **Every report states an action.** A report with no action is a dashboard
+   with extra steps, and the linter rejects one.
+
+**Degradation is declared, never silent.** Three operations reports ask
+questions only a running estate can answer: which monitors never fire, which
+fire constantly, which oscillate. Offline they answer the *structural* half —
+which monitors cannot fire here, which are built to be noisy, which are built to
+flap — and label the answer `evidence: structural`. That is what lets the whole
+catalog run on a pull request with no credentials.
+
+**Consequence.** Twenty reports across five families, all runnable offline
+against `tests/fixtures`. The seven operations reports that §34 named and
+nothing implemented — never-triggered, noisy, flapping, services without
+telemetry, missing ownership, runbook coverage, on-call coverage — exist and are
+tested. They are **not** a CI gate: coverage and the scorecard are the gates, and
+a third gate that fires on a review backlog would only teach people to ignore
+all three.
+
+---
+
+## ADR-020 — Entity-aware scorecards score alongside the fleet gate, not instead of it
+
+**Gap.** §41 wants services, datastores and infrastructure graded by different
+rules. The existing scorecard graded every monitor against one set of weights,
+and that set was written for a request-path service — so it asked a database
+instance to justify itself as though it were an API.
+
+**Decision.** Three entity kinds (`service`, `datastore`, `infrastructure`),
+resolved from an explicit, exhaustive and validated `resource_type` map in
+`platform/policy/scorecards.yaml`. Each kind re-weights the same seven
+dimensions; datastores carry one additional dimension, `durability`. The seven
+dimensions are computed **once**, by the fleet model, and read twice — two
+scoring implementations would eventually disagree about what "actionability"
+means, and then the two published numbers would be arguing with each other in
+the same report.
+
+**Why an unclassified `resource_type` is a lint error rather than a default.**
+A silent default to `service` is how a new datastore technology gets graded as a
+request path and is never asked for a backup check. Classifying a new type is a
+one-line decision, and it should be a decision.
+
+**Why the entity score does not replace the fleet score.** The fleet number
+gates the deploy pipeline at ≥ 85. Re-weighting it in place would have changed
+what that gate *means* without anybody deciding to change it: the same estate
+would score differently on Monday than on Friday, and nobody could tell a real
+regression from the reweight. So the fleet model is untouched, the entity model
+is added with its own per-kind minimums, and both are published. The fleet score
+gates deploys; the entity minimums are enforced by the test suite and by the
+governance run (`--enforce-entity-minimums`).
+
+**Consequence.** Four kind-specific rules, each one run against the real catalog
+before it was written: three find nothing today and exist as regression guards,
+and one finds a genuine backlog — three datastore technologies (`azure_storage`,
+`snowflake_warehouse`, `storage_volume`) have no capacity forecast, backup,
+replication or freshness check. That is why the datastore minimum is 80 while
+service and infrastructure are 85: an honest recorded gap rather than a rounding
+allowance.

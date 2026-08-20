@@ -134,9 +134,27 @@ jobs:
           DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
         run: cd tools && python fleet_compliance.py --live
 
-      - name: Monitor quality scorecard
+      # `--enforce-entity-minimums` is set HERE and not in deploy.yml on purpose:
+      # the deploy gate keeps meaning exactly what it meant before §41 (fleet
+      # average >= 85, zero F), while erosion of a per-kind score is caught by
+      # this run and by the test suite. Changing what a deploy gate means
+      # without anybody deciding to change it is how a gate stops being trusted.
+      - name: Monitor quality scorecard (fleet gate + per-entity-kind minimums)
         if: always()
-        run: cd tools && python monitor_scorecard.py --min-fleet-score 85 --max-failing 0
+        run: |
+          cd tools && python monitor_scorecard.py --min-fleet-score 85 \
+            --max-failing 0 --enforce-entity-minimums
+
+      # The five report families (§34). NOT a gate — coverage and the scorecard
+      # are the gates, and a third one that fires on a review backlog would only
+      # teach people to ignore all three. This publishes the queue the weekly
+      # reliability review works from.
+      - name: Report families (executive, operations, platform, database, Azure)
+        if: always()
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        run: cd tools && python reports.py --live
 
       - name: Publish the report to the run summary
         if: always()
@@ -150,6 +168,13 @@ jobs:
             echo "⚠️ No coverage report was generated — the measurement step " \
                  "failed before producing output. See the earlier step's log." \
                  >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Publish the report catalog to the run summary
+        if: always()
+        run: |
+          if [ -f generated/reports.md ]; then
+            cat generated/reports.md >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - uses: actions/upload-artifact@v4

@@ -21,6 +21,8 @@ Checks, in the order the CI pipeline reports them:
   EXCEPTION     required fields, expiry, maximum lifetime, approver
   AUTOMATION    workflow classes carry their required safeguards
   BUDGET        the estate stays inside the monitor and paging budgets
+  SCORECARD     entity kinds classify every resource_type; weights total 100
+  REPORT        every catalogued report names an audience, a question and an action
 """
 from __future__ import annotations
 
@@ -405,6 +407,69 @@ def lint() -> list[str]:
                 f"notify_by {nb} is not a subset of group_by {gb}. A collapse key that is not "
                 "a group key does nothing at all, which looks like storm control while "
                 "providing none")
+
+    # ------------------------------------------------- entity kinds (§41) & reports
+    #
+    # Both new policy files are load-bearing for a tool that GRADES the estate,
+    # so a defect in them silently changes what "good" means rather than
+    # failing loudly. That is exactly what the linter is for.
+    sc = policy["scorecards"]
+    kind_names = set(sc["entity_kinds"])
+    rt_kind = sc["resource_type_kind"]
+
+    for rt in sorted({a["resource_type"] for a in policy["archetypes"].values()}):
+        if rt not in rt_kind:
+            err("SCORECARD", f"resource_type {rt}",
+                "is not classified in scorecards.yaml -> resource_type_kind. An "
+                "unclassified type would be graded by whichever rule set happened "
+                "to be the default, which is how a datastore stops being asked for "
+                "a backup check")
+    for rt, k in sorted(rt_kind.items()):
+        if k not in kind_names:
+            err("SCORECARD", f"resource_type_kind[{rt}]", f"unknown entity kind {k!r}")
+    for sa, k in sorted(sc["service_archetype_kind"].items()):
+        if sa not in policy["service_archetypes"]:
+            err("SCORECARD", f"service_archetype_kind[{sa}]",
+                "is not a registered service archetype")
+        if k not in kind_names:
+            err("SCORECARD", f"service_archetype_kind[{sa}]", f"unknown entity kind {k!r}")
+    for sa in sorted(policy["service_archetypes"]):
+        if sa not in sc["service_archetype_kind"]:
+            err("SCORECARD", f"service_archetype {sa}",
+                "has no entity kind, so a resource assigned to it cannot be graded")
+
+    for kind, spec in sorted(sc["entity_kinds"].items()):
+        total = sum(spec["weights"].values())
+        if total != 100:
+            # A block totalling 97 produces grades that quietly cannot reach an
+            # A, and the estate looks like it is degrading when only the
+            # arithmetic changed.
+            err("SCORECARD", f"entity kind {kind}",
+                f"weights total {total}, not 100")
+        if not spec.get("judged_on"):
+            err("SCORECARD", f"entity kind {kind}",
+                "has no `judged_on` — a kind that cannot say what it grades "
+                "differently does not need to be its own kind")
+    for rid, r in sorted(sc["rules"].items()):
+        if r["kind"] not in kind_names:
+            err("SCORECARD", f"rule {rid}", f"unknown entity kind {r['kind']!r}")
+
+    families = set(policy["reports_doc"]["families"])
+    for rid, r in sorted(policy["reports"].items()):
+        where = f"report {rid}"
+        for f in ("family", "audience", "question", "data_source", "cadence",
+                  "requires_live", "action"):
+            if f not in r:
+                err("REPORT", where, f"missing required field `{f}`")
+        if r.get("family") not in families:
+            err("REPORT", where, f"family {r.get('family')!r} is not declared")
+        for ds in r.get("data_source") or []:
+            if ds not in policy["reports_doc"]["data_sources"]:
+                err("REPORT", where, f"data source {ds!r} is not declared")
+        # A report that names no action is a dashboard with extra steps; the
+        # catalog's whole point is that somebody is expected to DO something.
+        if not str(r.get("action", "")).strip():
+            err("REPORT", where, "states no action for the reader")
 
     return errors
 
