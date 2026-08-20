@@ -1,0 +1,616 @@
+# =============================================================================
+# AZURE DEVOPS — deploy the observability platform to Datadog.
+#
+#   Validate ─▶ Nonprod (dev → qa → stage) ─▶ Production (approval-gated)
+#
+# The SAME definitions move through every environment. Nothing is copied
+# between them: each apply narrows `environments` to exactly one environment
+# with its OWN state file, so promoting one can never rewrite another's
+# resources. Production runs only from an explicit manual run with
+# target=production, behind the `datadog-production` environment's approval.
+#
+# STATE (ADR-016) is git-backed on the orphan `tfstate` branch of this
+# repository. There is no remote backend to configure — but the pipeline MUST
+# be able to push, hence `persistCredentials: true` and `fetchDepth: 0` on
+# every checkout that applies.
+#
+# LOCKING: Azure DevOps has no `concurrency:` group. The equivalent is an
+# **Exclusive Lock** check on the `datadog-nonprod` and `datadog-production`
+# environments, combined with `lockBehavior: sequential` below. Add that check
+# or two runs can touch state at once. See docs/azure-devops-pipeline.md.
+#
+# SETUP: docs/azure-devops-pipeline.md — variable group, environments,
+# approvals, and the permissions the build identity needs.
+# =============================================================================
+
+name: $(Date:yyyyMMdd).$(Rev:r)
+
+parameters:
+  - name: target
+    displayName: "Promotion target"
+    type: string
+    default: nonprod
+    values:
+      - validate-only
+      - nonprod
+      - production
+
+  - name: runSecurityScan
+    displayName: "Run IaC and secret scanning"
+    type: boolean
+    default: true
+
+  - name: commitRunbookRegistry
+    displayName: "Commit published notebook ids back to the branch"
+    type: boolean
+    # Publishing a runbook mints a notebook id that monitors attach to. If the
+    # id is never committed, the nightly drift check (`publish_runbooks.py
+    # --check`) fails on every unrecorded entry and every local consumer works
+    # from a registry that trails production.
+    #
+    # Turn this OFF if GitHub Actions is still the deployer for this repository
+    # — two pipelines committing the same file will race. Only one system
+    # should own the write-back.
+    type: boolean
+    default: false
+
+  - name: vmImage
+    displayName: "Agent image (blank = use the pool named below)"
+    type: string
+    default: ubuntu-latest
+
+  - name: poolName
+    displayName: "Self-hosted pool name (used only when vmImage is blank)"
+    type: string
+    default: ''
+
+trigger:
+  batch: true          # coalesce rapid pushes — one deploy, not five
+  branches:
+    include: [main]
+
+pr:
+  branches:
+    include: [main]
+
+variables:
+  # Datadog service-account credentials (DD_API_KEY, DD_APP_KEY). Back this
+  # group with Azure Key Vault so rotation happens in one place. NEVER use a
+  # personal API key.
+  - group: datadog-observability
+
+  - name: TF_VERSION
+    value: "1.9.8"
+  - name: PYTHON_VERSION
+    value: "3.11"
+
+  # DEPLOYMENT METADATA (§8, docs/tagging-standard.md § Deployment metadata).
+  # `version` is grouped on by the deployment archetypes; emitting it is what
+  # makes "what changed?" answerable during an incident. BuildNumber is
+  # monotonic and the SHA carries the diff.
+  - name: DD_SERVICE
+    value: observability-platform
+  - name: DD_VERSION
+    value: "$(Build.BuildNumber)-$(Build.SourceVersion)"
+  - name: DD_GIT_COMMIT_SHA
+    value: "$(Build.SourceVersion)"
+  - name: DD_GIT_REPOSITORY_URL
+    value: "$(Build.Repository.Uri)"
+
+stages:
+  # ===========================================================================
+  - stage: Validate
+    displayName: "Validate"
+    jobs:
+      # -----------------------------------------------------------------------
+      - job: policy
+        displayName: "Policy & configuration"
+        timeoutInMinutes: 30
+        ${{ if ne(parameters.vmImage, '') }}:
+          pool: { vmImage: "${{ parameters.vmImage }}" }
+        ${{ else }}:
+          pool: { name: "${{ parameters.poolName }}" }
+        workspace:
+          clean: all
+        steps:
+          - checkout: self
+            fetchDepth: 1
+
+          - template: .azuredevops/templates/install-tools.yml
+            parameters:
+              terraformVersion: $(TF_VERSION)
+              pythonVersion: $(PYTHON_VERSION)
+              requirements: tools/requirements-dev.txt
+              extraRequirements: "mcp/requirements.txt portal/requirements.txt"
+
+          - template: .azuredevops/templates/preflight.yml
+            parameters:
+              requireDatadogCredentials: false   # this stage runs offline
+              requireStatePush: false
+
+          - bash: |
+              set -euo pipefail
+              python - <<'PY'
+              import sys, yaml, pathlib
+              bad = []
+              for p in sorted(pathlib.Path("platform").rglob("*.yaml")):
+                  try:
+                      yaml.safe_load(p.read_text())
+                  except yaml.YAMLError as exc:
+                      bad.append(f"{p}: {exc}")
+              for b in bad:
+                  print("YAML ERROR:", b)
+              sys.exit(1 if bad else 0)
+              PY
+            displayName: "YAML syntax"
+
+          - bash: |
+              set -euo pipefail
+              python - <<'PY'
+              import json, sys, pathlib, yaml, jsonschema
+              fails = 0
+              for schema_name, glob in (("monitor", "platform/monitors/*.yaml"),
+                                        ("entity",  "platform/entities/*.yaml"),
+                                        ("service", "platform/services/*.yaml")):
+                  schema_path = pathlib.Path(f"platform/schemas/{schema_name}.schema.json")
+                  if not schema_path.exists():
+                      continue
+                  schema = json.loads(schema_path.read_text())
+                  for p in sorted(pathlib.Path().glob(glob)):
+                      try:
+                          jsonschema.validate(yaml.safe_load(p.read_text()), schema)
+                      except jsonschema.ValidationError as exc:
+                          print(f"SCHEMA ERROR {p}: {exc.message} (at {list(exc.path)})")
+                          fails += 1
+              sys.exit(1 if fails else 0)
+              PY
+            displayName: "JSON schema — entity registrations & monitor manifests"
+
+          # Policy lint, manifest validation, runbook registry sync, generated
+          # doc staleness, scorecard thresholds and the scale test all run
+          # inside pytest; tests/ asserts each one.
+          - bash: |
+              set -euo pipefail
+              python -m pytest tests/ -q --junitxml=$(Agent.TempDirectory)/platform.xml
+            displayName: "Platform test suite"
+
+          - bash: |
+              set -euo pipefail
+              python -m pytest mcp/tests -q --junitxml=$(Agent.TempDirectory)/mcp.xml
+            displayName: "MCP server — contracts, governance, grounding"
+
+          - bash: |
+              set -euo pipefail
+              python -m pytest portal/tests -q --junitxml=$(Agent.TempDirectory)/portal.xml
+            displayName: "Executive portal — offline render, freshness, failure states"
+
+          - bash: |
+              set -euo pipefail
+              cd tools && python agent_config.py --check
+            displayName: "Agent configuration — render and scan for secrets"
+
+          - bash: |
+              set -euo pipefail
+              cd tools && python reports.py --fixtures ../tests/fixtures
+            displayName: "Report families — offline against fixtures"
+
+          - task: PublishTestResults@2
+            displayName: "Publish test results"
+            condition: always()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: "$(Agent.TempDirectory)/*.xml"
+              mergeTestResults: true
+              failTaskOnFailedTests: true
+
+          - task: PublishPipelineArtifact@1
+            displayName: "Publish quality reports"
+            condition: always()
+            continueOnError: true
+            inputs:
+              targetPath: generated
+              artifact: "quality-reports-$(System.JobAttempt)"
+
+      # -----------------------------------------------------------------------
+      - job: terraform
+        displayName: "Terraform — fmt, validate, offline plan, determinism"
+        timeoutInMinutes: 30
+        ${{ if ne(parameters.vmImage, '') }}:
+          pool: { vmImage: "${{ parameters.vmImage }}" }
+        ${{ else }}:
+          pool: { name: "${{ parameters.poolName }}" }
+        workspace:
+          clean: all
+        steps:
+          - checkout: self
+            fetchDepth: 1
+
+          - template: .azuredevops/templates/install-tools.yml
+            parameters:
+              terraformVersion: $(TF_VERSION)
+              pythonVersion: $(PYTHON_VERSION)
+
+          # Only matters on a reused (self-hosted) workspace: a .terraform/
+          # from an earlier run can record a backend this repository does not
+          # declare, which fails init on the second run and never on a hosted
+          # agent.
+          - bash: |
+              set -euo pipefail
+              find . -name '.terraform' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+              echo "cleared stale terraform working directories"
+            displayName: "Clear stale terraform working directories"
+
+          - bash: |
+              set -euo pipefail
+              terraform fmt -recursive -check -no-color
+            displayName: "terraform fmt"
+
+          - bash: |
+              set -euo pipefail
+              for d in modules/* stacks/coverage stacks/foundation; do
+                echo "== $d"
+                ( cd "$d" && terraform init -backend=false -input=false -no-color >/dev/null && terraform validate -no-color )
+              done
+            displayName: "terraform validate — every module and stack"
+
+          # No credentials: `datadog_validate=false` turns off the provider's
+          # plan-time API calls. This still exercises every precondition,
+          # budget and cardinality gate in the configuration.
+          - bash: |
+              set -euo pipefail
+              cd stacks/coverage
+              DD_API_KEY=offline DD_APP_KEY=offline terraform plan -input=false -no-color \
+                -var datadog_validate=false -out=plan.out
+              cd ../foundation
+              DD_API_KEY=offline DD_APP_KEY=offline terraform plan -input=false -no-color \
+                -var datadog_validate=false -var manage_rbac=false
+            displayName: "Offline plan — preconditions, budgets, cardinality gates"
+
+          - bash: |
+              set -euo pipefail
+              cd stacks/coverage
+              terraform show -json plan.out \
+                | jq -S '.resource_changes | map({address, actions: .change.actions})' > p1.json
+              DD_API_KEY=offline DD_APP_KEY=offline terraform plan -input=false -no-color \
+                -var datadog_validate=false -out=plan2.out
+              terraform show -json plan2.out \
+                | jq -S '.resource_changes | map({address, actions: .change.actions})' > p2.json
+              if ! diff -u p1.json p2.json; then
+                echo "##vso[task.logissue type=error]Two consecutive plans differ — the configuration is not deterministic. A non-deterministic plan means an apply can churn resources on every run."
+                exit 1
+              fi
+              echo "determinism: two consecutive plans are identical"
+            displayName: "Determinism — a second plan must equal the first"
+
+          - bash: |
+              set -euo pipefail
+              cd stacks/coverage
+              terraform show -json plan.out | jq -r '
+                [.resource_changes[] | select(.type == "datadog_monitor")] as $m
+                | "## Planned monitoring estate\n"
+                + "- monitors: \($m | length)\n"
+                + "- SLOs: \([.resource_changes[] | select(.type == "datadog_service_level_objective")] | length)"
+              ' > "$(Build.ArtifactStagingDirectory)/estate-summary.md"
+              cat "$(Build.ArtifactStagingDirectory)/estate-summary.md"
+              echo "##vso[task.uploadsummary]$(Build.ArtifactStagingDirectory)/estate-summary.md"
+            displayName: "Estate summary"
+            continueOnError: true
+
+      # -----------------------------------------------------------------------
+      - ${{ if parameters.runSecurityScan }}:
+          - job: security
+            displayName: "Security — IaC misconfiguration and secret scan"
+            timeoutInMinutes: 25
+            ${{ if ne(parameters.vmImage, '') }}:
+              pool: { vmImage: "${{ parameters.vmImage }}" }
+            ${{ else }}:
+              pool: { name: "${{ parameters.poolName }}" }
+            workspace:
+              clean: all
+            steps:
+              # Full history: gitleaks scans a commit RANGE and cannot resolve
+              # it from a shallow clone.
+              - checkout: self
+                fetchDepth: 0
+
+              - template: .azuredevops/templates/install-tools.yml
+                parameters:
+                  terraformVersion: $(TF_VERSION)
+                  pythonVersion: $(PYTHON_VERSION)
+                  installSecurityTools: true
+
+              - bash: |
+                  set -euo pipefail
+                  trivy config . --exit-code 1 --severity HIGH,CRITICAL --no-progress
+                displayName: "IaC misconfiguration scan (trivy)"
+
+              - bash: |
+                  set -euo pipefail
+                  gitleaks detect --source . --redact --no-banner --exit-code 1 \
+                    --report-format sarif --report-path "$(Build.ArtifactStagingDirectory)/gitleaks.sarif"
+                displayName: "Secret scan (gitleaks)"
+
+              - task: PublishPipelineArtifact@1
+                displayName: "Publish security findings"
+                condition: always()
+                continueOnError: true
+                inputs:
+                  targetPath: $(Build.ArtifactStagingDirectory)
+                  artifact: "security-findings-$(System.JobAttempt)"
+
+      # -----------------------------------------------------------------------
+      # Credentialed plan: every planned monitor is checked against Datadog's
+      # own validation API, so a syntactically invalid query cannot reach an
+      # apply. Skipped automatically when the variable group is not linked.
+      - job: livePlan
+        displayName: "Live monitor validation"
+        timeoutInMinutes: 30
+        ${{ if ne(parameters.vmImage, '') }}:
+          pool: { vmImage: "${{ parameters.vmImage }}" }
+        ${{ else }}:
+          pool: { name: "${{ parameters.poolName }}" }
+        workspace:
+          clean: all
+        steps:
+          - checkout: self
+            fetchDepth: 1
+
+          - template: .azuredevops/templates/install-tools.yml
+            parameters:
+              terraformVersion: $(TF_VERSION)
+              pythonVersion: $(PYTHON_VERSION)
+
+          - bash: |
+              set -euo pipefail
+              if [ -z "${DD_API_KEY:-}" ] || [ -z "${DD_APP_KEY:-}" ]; then
+                echo "##vso[task.logissue type=warning]Datadog credentials are not available to this job — live monitor validation skipped. The offline plan already gated this run."
+                exit 0
+              fi
+              cd stacks/coverage
+              terraform init -input=false -no-color -reconfigure >/dev/null
+              terraform plan -input=false -no-color -var datadog_validate=false -out=plan.out
+              terraform show -json plan.out > plan.json
+              cd ../../tools
+              python validate_live.py ../stacks/coverage/plan.json
+            displayName: "Plan, then validate every planned monitor against the live API"
+            env:
+              DD_API_KEY: $(DD_API_KEY)
+              DD_APP_KEY: $(DD_APP_KEY)
+
+  # ===========================================================================
+  - ${{ if ne(parameters.target, 'validate-only') }}:
+      - stage: Nonprod
+        displayName: "Promote → dev, qa, stage"
+        dependsOn: Validate
+        condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))
+        # Serialise with Production and with any other run: requires an
+        # Exclusive Lock check on the environment.
+        lockBehavior: sequential
+        jobs:
+          - deployment: nonprod
+            displayName: "dev → qa → stage"
+            environment: datadog-nonprod
+            timeoutInMinutes: 90
+            ${{ if ne(parameters.vmImage, '') }}:
+              pool: { vmImage: "${{ parameters.vmImage }}" }
+            ${{ else }}:
+              pool: { name: "${{ parameters.poolName }}" }
+            workspace:
+              clean: all
+            strategy:
+              runOnce:
+                deploy:
+                  steps:
+                    # Deployment jobs do NOT check out sources by default.
+                    - checkout: self
+                      fetchDepth: 0            # state commits need real history
+                      persistCredentials: true # tfstate branch push
+
+                    - template: .azuredevops/templates/install-tools.yml
+                      parameters:
+                        terraformVersion: $(TF_VERSION)
+                        pythonVersion: $(PYTHON_VERSION)
+
+                    - template: .azuredevops/templates/preflight.yml
+
+                    # Runbooks are published BEFORE the apply because a monitor
+                    # attaches its runbook through the native `assets` field,
+                    # which needs the notebook id. Publishing is idempotent
+                    # (content-hash compared), so this is a no-op when nothing
+                    # changed.
+                    - bash: |
+                        set -euo pipefail
+                        cd tools && python publish_runbooks.py --write-registry
+                      displayName: "Runbooks · publish notebooks and bind ids"
+                      env:
+                        DD_API_KEY: $(DD_API_KEY)
+                        DD_APP_KEY: $(DD_APP_KEY)
+
+                    - ${{ if parameters.commitRunbookRegistry }}:
+                        - bash: |
+                            set -euo pipefail
+                            git config user.name  "observability-deploy[bot]"
+                            git config user.email "observability-deploy@users.noreply.local"
+                            if git diff --quiet -- platform/policy/runbooks.yaml; then
+                              echo "registry unchanged — every runbook already had an id"
+                              exit 0
+                            fi
+                            git add platform/policy/runbooks.yaml
+                            # ***NO_CI*** and [skip ci] are load-bearing: this
+                            # pushes to the branch that triggers this pipeline.
+                            git commit -m "Record published runbook notebook ids [skip ci] ***NO_CI***"
+                            # A rejected push is not a deploy failure: the
+                            # notebooks exist in Datadog either way and the next
+                            # run re-adopts them by name.
+                            git push origin "HEAD:$(Build.SourceBranchName)" \
+                              || echo "##vso[task.logissue type=warning]could not push the runbook registry; notebook ids remain unrecorded in git"
+                          displayName: "Runbooks · record notebook ids in the repository"
+
+                    # One environment at a time, each with its own state file.
+                    - template: .azuredevops/templates/tf-apply.yml
+                      parameters:
+                        stack: coverage
+                        environment: dev
+                        planArgs: '-var ''environments=["dev"]'''
+                    - template: .azuredevops/templates/tf-apply.yml
+                      parameters:
+                        stack: coverage
+                        environment: qa
+                        planArgs: '-var ''environments=["qa"]'''
+                    - template: .azuredevops/templates/tf-apply.yml
+                      parameters:
+                        stack: coverage
+                        environment: stage
+                        planArgs: '-var ''environments=["stage"]'''
+
+                    # Only after a green apply: a marker for a deployment that
+                    # did not complete is worse than none, because the
+                    # correlation view would blame a change that never landed.
+                    # dev is skipped — it instantiates zero monitors by policy.
+                    - bash: |
+                        set -euo pipefail
+                        for env in qa stage; do
+                          DD_ENV="$env" python tools/emit_deployment_event.py
+                        done
+                      displayName: "Deployment marker · record the configuration version"
+                      env:
+                        DD_API_KEY: $(DD_API_KEY)
+                        DD_APP_KEY: $(DD_APP_KEY)
+                        DD_SERVICE: $(DD_SERVICE)
+                        DD_VERSION: $(DD_VERSION)
+                        DD_GIT_COMMIT_SHA: $(DD_GIT_COMMIT_SHA)
+                        DD_GIT_REPOSITORY_URL: $(DD_GIT_REPOSITORY_URL)
+
+  # ===========================================================================
+  - ${{ if eq(parameters.target, 'production') }}:
+      - stage: Production
+        displayName: "Promote → prod"
+        dependsOn: Nonprod
+        condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))
+        lockBehavior: sequential
+        jobs:
+          - deployment: production
+            displayName: "foundation → runbooks → coverage → verify"
+            environment: datadog-production   # approval gate lives here
+            timeoutInMinutes: 120
+            ${{ if ne(parameters.vmImage, '') }}:
+              pool: { vmImage: "${{ parameters.vmImage }}" }
+            ${{ else }}:
+              pool: { name: "${{ parameters.poolName }}" }
+            workspace:
+              clean: all
+            strategy:
+              runOnce:
+                deploy:
+                  steps:
+                    - checkout: self
+                      fetchDepth: 0
+                      persistCredentials: true
+
+                    - template: .azuredevops/templates/install-tools.yml
+                      parameters:
+                        terraformVersion: $(TF_VERSION)
+                        pythonVersion: $(PYTHON_VERSION)
+
+                    - template: .azuredevops/templates/preflight.yml
+
+                    # 1 · Foundation FIRST. An alert that fires into a routing
+                    # void is worse than no alert: it creates the appearance of
+                    # coverage.
+                    - template: .azuredevops/templates/tf-apply.yml
+                      parameters:
+                        stack: foundation
+                        environment: prod
+                        displayName: "1 · Foundation — teams, routing, on-call, workflows, RBAC"
+
+                    # 2 · Publish before the coverage apply so every monitor can
+                    # attach its runbook.
+                    - bash: |
+                        set -euo pipefail
+                        cd tools && python publish_runbooks.py --write-registry
+                      displayName: "2 · Runbooks — publish notebooks and bind ids"
+                      env:
+                        DD_API_KEY: $(DD_API_KEY)
+                        DD_APP_KEY: $(DD_APP_KEY)
+
+                    # 3 · Coverage.
+                    - template: .azuredevops/templates/tf-apply.yml
+                      parameters:
+                        stack: coverage
+                        environment: prod
+                        planArgs: '-var ''environments=["prod"]'''
+                        displayName: "3 · Coverage — monitors, SLOs, burn-rate alerts, composites"
+
+                    # ---- post-deployment verification --------------------------
+                    - bash: |
+                        set -euo pipefail
+                        cd stacks/foundation
+                        terraform plan -input=false -no-color -detailed-exitcode
+                        cd ../coverage
+                        terraform plan -input=false -no-color -var 'environments=["prod"]' -detailed-exitcode
+                      displayName: "4 · Idempotency — a second plan must be empty"
+                      env:
+                        DD_API_KEY: $(DD_API_KEY)
+                        DD_APP_KEY: $(DD_APP_KEY)
+
+                    - bash: |
+                        set -euo pipefail
+                        cd tools
+                        python build_inventory.py --live
+                        python profile_engine.py
+                        python coverage_report.py --live --gate deploy
+                      displayName: "5 · Coverage & compliance report against the live org"
+                      env:
+                        DD_API_KEY: $(DD_API_KEY)
+                        DD_APP_KEY: $(DD_APP_KEY)
+
+                    - bash: |
+                        set -euo pipefail
+                        cd tools && python monitor_scorecard.py --min-fleet-score 85 --max-failing 0
+                      displayName: "6 · Quality scorecard against the catalog"
+
+                    - bash: |
+                        set -euo pipefail
+                        cd tools && python reconciliation_report.py --live
+                      displayName: "7 · Monitor reconciliation against the live estate"
+                      env:
+                        DD_API_KEY: $(DD_API_KEY)
+                        DD_APP_KEY: $(DD_APP_KEY)
+
+                    # Report-only by decision (agent_profiles.yaml →
+                    # compliance.ratio.report_targets). Gating before the first
+                    # rollout wave would produce a permanently red deploy, and a
+                    # gate everyone learns to ignore protects nothing.
+                    - bash: |
+                        set -euo pipefail
+                        cd tools && python fleet_compliance.py --live
+                      displayName: "8 · Fleet compliance — agent, integration and tag coverage"
+                      condition: always()
+                      continueOnError: true
+                      env:
+                        DD_API_KEY: $(DD_API_KEY)
+                        DD_APP_KEY: $(DD_APP_KEY)
+
+                    # Last, and only on a green run: the marker asserts "this
+                    # configuration version is live", which is only true if
+                    # everything above succeeded.
+                    - bash: |
+                        set -euo pipefail
+                        cd tools && python emit_deployment_event.py
+                      displayName: "9 · Deployment marker — record the configuration version"
+                      env:
+                        DD_ENV: prod
+                        DD_API_KEY: $(DD_API_KEY)
+                        DD_APP_KEY: $(DD_APP_KEY)
+                        DD_SERVICE: $(DD_SERVICE)
+                        DD_VERSION: $(DD_VERSION)
+                        DD_GIT_COMMIT_SHA: $(DD_GIT_COMMIT_SHA)
+                        DD_GIT_REPOSITORY_URL: $(DD_GIT_REPOSITORY_URL)
+
+                    - task: PublishPipelineArtifact@1
+                      displayName: "Publish post-deploy evidence"
+                      condition: always()
+                      continueOnError: true
+                      inputs:
+                        targetPath: generated
+                        artifact: "post-deploy-evidence-$(System.JobAttempt)"

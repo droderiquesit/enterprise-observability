@@ -1,0 +1,219 @@
+# =============================================================================
+# TOOLCHAIN INSTALL — every binary this repository needs, pinned and verified.
+#
+# Microsoft-hosted images ship *a* Terraform, but never the one this repository
+# pins, and self-hosted agents may ship none. Nothing here trusts the image:
+# Terraform is downloaded at the pinned version and its SHA256 is checked
+# against HashiCorp's published sums before it is unzipped, so a corrupted or
+# substituted download fails the build instead of planning with it.
+#
+# Everything is cached by version, so the steady-state cost is a cache restore.
+# =============================================================================
+parameters:
+  - name: terraformVersion
+    type: string
+  - name: pythonVersion
+    type: string
+  - name: requirements
+    type: string
+    default: tools/requirements.txt
+  - name: extraRequirements          # space-separated, e.g. "mcp/requirements.txt portal/requirements.txt"
+    type: string
+    default: ''
+  - name: installSecurityTools
+    type: boolean
+    default: false
+  - name: trivyVersion               # empty => latest at install time
+    type: string
+    default: ''
+  - name: gitleaksVersion            # empty => latest at install time
+    type: string
+    default: ''
+
+steps:
+  # ---------------------------------------------------------------------------
+  - bash: |
+      set -euo pipefail
+      mkdir -p "$(Pipeline.Workspace)/.tools/bin" "$(Pipeline.Workspace)/.tfplugins"
+      echo "##vso[task.prependpath]$(Pipeline.Workspace)/.tools/bin"
+      # Shared provider cache: the Datadog provider is ~80MB and is otherwise
+      # re-downloaded by every `terraform init` in every stack, in every job.
+      echo "##vso[task.setvariable variable=TF_PLUGIN_CACHE_DIR]$(Pipeline.Workspace)/.tfplugins"
+      # Terraform's own retry/backoff for registry and provider downloads.
+      echo "##vso[task.setvariable variable=TF_IN_AUTOMATION]1"
+      echo "##vso[task.setvariable variable=TF_INPUT]0"
+      echo "##vso[task.setvariable variable=CHECKPOINT_DISABLE]1"
+    displayName: "Toolchain · prepare PATH and caches"
+
+  # ---------------------------------------------------------------------------
+  - task: UsePythonVersion@0
+    displayName: "Toolchain · Python ${{ parameters.pythonVersion }}"
+    retryCountOnTaskFailure: 2
+    inputs:
+      versionSpec: "${{ parameters.pythonVersion }}"
+      addToPath: true
+
+  - task: Cache@2
+    displayName: "Cache · pip"
+    inputs:
+      key: 'pip | "$(Agent.OS)" | "${{ parameters.pythonVersion }}" | ${{ parameters.requirements }}'
+      restoreKeys: |
+        pip | "$(Agent.OS)" | "${{ parameters.pythonVersion }}"
+      path: $(Pipeline.Workspace)/.cache/pip
+
+  - task: Cache@2
+    displayName: "Cache · Terraform ${{ parameters.terraformVersion }} binary"
+    inputs:
+      key: 'terraform | "$(Agent.OS)" | "${{ parameters.terraformVersion }}"'
+      path: $(Pipeline.Workspace)/.tools/bin
+      cacheHitVar: TERRAFORM_CACHE_HIT
+
+  - task: Cache@2
+    displayName: "Cache · Terraform providers"
+    inputs:
+      # Provider lock files are not committed (see .gitignore), so the version
+      # CONSTRAINTS are the most stable key available. A constraint change
+      # correctly busts the cache; a new patch release inside the same
+      # constraint is picked up by `terraform init` on a cache hit anyway.
+      key: 'tfproviders | "$(Agent.OS)" | stacks/**/versions.tf | modules/**/versions.tf'
+      restoreKeys: |
+        tfproviders | "$(Agent.OS)"
+      path: $(Pipeline.Workspace)/.tfplugins
+
+  # ---------------------------------------------------------------------------
+  - bash: |
+      set -euo pipefail
+      # unzip/curl/jq are present on Microsoft-hosted images and frequently are
+      # NOT on a minimal self-hosted agent. Install only what is missing, and
+      # only if we can (a non-root agent without sudo gets a clear error rather
+      # than a confusing failure three steps later).
+      missing=()
+      for t in curl unzip jq git; do command -v "$t" >/dev/null 2>&1 || missing+=("$t"); done
+      if [ ${#missing[@]} -gt 0 ]; then
+        echo "missing base tools: ${missing[*]}"
+        if command -v sudo >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq "${missing[@]}"
+        else
+          echo "##vso[task.logissue type=error]Cannot install ${missing[*]}: no sudo/apt-get on this agent. Pre-install them on the agent image."
+          exit 1
+        fi
+      fi
+      echo "base tools present: curl unzip jq git"
+    displayName: "Toolchain · base utilities (curl, unzip, jq, git)"
+    retryCountOnTaskFailure: 2
+
+  # ---------------------------------------------------------------------------
+  - bash: |
+      set -euo pipefail
+      VER="${{ parameters.terraformVersion }}"
+      BIN="$(Pipeline.Workspace)/.tools/bin"
+      TMP="$(mktemp -d)"
+      BASE="https://releases.hashicorp.com/terraform/${VER}"
+      ZIP="terraform_${VER}_linux_amd64.zip"
+
+      # Retry the whole fetch+verify cycle: a truncated download is a checksum
+      # failure, and a checksum failure on attempt 1 is usually transient.
+      for attempt in 1 2 3; do
+        rc=0
+        curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused \
+             -o "$TMP/$ZIP" "$BASE/$ZIP" || rc=$?
+        curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused \
+             -o "$TMP/SHA256SUMS" "$BASE/terraform_${VER}_SHA256SUMS" || rc=$?
+        if [ "$rc" -eq 0 ] && ( cd "$TMP" && grep " ${ZIP}\$" SHA256SUMS | sha256sum -c - ); then
+          echo "checksum verified for $ZIP"
+          break
+        fi
+        if [ "$attempt" -eq 3 ]; then
+          echo "##vso[task.logissue type=error]Terraform ${VER} download or checksum verification failed after 3 attempts."
+          exit 1
+        fi
+        echo "attempt ${attempt} failed — retrying"; sleep $(( attempt * 3 ))
+      done
+
+      unzip -oq "$TMP/$ZIP" -d "$BIN"
+      chmod +x "$BIN/terraform"
+      rm -rf "$TMP"
+      "$BIN/terraform" version
+    displayName: "Toolchain · Terraform ${{ parameters.terraformVersion }} (checksum verified)"
+    condition: and(succeeded(), ne(variables.TERRAFORM_CACHE_HIT, 'true'))
+    retryCountOnTaskFailure: 1
+
+  # ---------------------------------------------------------------------------
+  - bash: |
+      set -euo pipefail
+      export PIP_CACHE_DIR="$(Pipeline.Workspace)/.cache/pip"
+      python -m pip install --upgrade pip --quiet
+      python -m pip install --quiet -r "${{ parameters.requirements }}"
+      for req in ${{ parameters.extraRequirements }}; do
+        echo "  + $req"
+        python -m pip install --quiet -r "$req"
+      done
+      python -m pip check || echo "##vso[task.logissue type=warning]pip reported dependency conflicts (see above)"
+    displayName: "Toolchain · Python dependencies"
+    retryCountOnTaskFailure: 2
+
+  # ---------------------------------------------------------------------------
+  - ${{ if parameters.installSecurityTools }}:
+      - bash: |
+          set -euo pipefail
+          BIN="$(Pipeline.Workspace)/.tools/bin"
+
+          # Trivy — IaC misconfiguration scanning (tfsec's maintained successor;
+          # tfsec's parser rejects the Terraform `check` blocks this repo uses).
+          if ! command -v trivy >/dev/null 2>&1; then
+            TRIVY_VER="${{ parameters.trivyVersion }}"
+            curl -fsSL --retry 3 --retry-delay 2 \
+              https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+              | sh -s -- -b "$BIN" ${TRIVY_VER:+v$TRIVY_VER}
+          fi
+
+          # Gitleaks — secret scanning.
+          if ! command -v gitleaks >/dev/null 2>&1; then
+            GL_VER="${{ parameters.gitleaksVersion }}"
+            if [ -z "$GL_VER" ]; then
+              GL_VER="$(curl -fsSL --retry 3 https://api.github.com/repos/gitleaks/gitleaks/releases/latest \
+                        | jq -r '.tag_name' | sed 's/^v//')"
+            fi
+            [ -n "$GL_VER" ] && [ "$GL_VER" != "null" ] || {
+              echo "##vso[task.logissue type=error]Could not resolve a gitleaks version."; exit 1; }
+            TMP="$(mktemp -d)"
+            curl -fsSL --retry 3 --retry-delay 2 \
+              -o "$TMP/gitleaks.tar.gz" \
+              "https://github.com/gitleaks/gitleaks/releases/download/v${GL_VER}/gitleaks_${GL_VER}_linux_x64.tar.gz"
+            tar -xzf "$TMP/gitleaks.tar.gz" -C "$BIN" gitleaks
+            chmod +x "$BIN/gitleaks"
+            rm -rf "$TMP"
+          fi
+        displayName: "Toolchain · security scanners (trivy, gitleaks)"
+        retryCountOnTaskFailure: 2
+
+  # ---------------------------------------------------------------------------
+  - bash: |
+      set -euo pipefail
+      echo "──────────── toolchain ────────────"
+      fail=0
+      check() {
+        if command -v "$1" >/dev/null 2>&1; then
+          printf '  %-10s %s\n' "$1" "$($2 2>&1 | head -1)"
+        else
+          echo "##vso[task.logissue type=error]required tool not on PATH: $1"; fail=1
+        fi
+      }
+      check terraform "terraform version"
+      check python    "python --version"
+      check jq        "jq --version"
+      check git       "git --version"
+      echo "  provider cache: ${TF_PLUGIN_CACHE_DIR:-<unset>}"
+      python - <<'PY'
+      import importlib, sys
+      for mod in ("yaml", "requests"):
+          try:
+              importlib.import_module(mod)
+              print(f"  python:{mod:<9} ok")
+          except ImportError:
+              print(f"##vso[task.logissue type=error]python module missing: {mod}")
+              sys.exit(1)
+      PY
+      exit $fail
+    displayName: "Toolchain · verify"

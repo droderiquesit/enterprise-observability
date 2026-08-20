@@ -1,0 +1,75 @@
+# =============================================================================
+# PREFLIGHT — fail in ten seconds, not ten minutes.
+#
+# Every failure this catches would otherwise surface midway through an apply,
+# after Datadog objects have already been created: a missing credential three
+# steps in, or a git remote that cannot be pushed to, which strands the state
+# for a fleet that now exists.
+#
+# Secrets are never printed. Presence and shape are asserted; values are not.
+# =============================================================================
+parameters:
+  - name: requireDatadogCredentials
+    type: boolean
+    default: true
+  - name: requireStatePush        # deploy stages push to the `tfstate` branch
+    type: boolean
+    default: true
+
+steps:
+  - bash: |
+      set -euo pipefail
+      fail=0
+      # Boolean parameters substitute as True/False; normalise for test(1).
+      REQUIRE_CREDS="$(echo '${{ parameters.requireDatadogCredentials }}' | tr '[:upper:]' '[:lower:]')"
+      REQUIRE_PUSH="$(echo '${{ parameters.requireStatePush }}' | tr '[:upper:]' '[:lower:]')"
+
+      # --- repository shape ---------------------------------------------------
+      for path in stacks/coverage stacks/foundation tools/tfstate-git.sh \
+                  tools/requirements.txt platform/policy; do
+        if [ ! -e "$path" ]; then
+          echo "##vso[task.logissue type=error]expected path missing from the checkout: $path"
+          fail=1
+        fi
+      done
+      [ -x tools/tfstate-git.sh ] || chmod +x tools/tfstate-git.sh
+
+      # --- credentials --------------------------------------------------------
+      if [ "$REQUIRE_CREDS" = "true" ]; then
+        for var in DD_API_KEY DD_APP_KEY; do
+          val="${!var:-}"
+          if [ -z "$val" ]; then
+            echo "##vso[task.logissue type=error]$var is empty. Link the variable group holding the Datadog service-account credentials to this pipeline, and confirm the value is mapped into the step's env: block (Azure DevOps does NOT expose secret variables to scripts automatically)."
+            fail=1
+          else
+            # Length only — never the value. A 3-character paste error is a
+            # far more common failure than a wrong-but-well-formed key.
+            echo "  $var present (${#val} chars)"
+            case "$var" in
+              DD_API_KEY) [ "${#val}" -ge 32 ] || { echo "##vso[task.logissue type=warning]DD_API_KEY is shorter than a Datadog API key normally is."; } ;;
+              DD_APP_KEY) [ "${#val}" -ge 40 ] || { echo "##vso[task.logissue type=warning]DD_APP_KEY is shorter than a Datadog application key normally is."; } ;;
+            esac
+          fi
+        done
+      fi
+
+      # --- git remote write path (state branch) -------------------------------
+      if [ "$REQUIRE_PUSH" = "true" ]; then
+        if ! git ls-remote --heads origin >/dev/null 2>&1; then
+          echo "##vso[task.logissue type=error]git cannot reach 'origin'. Terraform state lives on the 'tfstate' branch of this repository (ADR-016), so the deploy MUST be able to fetch and push it. Set 'persistCredentials: true' on the checkout step and grant the build identity write access to the repository."
+          fail=1
+        else
+          echo "  git remote reachable"
+          # A shallow clone cannot build the state commit on the fetched tip.
+          if [ -f .git/shallow ]; then
+            echo "##vso[task.logissue type=error]this is a shallow clone; set 'fetchDepth: 0' on the checkout step or state persistence will fail."
+            fail=1
+          fi
+        fi
+      fi
+
+      exit $fail
+    displayName: "Preflight · credentials, repository shape, state access"
+    env:
+      DD_API_KEY: $(DD_API_KEY)
+      DD_APP_KEY: $(DD_APP_KEY)
