@@ -54,6 +54,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: controlm_job
+    telemetry: [controlm_exporter]
     selector: "resource_type:controlm_job"
     # The product with `controlm.job.running` is the in-flight GATE, and it is
     # in the query rather than in a tag filter on purpose: it makes the alert
@@ -100,6 +101,7 @@ archetypes:
     detection: seasonal_anomaly
     monitor_type: query alert
     resource_type: controlm_job
+    telemetry: [controlm_exporter]
     selector: "resource_type:controlm_job"
     query: "avg(last_4h):anomalies(avg:controlm.job.elapsed_seconds{__SCOPE__,job_state:completed} by {folder,job_name}, 'robust', 3, direction='above', seasonality='daily') >= 1"
     thresholds: { critical: 1.0 }
@@ -129,6 +131,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: controlm_job
+    telemetry: [controlm_exporter]
     selector: "resource_type:controlm_job"
     # Control-M already computes lateness from the job definition's "must start
     # by" time and exposes it as a job state. Re-deriving that deadline inside a
@@ -158,6 +161,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: controlm_job
+    telemetry: [controlm_exporter]
     selector: "resource_type:controlm_job"
     query: 'sum(last_1d):sum:controlm.job.status{__SCOPE__,job_status:completed} by {folder,job_name}.as_count() < 1'
     thresholds: { critical: 1 }
@@ -188,6 +192,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: controlm_job
+    telemetry: [controlm_exporter]
     selector: "resource_type:controlm_job"
     # The silent failure that job-status monitoring cannot see: Control-M ends
     # the job OK because the script returned 0, but the run took 8 seconds
@@ -221,6 +226,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: controlm_job
+    telemetry: [controlm_exporter]
     selector: "resource_type:controlm_job"
     query: 'sum(last_2h):sum:controlm.job.status{__SCOPE__,job_status:failed} by {folder,job_name}.as_count() >= 1'
     thresholds: { critical: 1 }
@@ -248,6 +254,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: controlm_job
+    telemetry: [controlm_exporter]
     selector: "resource_type:controlm_job"
     # Waiting on a condition is NORMAL in Control-M and alerting on it would be
     # unbearable noise. The exporter emits job_status:blocked only when the job
@@ -281,6 +288,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: controlm_job
+    telemetry: [controlm_exporter]
     selector: "resource_type:controlm_job"
     # Emitted for every job in the active order pool whether or not it ran, so
     # this keeps reporting when every other signal above has gone quiet: a job
@@ -313,6 +321,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: controlm_server
+    telemetry: [controlm_exporter]
     selector: "resource_type:controlm_server"
     query: 'sum(last_30m):sum:controlm.job.status{__SCOPE__}.as_count() < 1'
     thresholds: { critical: 1 }

@@ -421,6 +421,18 @@ telemetry_sources:
     metric_namespaces: ["acme.batch."]
     provided_by: Batch platform emits run outcome, duration, backlog and output age.
 
+  controlm_exporter:
+    display: Control-M Automation API exporter
+    kind: custom_emitter
+    metric_namespaces: ["controlm."]
+    # Deliberately separate from custom_scheduler_metrics. Control-M has no
+    # native Datadog integration for IN-FLIGHT job state, so this source is a
+    # poller against the Automation API rather than a push from a control
+    # plane — and it fails differently: an expired API token silently greens
+    # every job at once, which is why controlm-exporter-telemetry-loss watches
+    # the poller itself. See docs/telemetry-gaps.md §9.
+    provided_by: Exporter polling the Control-M Automation API every 60s.
+
   custom_scheduler_metrics:
     display: Scheduler execution metrics
     kind: custom_emitter
