@@ -159,6 +159,7 @@ duplicates policy YAML — read the YAML through `obs_common.load_policy()`.
 | [operating-model.md](docs/operating-model.md) | Ownership, cadences, change-safety, escalation |
 | [migration-strategy.md](docs/migration-strategy.md) | General migration playbook + what remains open in this org |
 | [quality-scorecard.md](docs/quality-scorecard.md) | The 8-dimension monitor quality model |
+| [requirement-traceability.md](docs/requirement-traceability.md) | **Audit** — every platform requirement, its status, gap and remediation |
 | [tagging-standard.md](docs/tagging-standard.md) | The six tags a service owner applies, and how |
 | [telemetry-gaps.md](docs/telemetry-gaps.md) | Every `acme.*` metric's emission contract |
 | [decision-records.md](docs/decision-records.md) | ADR-001…ADR-018 |
