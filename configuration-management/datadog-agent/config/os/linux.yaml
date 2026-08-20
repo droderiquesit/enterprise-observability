@@ -1,0 +1,37 @@
+# LAYER 2 — LINUX. The baseline equivalent of windows.yaml.
+version: 2
+
+# WHAT THIS PROFILE CAN USE. Policy (environment, criticality) decides whether a
+# feature is ALLOWED; this decides whether it is USABLE. Both must agree, so a
+# tier1 poller does not get APM enabled — and an APM host licence consumed —
+# for an application it does not run.
+supports: []
+extends_note: >-
+  Matches agent_profiles.yaml -> linux-server (match.os_family: [linux]).
+
+datadog_yaml:
+  # dd-agent is an unprivileged service user. Anything needing more than that
+  # (reading another user's logs, a raw socket) is an explicit grant, recorded
+  # in the profile that needs it rather than granted globally here.
+  process_config:
+    process_collection:
+      enabled: true
+
+conf_d:
+  # The Linux counterpart to windows_service: systemd unit state feeds the same
+  # host-process-down archetype through a different check.
+  systemd.d/conf.yaml:
+    init_config: {}
+    instances:
+      - unit_names: ["datadog-agent.service"]
+        collect_all_units: false
+
+  # inode exhaustion is a Linux-only failure that presents as "disk full" while
+  # df reports free space, and it has its own forecast archetype.
+  disk.d/conf.yaml:
+    init_config: {}
+    instances:
+      - use_mount: false
+        # Container and snap mounts are noise on a server fleet and inflate
+        # per-host metric cardinality without ever being actionable.
+        excluded_filesystems: [tmpfs, overlay, squashfs, devtmpfs]

@@ -96,6 +96,14 @@ jobs:
           pip install -r mcp/requirements.txt
           python -m pytest mcp/tests -q
 
+      # Agent configuration renders offline and is validated as a unit: the
+      # representative nodes (§25) are the cases that would catch a change to a
+      # shared layer breaking one workload while leaving the others fine. The
+      # secret scan runs over the RENDERED output, not just the sources, since
+      # a handle that fails to resolve is what would inline a value.
+      - name: "Agent configuration — render representative nodes, scan for secrets"
+        run: cd tools && python agent_config.py --check
+
       # The executive portal (§47-§49) is gated OFFLINE, with no credentials:
       # it must render from portal/fixtures/ alone, report data freshness, and
       # show an explicit error state — never a confident zero — when an

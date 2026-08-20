@@ -90,6 +90,7 @@ monitor to Datadog's own validation API.
 | `tools/` | Python/shell tooling: validate · discover · measure · generate · publish | Adding a check or a generator (shared helpers: `obs_common.py`) |
 | `tests/` | Pytest suite incl. a 1.2M-resource scale test; plan-derived fixtures | Adding or changing checked behavior |
 | `docs/` | Maintained docs + the **generated** coverage matrix + `archive/` (dated snapshots) | A subject that outgrows this README |
+| `configuration-management/datadog-agent/` | Agent install, config, upgrade, rings, NinjaOne automation. Composed from layers — adding a server creates no file | Changing what an Agent collects, or how it is deployed |
 | `mcp/` | The MCP server — Ask (grounded answers) · Act (proposes PRs) · governance | Adding a question, a tool, or a governance rule |
 | `portal/` | The executive portal — read-only, offline-capable web view | Changing what leadership sees |
 | `.github/workflows/` | `ci` (PR gate) · `deploy` (promotion) · `governance` (nightly/weekday loops) | Only when adding an approved automation path |
@@ -138,6 +139,7 @@ make portal           # serve the executive portal offline at :8787
 make reports          # the report families, offline against the fixtures
 make fleet            # agent fleet compliance, measured against the inventory
 make entities         # entity-kind census: what platform/entities/ becomes in Datadog
+make agent-render     # render + validate every representative Agent node
 ```
 
 To **add**: anything you want monitored → one file in `platform/entities/`
@@ -172,6 +174,7 @@ duplicates policy YAML — read the YAML through `obs_common.load_policy()`.
 | [tagging-standard.md](docs/tagging-standard.md) | The six tags a service owner applies, and how |
 | [telemetry-gaps.md](docs/telemetry-gaps.md) | Every `acme.*` metric's emission contract |
 | [decision-records.md](docs/decision-records.md) | ADR-001…ADR-018 |
+| [`configuration-management/datadog-agent/README.md`](configuration-management/datadog-agent/README.md) | Agent configuration management: composition, the catalog boundary, rings, secrets |
 | [`mcp/README.md`](mcp/README.md) | The MCP server: the question catalog, the write fence, the governance model |
 | [`portal/README.md`](portal/README.md) | The executive portal: what it reads, live vs fixture, why it can only GET |
 | [`docs/presentation/`](docs/presentation/) | The executive deck (55 slides) and its speaker notes |

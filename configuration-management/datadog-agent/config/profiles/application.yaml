@@ -1,0 +1,43 @@
+# =============================================================================
+# PROFILE — application
+#
+# The generic "this host runs something we wrote" profile: APM, runtime
+# metrics, and the process check for the application's own process. Composed
+# with a workload profile (iis, tomcat) rather than instead of one.
+# =============================================================================
+version: 2
+
+# WHAT THIS PROFILE CAN USE. Policy (environment, criticality) decides whether a
+# feature is ALLOWED; this decides whether it is USABLE. Both must agree, so a
+# tier1 poller does not get APM enabled — and an APM host licence consumed —
+# for an application it does not run.
+supports: [logs, apm]
+catalog_profile: application
+
+datadog_yaml:
+  # APM is enabled by the environment and criticality layers, not asserted
+  # here — a tier2 dev box does not need trace ingestion, and turning it on
+  # everywhere is how an APM bill becomes a surprise.
+  apm_config:
+    apm_non_local_traffic: false   # the Agent accepts traces from localhost only
+  # Runtime metrics (JVM/CLR) are what join a latency regression to a GC pause.
+  # They arrive over the same APM connection, so this costs nothing extra when
+  # APM is already on.
+  logs_enabled: true
+
+conf_d:
+  # The application's own process. `host-process-down` reads this; without it
+  # a crashed application is only visible as an absence of traffic, which is
+  # indistinguishable from a quiet night.
+  process.d/conf.yaml:
+    init_config: {}
+    instances:
+      - name: "{{ service }}"
+        search_string: ["{{ process_name }}"]
+        exact_match: false
+        # `thresholds` turns the check into a service check with a real
+        # expectation rather than a metric nobody reads. A node that runs four
+        # workers says so, and three workers is then a warning rather than a
+        # number on a graph.
+        thresholds:
+          critical: { min: "{{ process_min_count }}" }

@@ -1,0 +1,65 @@
+# =============================================================================
+# PROFILE — iis
+#
+# Additive. A node declares `[windows-standard, iis]`; this file adds only what
+# IIS needs and restates nothing the Windows layer already provides.
+# =============================================================================
+version: 2
+
+# WHAT THIS PROFILE CAN USE. Policy (environment, criticality) decides whether a
+# feature is ALLOWED; this decides whether it is USABLE. Both must agree, so a
+# tier1 poller does not get APM enabled — and an APM host licence consumed —
+# for an application it does not run.
+supports: [logs]
+catalog_profile: application       # IIS nodes are `application` in the catalog
+
+datadog_yaml:
+  logs_enabled: true
+
+conf_d:
+  iis.d/conf.yaml:
+    init_config: {}
+    instances:
+      - # No `sites:` filter. Naming sites here means the config decays every
+        # time a site is added, which is the host-by-host maintenance this
+        # design exists to avoid. All sites are collected and tagged by name;
+        # filtering, if it is ever needed, belongs in the monitor query.
+        tags: ["{{ node_tags }}"]
+
+  # Application-pool and worker-process state. iis.d gives request rates and
+  # queueing; it does NOT tell you a pool has stopped, and a stopped pool is
+  # the single most common IIS incident.
+  windows_service.d/conf.yaml:
+    init_config: {}
+    instances:
+      - services: ["W3SVC", "WAS"]
+
+  windows_performance_counters.d/conf.yaml:
+    init_config: {}
+    instances:
+      - metrics:
+          "APP_POOL_WAS":
+            name: ["iis.app_pool.state"]
+            counters: ["Current Application Pool State"]
+            instances: ["__Total__"]
+            type: gauge
+          "W3SVC_W3WP":
+            name: ["iis.worker.requests_current", "iis.worker.threads"]
+            counters: ["Active Requests", "Active Threads Count"]
+            type: gauge
+
+logs:
+  - type: file
+    # W3C request logs. `source: iis` is what applies Datadog's built-in
+    # pipeline; without it these arrive as unparsed text and the status-code
+    # facets the dashboards use do not exist.
+    path: 'C:\inetpub\logs\LogFiles\**\*.log'
+    source: iis
+    service: "{{ service }}"
+    log_processing_rules:
+      # W3C files begin with #Software/#Fields comment blocks that are not
+      # events. Ingesting them costs money and pollutes the parser's view of
+      # the schema.
+      - type: exclude_at_match
+        name: exclude_w3c_headers
+        pattern: '^#'

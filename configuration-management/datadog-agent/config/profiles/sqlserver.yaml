@@ -1,0 +1,104 @@
+# =============================================================================
+# PROFILE — sqlserver
+#
+# Catalog entry: platform/policy/agent_profiles.yaml -> agent_profiles.sqlserver
+# That file decides WHICH hosts get this profile and what it must emit. This
+# file is the configuration that produces it.
+#
+# TWO DEPLOYMENT SHAPES, one profile. The same configuration is used whether
+# the Agent runs ON the SQL host or on a centralized poller reaching several
+# instances (§8). The only difference is how many `instances:` the node
+# contributes, which is a node fact rather than a different profile — a second
+# profile would be two files describing one integration.
+#
+# WHAT IS DELIBERATELY NOT HERE. Metrics the native integration already
+# collects are not re-collected through custom_queries. Duplicating them
+# doubles cost, and the two copies disagree during exactly the incidents where
+# the number matters.
+# =============================================================================
+version: 2
+
+# WHAT THIS PROFILE CAN USE. Policy (environment, criticality) decides whether a
+# feature is ALLOWED; this decides whether it is USABLE. Both must agree, so a
+# tier1 poller does not get APM enabled — and an APM host licence consumed —
+# for an application it does not run.
+supports: [logs, dbm]
+catalog_profile: sqlserver
+
+datadog_yaml:
+  # DBM is a licensed product and its own decision. It is enabled by the
+  # environment and criticality layers, not asserted here, so a tier2 dev
+  # instance does not silently consume DBM capacity.
+  logs_enabled: true
+
+conf_d:
+  sqlserver.d/conf.yaml:
+    init_config: {}
+    instances:
+      # The renderer merges node-supplied instances into this list. A node with
+      # three SQL instances contributes three; a centralized poller with forty
+      # contributes forty. Nothing about the shape changes.
+      - host: "{{ sqlserver_host }}"
+        username: "{{ sqlserver_username }}"
+        password: "ENC[sqlserver_monitoring_password]"
+        connector: adodbapi
+        adoprovider: MSOLEDBSQL
+        # `dbm: true` is what turns query-level collection on. The environment
+        # layer sets it; this placeholder documents where it lands.
+        dbm: "{{ dbm_enabled }}"
+        include_ao_metrics: true          # AlwaysOn availability-group state
+        include_task_scheduler_metrics: true
+        include_db_fragmentation_metrics: false
+        # Fragmentation scans are expensive on large databases and nothing in
+        # the monitor catalog reads them. Off until something does.
+        tags: ["{{ node_tags }}"]
+
+        # CUSTOM QUERIES — only where the native integration has no equivalent.
+        # Each one states why it exists, because "we added a DMV query" is how
+        # a monitoring account quietly becomes a load source.
+        custom_queries:
+          - query: |
+              SELECT TOP 1
+                     DATEDIFF(hour, MAX(backup_finish_date), GETDATE())
+                FROM msdb.dbo.backupset
+               WHERE type = 'D'
+            columns:
+              - name: sqlserver.backup.age_hours
+                type: gauge
+            tags: ["backup_type:full"]
+            # WHY: the native integration reports database state but not backup
+            # recency, and `db-backup-age` is a P2 archetype. Without this the
+            # monitor exists and can never fire.
+
+          - query: |
+              SELECT COUNT(*)
+                FROM msdb.dbo.sysjobs j
+                JOIN msdb.dbo.sysjobhistory h ON h.job_id = j.job_id
+               WHERE h.run_status = 0
+                 AND h.run_date >= CONVERT(char(8), DATEADD(day, -1, GETDATE()), 112)
+            columns:
+              - name: sqlserver.agent.failed_jobs_24h
+                type: gauge
+            # WHY: SQL Agent job failure is invisible to the standard metric
+            # set and is one of the most common causes of a silent data gap.
+
+  # The Windows service for the database engine itself. A stopped service and a
+  # database that will not answer look identical from the outside; this
+  # distinguishes them, which changes who gets paged.
+  windows_service.d/conf.yaml:
+    init_config: {}
+    instances:
+      - services: ["MSSQLSERVER", "SQLSERVERAGENT"]
+
+logs:
+  - type: file
+    path: "{{ sqlserver_errorlog_path }}"
+    source: sqlserver
+    service: "{{ service }}"
+    log_processing_rules:
+      # SQL Server error logs are UTF-16 and multiline. Without an explicit
+      # start pattern every stack trace becomes N separate log lines and the
+      # error-rate monitors count one failure as twenty.
+      - type: multi_line
+        name: sqlserver_log_start
+        pattern: \d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}

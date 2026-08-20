@@ -1,0 +1,34 @@
+# Centralized database poller — reaches Azure SQL logical servers over 1433.
+# Three instances here; the cap is 40 (config/profiles/database-poller.yaml).
+node:
+  name: poller-db-a
+  os: windows
+  env: prod
+  team: data-engineering
+  criticality: tier1
+  service: database-platform
+  platform: azure_sql
+  resource_type: poller
+  resource_class: poller
+  support_model: 24x7
+  profiles: [windows-standard, database-poller]
+  facts:
+    sqlserver_username: datadog_monitor
+  overrides:
+    conf_d:
+      sqlserver.d/conf.yaml:
+        instances:
+          - host: "sql-orders.database.windows.net,1433"
+            username: datadog_monitor
+            password: "ENC[azure_sql_monitoring_password]"
+            connector: adodbapi
+            adoprovider: MSOLEDBSQL
+            dbm: true
+            tags: ["db_instance:sql-orders"]
+          - host: "sql-billing.database.windows.net,1433"
+            username: datadog_monitor
+            password: "ENC[azure_sql_monitoring_password]"
+            connector: adodbapi
+            adoprovider: MSOLEDBSQL
+            dbm: true
+            tags: ["db_instance:sql-billing"]

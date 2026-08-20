@@ -1,0 +1,54 @@
+# LAYER 2 — WINDOWS. Everything true of a Windows Agent and nothing else.
+version: 2
+
+# WHAT THIS PROFILE CAN USE. Policy (environment, criticality) decides whether a
+# feature is ALLOWED; this decides whether it is USABLE. Both must agree, so a
+# tier1 poller does not get APM enabled — and an APM host licence consumed —
+# for an application it does not run.
+supports: [logs]
+extends_note: >-
+  Matches agent_profiles.yaml -> windows-server (match.os_family: [windows]).
+  The catalog decides WHICH hosts land here; this file decides what they get.
+
+datadog_yaml:
+  # The Agent runs as a managed service account, not LocalSystem. LocalSystem
+  # can read anything on the box, which is far more than a monitoring agent
+  # needs and is the first finding in every review.
+  windows_use_pythonpath: false
+
+conf_d:
+  # Service state is what host-process-down reads on Windows. The Linux process
+  # check does not exist here, which is why this is an OS layer and not a
+  # profile.
+  windows_service.d/conf.yaml:
+    init_config: {}
+    instances:
+      - services: ["datadogagent"]     # nodes add their own; merged by renderer
+        disable_generic_tags: true
+
+  # Event logs, FILTERED. Unfiltered Windows event collection is a cost
+  # incident rather than observability — the System and Application channels
+  # on a busy server produce millions of Information events nobody reads.
+  win32_event_log.d/conf.yaml:
+    init_config: {}
+    instances:
+      - path: System
+        legacy_mode: false
+        filters:
+          level: [Error, Critical]
+      - path: Application
+        legacy_mode: false
+        filters:
+          level: [Error, Critical]
+
+  # Page file and handle counts: the two Windows exhaustion modes the core
+  # system check cannot see.
+  wmi_check.d/conf.yaml:
+    init_config: {}
+    instances:
+      - class: Win32_PerfFormattedData_PerfOS_PagingFile
+        metrics:
+          - [PercentUsage, system.mem.pagefile.pct_full, gauge]
+        tag_by: Name
+        filters:
+          - Name: _Total

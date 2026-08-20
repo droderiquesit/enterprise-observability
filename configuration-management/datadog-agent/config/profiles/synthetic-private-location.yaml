@@ -1,0 +1,61 @@
+# =============================================================================
+# PROFILE — synthetic-private-location  (§17)
+#
+# A private-location worker is a Datadog container/service that runs synthetic
+# tests from inside the network, for internal applications a public location
+# cannot reach. It is NOT a Datadog Agent, and treating it as one is the most
+# common mistake here: it upgrades on its own cadence, has its own health
+# signal, and its configuration blob is issued by Datadog per location.
+#
+# IT IS MANAGED THE SAME WAY ANYWAY — versioned, ringed, validated, tagged and
+# reconciled by NinjaOne — because an unmanaged worker is a monitoring blind
+# spot that reports as a passing test right up until it stops running one.
+#
+# NO LOCATIONS ARE DEFINED IN THIS REPOSITORY. The requirement set forbids
+# fabricating them, and a private location that does not exist would produce
+# tests that never run and report as healthy. `nodes/` gains an entry when a
+# real location is provisioned.
+# =============================================================================
+version: 2
+
+# WHAT THIS PROFILE CAN USE. Policy (environment, criticality) decides whether a
+# feature is ALLOWED; this decides whether it is USABLE. Both must agree, so a
+# tier1 poller does not get APM enabled — and an APM host licence consumed —
+# for an application it does not run.
+supports: []
+catalog_profile: base-infrastructure
+
+worker:
+  # Pinned, not `latest`, for the same reason the Agent is: a worker release
+  # can change how a test resolves DNS or presents TLS, and discovering that
+  # from a wave of false synthetic failures is expensive.
+  image: "gcr.io/datadoghq/synthetics-private-location-worker"
+  version: "1.52.0"
+  config_secret: "ENC[synthetics_private_location_config]"
+
+  # Two workers per location. A single worker is a single point of failure for
+  # every internal test, and Datadog distributes test execution across the
+  # workers in a location automatically — so this is redundancy without the
+  # double-execution problem the VMware pollers have.
+  replicas: 2
+
+  resources:
+    # Browser tests are dramatically heavier than API tests. A location that
+    # runs both needs headroom for the browser tests or the API tests queue
+    # behind them and report as slow.
+    cpu_request: "1"
+    memory_request: "2Gi"
+
+health:
+  # The worker reports its own liveness to Datadog. A location whose workers
+  # have stopped shows tests as "no data" rather than failing, which is why
+  # this is monitored as an availability signal and not a test result.
+  check: "synthetics.pl.worker.running"
+  page_when_down: true
+
+guardrails:
+  # Do not co-locate a private-location worker with a database or VMware
+  # poller. Browser tests are bursty and CPU-hungry; a burst that starves a
+  # vSphere collection produces a VMware outage that looks like vCenter's
+  # fault. Asserted by tests.
+  forbid_colocation_with: [vmware-poller, database-poller]

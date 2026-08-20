@@ -5,7 +5,7 @@ MODULES := $(wildcard modules/*)
 
 .PHONY: setup fmt fmt-check validate test test-mcp tf-validate matrix entities \
         runbooks fixtures applicability fleet reports reports-live inventory \
-        coverage mcp plan-offline portal portal-test reconcile clean
+        coverage mcp plan-offline portal portal-test reconcile agent-render clean
 
 # --- developer entry points --------------------------------------------------
 setup:
@@ -65,6 +65,9 @@ plan-offline:
 # --- operations (credentialed; svc-observability keys, never personal) -------
 inventory:         ## rebuild the inventory and reassign profiles
 	cd tools && $(PY) build_inventory.py --live && $(PY) profile_engine.py
+agent-render:      ## render every representative Agent node and validate it
+	cd tools && $(PY) agent_config.py --check
+
 reconcile:         ## catalog entries + runbooks nothing owns (dry run; needs DD keys)
 	cd tools && $(PY) catalog_reconcile.py
 

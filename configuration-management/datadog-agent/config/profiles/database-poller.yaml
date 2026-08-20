@@ -1,0 +1,62 @@
+# =============================================================================
+# PROFILE — database-poller  (§8, centralized polling)
+#
+# One Agent reaching many database instances over the network, instead of an
+# Agent on every database host. Correct for Azure SQL and Cosmos DB, where
+# there is no host to install on, and often correct for SQL Server where the
+# DBA team will not accept an agent on the instance.
+#
+# WHEN THIS IS THE WRONG ANSWER — stated because "centralize it" is the kind of
+# decision that looks efficient until the day it does not:
+#
+#   * BLAST RADIUS. One poller down is every database blind at once. Mitigated
+#     by pairs, capped by `max_instances_per_poller`, and made visible by the
+#     poller's own service check, which pages rather than going quiet.
+#   * NETWORK PATH. A poller in one subnet reaching instances in another turns
+#     every firewall change into a monitoring outage. Pollers are placed in the
+#     same failure domain as the databases they watch, never centrally by
+#     convenience.
+#   * CREDENTIALS. A poller holds a login for every instance it reaches, which
+#     concentrates exactly what least privilege wants to spread out. The
+#     monitoring login is read-only and per-environment, never shared across
+#     prod and non-prod.
+#   * LATENCY AND LOAD. Forty instances on a five-second interval is eight
+#     queries a second before any custom query. The cap exists for this.
+# =============================================================================
+version: 2
+
+# WHAT THIS PROFILE CAN USE. Policy (environment, criticality) decides whether a
+# feature is ALLOWED; this decides whether it is USABLE. Both must agree, so a
+# tier1 poller does not get APM enabled — and an APM host licence consumed —
+# for an application it does not run.
+supports: [dbm]
+catalog_profile: sqlserver
+
+datadog_yaml:
+  logs_enabled: false            # a poller collects no logs of its own
+
+conf_d:
+  # Instances are contributed entirely by the node declaration. This profile
+  # supplies the shape and the guardrails; the node supplies the list, which is
+  # what keeps "add another database" a one-line change.
+  sqlserver.d/conf.yaml:
+    init_config:
+      # A shared connection ceiling. Without it a poller with many instances
+      # can exhaust its own sockets and report every database as down
+      # simultaneously — an outage indistinguishable from a real one.
+      min_collection_interval: 30
+    instances: []
+
+capacity:
+  # Derived from the interval and the per-instance query cost, not guessed:
+  # 40 instances x ~6 queries per run / 30s ~= 8 queries/sec steady state, which
+  # a single Agent handles comfortably and a DBA will accept.
+  max_instances_per_poller: 40
+  interval_seconds: 30
+  # Above this, add a poller rather than raising the cap. The cap is the thing
+  # that keeps the failure domain bounded; raising it defeats its purpose.
+
+redundancy:
+  model: active_standby
+  members_required: 2
+  failover_after_failed_validations: 2

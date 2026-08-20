@@ -1,0 +1,18 @@
+# Windows + IIS + Serilog — the most common shape in the estate.
+node:
+  name: win-app-01
+  os: windows
+  env: prod
+  team: application-development
+  criticality: tier1
+  service: reporting-portal
+  version: "2026.8.1"
+  platform: iis
+  resource_type: application
+  application: reporting-portal
+  support_model: 24x7
+  profiles: [windows-standard, application, iis, serilog]
+  facts:
+    process_name: w3wp.exe
+    process_min_count: 1
+    serilog_path: 'C:\logs\reporting-portal\*.json'

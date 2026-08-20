@@ -273,6 +273,52 @@ def lint() -> list[str]:
             if aid not in policy["archetypes"]:
                 err("PACKS", f"pack {pid}", f"references unknown archetype {aid!r}")
 
+    # ------------------------------------------------------- agent configuration
+    # The boundary between the profile CATALOG (this policy tree) and the
+    # rendered agent CONFIGURATION (configuration-management/datadog-agent).
+    # Each owns one question; the lint exists so they cannot start answering
+    # both and disagreeing.
+    try:
+        import agent_config as ac
+        ag_layers = ac.load_layers()
+    except Exception as exc:                              # noqa: BLE001
+        err("AGENT", "configuration-management/datadog-agent",
+            f"agent configuration failed to load: {exc}")
+    else:
+        agent_catalog_doc = oc.load_agent_profiles()
+        catalog = set(agent_catalog_doc["agent_profiles"])
+        for name, frag in ag_layers["profiles"].items():
+            cp = frag.get("catalog_profile")
+            if cp is not None and cp not in catalog:
+                err("AGENT", f"config profile {name}",
+                    f"claims catalog profile {cp!r}, which agent_profiles.yaml "
+                    f"does not define")
+        rings_min = ag_layers["rings"]["versions"]["minimum_version"]
+        fleet_min = agent_catalog_doc["fleet"]["minimum_agent_version"]
+        if rings_min != fleet_min:
+            err("AGENT", "minimum agent version",
+                f"rollout-rings.yaml says {rings_min}, agent_profiles.yaml "
+                f"says {fleet_min} — one estate, one minimum")
+        for env_name in ag_layers["environments"]:
+            if env_name not in policy["environments"]:
+                err("AGENT", f"agent environment {env_name}",
+                    "is not an environment this platform defines")
+        for tier in ag_layers["criticality"]:
+            if tier not in policy["tiers"]:
+                err("AGENT", f"agent criticality {tier}",
+                    "is not a tier this platform defines")
+        # Every representative node must render and validate. These are the
+        # examples CI renders (§25); one that no longer composes means a shared
+        # layer changed under a workload nobody re-checked.
+        for node in ac.load_nodes():
+            try:
+                problems = ac.validate(ac.render(node, ag_layers), ag_layers)
+            except Exception as exc:                      # noqa: BLE001
+                err("AGENT", f"node {node['name']}", f"failed to render: {exc}")
+                continue
+            for problem in problems:
+                err("AGENT", f"node {node['name']}", problem)
+
     # -------------------------------------------------------------------- entity
     # The catalog is only as good as its kinds. Every rule here is one the
     # entity model exists to enforce: a database is a datastore, a VM is not a
