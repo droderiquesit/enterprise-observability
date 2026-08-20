@@ -73,6 +73,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-batch-completion
+    slo_relation: slo_impacting
     runbook: controlm-job-inflight-overrun
     workflow: diag-batch-job
     failure_domain: batch-platform
@@ -110,6 +111,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-batch-completion
+    slo_relation: slo_supporting
     runbook: controlm-job-runtime-drift
     workflow: diag-batch-job
     failure_domain: batch-platform
@@ -145,6 +147,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-integration-delivery
+    slo_relation: slo_impacting
     runbook: controlm-job-late-start
     workflow: remediate-rerun-job
     failure_domain: scheduler
@@ -170,6 +173,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-integration-delivery
+    slo_relation: slo_impacting
     runbook: controlm-job-not-executed
     workflow: remediate-rerun-job
     failure_domain: scheduler
@@ -206,6 +210,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-batch-completion
+    slo_relation: slo_impacting
     runbook: controlm-job-abnormally-short
     workflow: diag-batch-job
     failure_domain: batch-platform
@@ -235,6 +240,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-batch-completion
+    slo_relation: slo_impacting
     runbook: controlm-job-failure
     workflow: remediate-rerun-job
     failure_domain: batch-platform
@@ -269,6 +275,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-integration-delivery
+    slo_relation: dependency
     runbook: controlm-dependency-failure
     workflow: diag-dependency
     failure_domain: scheduler
@@ -302,6 +309,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-batch-completion
+    slo_relation: slo_impacting
     runbook: controlm-job-last-success-stale
     workflow: remediate-rerun-job
     failure_domain: batch-platform
@@ -330,6 +338,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-batch-completion
+    slo_relation: diagnostic
     runbook: controlm-exporter-telemetry-loss
     workflow: diag-batch-job
     failure_domain: scheduler
