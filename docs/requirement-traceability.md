@@ -26,16 +26,22 @@ row was confirmed by a repository-wide search that returned zero matches.
 
 | Status | Sections |
 |---|---|
-| OK | 21 |
+| OK | 24 |
 | IMPROVE | 9 |
 | PARTIAL | 12 |
-| MISSING | 15 |
+| MISSING | 12 |
 | OBSOLETE | 1 (resolved) |
 | N/A | 2 |
 
-The platform is strong on the **monitor → SLO → routing → runbook** spine and
-absent on the **product surfaces** — MCP server, executive portal,
-presentation, survey — and on **fleet/agent operations** and **Control-M**.
+The platform is strong on the **monitor → SLO → routing → runbook** spine, now
+has the **executive surface** (§47–§49, `portal/`), and remains absent on the
+**MCP server**, the **presentation** and the **survey**, and on **fleet/agent
+operations** and **Control-M**.
+
+The portal is also the first surface that makes the remaining gaps visible to
+the people who fund them: it reports agent coverage as permanently *unknown*
+until §36/§37 ship, and on-call coverage as 0% while §28's rosters stay empty,
+rather than computing a flattering number from what happens to be measurable.
 
 ---
 
@@ -184,9 +190,9 @@ This prompt reinstates it; the reinstatement is treated as authoritative.
 
 | § | Requirement | Status | Where | Gap → Remediation | Validation |
 |---|---|---|---|---|---|
-| 47 | Executive real-time web portal | **MISSING** | — | No web application in the repository | portal renders live health |
-| 48 | Progressive drilldown enterprise → system → service → SLO → incident | **MISSING** | — | — | navigation test |
-| 49 | Portal reads live Datadog APIs, shows freshness, SSO, read-only role | **MISSING** | — | — | freshness indicator |
+| 47 | Executive real-time web portal | **OK** | `portal/` | Home view: enterprise health, reliability, risk, coverage, event reduction, active incidents. Stdlib HTTP server + one static page; no new dependency, no build toolchain | `portal/tests/test_offline.py` — renders with no credentials |
+| 48 | Progressive drilldown enterprise → system → service → SLO → incident | **OK** | `portal/app/view.py`, `portal/static/app.js` | Enterprise → system → service → SLO → event/incident → per-monitor evidence, every level deep-linking into Datadog. The home view carries no engineering graphs | `portal/tests/test_drilldown_and_access.py::test_the_whole_drilldown_chain_is_walkable` |
+| 49 | Portal reads live Datadog APIs, shows freshness, SSO, read-only role | **OK** | `portal/app/sources.py`, `portal/app/auth.py` | Per-source freshness with kind-specific budgets; GET-only, no write path; SSO seam at the reverse proxy (`PORTAL_REQUIRE_SSO`, `PORTAL_EXEC_GROUPS`) since no IdP exists here. **A failed upstream renders an explicit no-data state, never a zero** | `portal/tests/test_freshness_and_failure.py` |
 | 50 | Executive presentation (32 topics) | **MISSING** | — | — | deck review |
 
 ---

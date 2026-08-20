@@ -74,6 +74,14 @@ jobs:
       - name: "Policy, manifests, runbooks, generated docs, scorecard, scale — pytest"
         run: python -m pytest tests/ -q
 
+      # The executive portal (§47-§49) is gated OFFLINE, with no credentials:
+      # it must render from portal/fixtures/ alone, report data freshness, and
+      # show an explicit error state — never a confident zero — when an
+      # upstream fails. A reporting surface that only works against production
+      # is a reporting surface nobody reviews.
+      - name: "Executive portal — offline render, freshness, failure states"
+        run: python -m pytest portal/tests -q
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
