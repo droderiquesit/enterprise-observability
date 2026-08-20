@@ -232,7 +232,13 @@ jobs:
       # Gating before the first rollout wave would produce a permanently red
       # deploy, and a gate everyone learns to ignore protects nothing.
       - name: "8 · Fleet compliance — agent, integration and tag coverage (§39)"
+        # `always()` so the report still runs when an earlier step failed, and
+        # `continue-on-error` because the comment above says this does not gate.
+        # Without the second flag the "non-gating" report failed the job anyway,
+        # which is the kind of contradiction that teaches people to ignore a
+        # red deploy.
         if: always()
+        continue-on-error: true
         env:
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
           DD_APP_KEY: ${{ secrets.DD_APP_KEY }}

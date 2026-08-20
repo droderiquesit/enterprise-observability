@@ -209,6 +209,33 @@ slos:
   # with — Azure SQL, Cosmos and Snowflake each expose latency differently — so
   # the objective is expressed the way the platform already expresses
   # multi-engine database health: over the latency monitors themselves.
+  # TWO-PHASE MIGRATION — PHASE A. `burn_alerts` is deliberately empty; restore
+  # it to [slow] in the next release and delete this note.
+  #
+  # Changing `type` from metric to monitor forces Terraform to REPLACE the SLO,
+  # and Datadog refuses to delete an SLO a monitor still references:
+  #
+  #   409 Conflict: slo d0fb22d3f0fb59669... is referenced in monitor_id: 314427621
+  #
+  # 314427621 is this objective's OWN burn-rate monitor. Its query embeds the
+  # SLO id — burn_rate("d0fb...").over("30d") — so the reference is a literal
+  # inside the monitor, not a soft association. Leaving `burn_alerts: [slow]`
+  # unchanged meant Terraform saw no reason to touch that monitor, so the SLO
+  # destroy ran first and always failed.
+  #
+  # Emptying `burn_alerts` is what fixes the ORDER. The burn monitor is built
+  # from `module.slos.slo_datadog_ids[slo_id]` (stacks/coverage/slos.tf), which
+  # is a real dependency edge, so Terraform destroys the dependent monitor
+  # before it destroys the SLO it depends on. The replace then finds nothing
+  # referencing it.
+  #
+  # PHASE B is one line: `burn_alerts: [slow]`. It is a pure create against the
+  # new SLO id, with no ordering hazard.
+  #
+  # The generalisation, which cost two failed applies to learn: an SLO whose
+  # TYPE changes cannot be migrated in the same apply as the burn monitors that
+  # reference it, because a type change is a replace and a burn monitor pins the
+  # id it was created against.
   slo-database-latency:
     name: Database query latency objective
     scope: domain
@@ -223,7 +250,7 @@ slos:
        sqlserver-log-flush-wait-degradation, azuresql-log-write-saturation,
        cosmos-server-side-latency-anomaly, snowflake-query-latency-anomaly,
        snowflake-warehouse-queueing]
-    burn_alerts: [slow]
+    burn_alerts: []
 
   # --- data ------------------------------------------------------------------
   slo-data-freshness:

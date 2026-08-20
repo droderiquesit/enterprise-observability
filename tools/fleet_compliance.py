@@ -362,6 +362,22 @@ def main() -> int:
     agent_profiles = oc.load_agent_profiles()
 
     if args.live:
+        # The inventory is the DENOMINATOR, and it is produced by an earlier
+        # deploy step. When that step is skipped — because something before it
+        # failed — this one used to raise FileNotFoundError and turn a report
+        # into a second red step, obscuring the real failure above it.
+        #
+        # Absent input is reported the same way an empty denominator is: NOT
+        # MEASURED. That is this tool's whole thesis — "a denominator of zero is
+        # not 100% compliant, it means nothing is known" — and it would be a
+        # poor advertisement for it to crash rather than say so.
+        if not args.inventory.exists():
+            print(f"fleet compliance: NOT MEASURED — no inventory at "
+                  f"{args.inventory}. It is built by the coverage/compliance "
+                  f"step; if that step was skipped or failed, fix that first. "
+                  f"Compliance is measured against the inventory, never against "
+                  f"the hosts Datadog can already see.")
+            return 0 if args.min_compliance is None else 1
         inventory = json.loads(args.inventory.read_text())
         hosts = fetch_live_hosts()
         now_ts = oc.utcnow().timestamp()
