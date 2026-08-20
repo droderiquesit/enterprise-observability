@@ -4,6 +4,8 @@ The generated artefacts are tested for FRESHNESS, not just correctness. A
 coverage matrix that no longer matches the catalog is worse than no matrix,
 because people trust it.
 """
+from pathlib import Path
+
 import generate_matrix
 import generate_runbooks
 import monitor_scorecard as ms
@@ -46,9 +48,16 @@ def test_scorecard_punishes_an_unresolvable_slo():
 
 
 def test_self_service_monitors_are_scored_too():
-    report = ms.build(POLICY)
-    ids = {r["monitor_id"] for r in report["monitors"]}
-    assert any(i.startswith("custom.") for i in ids)
+    """platform/monitors/ is deliberately empty — a file there is DEPLOYED, so
+    an example living there would be an artificial monitor in production. The
+    scorer is exercised against the reference manifest fixture instead, which
+    keeps the self-service scoring path covered without shipping an example."""
+    import yaml
+    fixture = Path(__file__).parent / "fixtures" / "self_service_example.yaml"
+    m = yaml.safe_load(fixture.read_text())["monitor"]
+    row = ms.score_custom(POLICY, m["name"], m, oc.load_services())
+    assert row["monitor_id"].startswith("custom.")
+    assert row["score"] > 0
 
 
 # --- generated documentation ------------------------------------------------

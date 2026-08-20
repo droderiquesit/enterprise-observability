@@ -12,10 +12,10 @@
 ```yaml
 monitor:
   # --- required ---------------------------------------------------------------
-  name: checkout-payment-latency     # kebab-case, MUST match the filename
+  name: self-service-example     # kebab-case, MUST match the filename
   archetype: api-latency-p99         # a catalog archetype id, or `custom`
   service: checkout-api              # must be registered in platform/services/
-  team: payments                     # must own that service
+  team: security                     # must own that service
   env: [stage, prod]                 # dev is rejected: it does not alert
   slo: slo-api-latency               # must exist in the SLO catalog
   runbook: api-latency-p99           # must exist in the runbook registry
@@ -340,7 +340,7 @@ tag parsing, the rate-limit-aware `dd_request`) live in `obs_common.py`.
 Three committed examples, each teaching something different:
 
 **1. Re-using a catalog archetype with a predictive variant**
-([`checkout-payment-latency.yaml`](../platform/monitors/checkout-payment-latency.yaml))
+([`self-service-example.yaml`](../tests/fixtures/self_service_example.yaml))
 — the exact shape from the brief. Requires a `justification` because the pack
 already covers this service; the justification explains that checkout's weekly
 traffic shape makes rate-of-change noisy and seasonal anomaly correct **for this
@@ -352,15 +352,15 @@ service only**.
 platform refuses to rewrite a query behind your back.
 
 **3. A business-outcome signal with no archetype**
-([`checkout-payment-authorization-rate.yaml`](../platform/monitors/checkout-payment-authorization-rate.yaml))
-— payment decline ratio. Invisible to availability monitoring: every request
+([`api-authorization-rate.yaml`](../tests/fixtures/self_service_example.yaml))
+— authorization decline ratio. Invisible to availability monitoring: every request
 succeeds with HTTP 200 while no money moves.
 
 ### What one file produces
 
 ```
 $ terraform plan
-+ [P2][prod][api] Checkout Payment Latency (critical)
++ [P2][prod][api] Self Service Example (critical)
     query    = avg(last_30m):anomalies(p95:trace.http.request.duration{
                  env:prod,service:checkout-api} by {service}, 'robust', 3,
                  direction='above', seasonality='weekly') >= 1
@@ -387,18 +387,18 @@ production_critical:
     P4: { page: false, servicenow: none, teams: low_noise_channel }
 ```
 
-Which becomes, for `team:payments`:
+Which becomes, for `team:security`:
 
 ```hcl
-resource "datadog_monitor_notification_rule" "route-production_critical-P1-page-payments" {
-  recipients = ["@teams-teams-payments-alerts",
+resource "datadog_monitor_notification_rule" "route-production_critical-P1-page-security" {
+  recipients = ["@teams-teams-security-alerts",
                 "@servicenow-acme-incident-p1",
-                "@oncall-payments",
+                "@oncall-security",
                 "@teams-major-incident",
                 "@teams-exec-bridge"]
   filter { tags = ["managed_by:terraform",
                    "notification_profile:production_critical",
-                   "priority:p1", "pages:true", "team:payments"] }
+                   "priority:p1", "pages:true", "team:security"] }
 }
 ```
 

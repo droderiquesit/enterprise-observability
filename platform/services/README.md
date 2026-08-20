@@ -7,15 +7,15 @@ discovery covers without it, and the tag contract are all in
 
 ```yaml
 service:
-  name: checkout-api              # must match the `service` tag on telemetry
-  team: payments                  # must exist in platform/policy/teams.yaml
+  name: identity-api              # must match the `service` tag on telemetry
+  team: application-development                  # must exist in platform/policy/teams.yaml
   tier: tier0                     # tier0 | tier1 | tier2 | tier3
   service_archetype: api          # selects the monitor packs
-  description: Customer checkout and payment orchestration API.
+  description: Customer identity and session API.
   envs: [dev, qa, stage, prod]
-  dependencies: [payments-ledger, stripe]
+  dependencies: [identity-store, okta]
   links:
-    - { name: Repository, type: repo, url: https://github.com/acme/checkout-api }
+    - { name: Repository, type: repo, url: https://github.com/acme/identity-api }
 ```
 
 Schema: [`platform/schemas/service.schema.json`](../schemas/service.schema.json)

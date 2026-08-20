@@ -1,0 +1,51 @@
+# REFERENCE MANIFEST — a fixture, deliberately not deployed.
+#
+# platform/monitors/ holds self-service manifests that the platform APPLIES.
+# This file is the worked example the self-service tests validate against, and
+# it lives here rather than there so the repository never deploys an example.
+# (The three manifests that used to live in platform/monitors/ were all
+# payment-team examples and were removed with that team.)
+#
+# It is the complete developer experience for a custom monitor: ONE file, this
+# size. Everything not written here is derived — Datadog notification syntax,
+# Teams channels, ServiceNow assignment groups, on-call targets, tags, message
+# formatting, naming, recovery behavior, evaluation windows, and
+# environment-specific priority.
+monitor:
+  name: self-service-example
+  archetype: api-latency-p99        # inherits query shape + detection + windows
+  service: identity-api
+  team: security
+  env:
+    - stage
+    - prod
+
+  slo: slo-api-latency
+
+  priority: P2                      # optional; derived from impact_class × band if omitted
+
+  thresholds:
+    warning: auto                   # auto = archetype default × tier sensitivity
+    critical: auto
+
+  predictive:
+    anomaly: true
+    forecast: false
+
+  notification_profile: production_critical
+
+  runbook: api-latency-p99
+  workflow: diag-api-health
+
+  # Required because this manifest re-uses a catalog archetype that already
+  # covers the service. The validator refuses a duplicate without one, which is
+  # how the platform stays free of near-identical monitors nobody remembers
+  # creating.
+  justification: >
+    The platform pack applies api-latency-p99 (rate-of-change) to every API.
+    This service has a strong weekly traffic shape — Monday morning and Friday
+    evening peaks several times the trough — so rate-of-change produces
+    recurring false positives at the shoulders of each peak.
+    `predictive.anomaly: true` selects the seasonal variant (robust/weekly) for
+    THIS service only, which learns the shape instead of reacting to it. The
+    pack monitor stays in place for every other API.

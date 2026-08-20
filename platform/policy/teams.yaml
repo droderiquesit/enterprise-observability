@@ -76,17 +76,6 @@ teams:
     oncall: true
     business_hours_timezone: America/New_York
 
-  payments:
-    name: Payments Engineering
-    email: payments@acme.example
-    domains_owned: []
-    escalation_to: sre
-    teams_channel: teams-payments-alerts
-    teams_low_noise_channel: teams-payments-signals
-    servicenow_assignment_group: PAYMENTS
-    oncall: true
-    business_hours_timezone: America/New_York
-
   observability-platform:
     name: Observability Platform (owns this repository)
     email: o11y@acme.example
