@@ -59,9 +59,21 @@ than from the run's exit code):
 | Dashboards | 18 | **3** |
 | Catalog objects | 3 service definitions | **6 typed entities** |
 | Runbook notebooks | 261 | **270** |
+| Catalog services (live) | 25 | **4** |
+| Runbook notebooks (live, org-wide) | 336 | **270** |
 
 The idempotency gate — a second plan must be empty — passed, which is the
 evidence that the apply converged rather than merely exited zero.
+
+The last two rows are the §6 cleanup, run separately through
+`catalog_reconcile.py --delete`: 22 catalog entries from a superseded
+repository and 66 unowned notebooks removed, leaving the live org holding
+exactly what this platform declares. One detail worth recording because it
+looks like a partial result and is not: 4 notebooks still carry the
+`dd-ai-start` author handle. They were ADOPTED by name in an earlier session —
+`publish_runbooks` adopts a same-name notebook rather than creating a
+duplicate — so they are managed runbooks that kept their original author. 58
+of the 62 were deleted; the other 4 were never unmanaged.
 
 ### What changed since the first audit
 
