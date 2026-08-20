@@ -201,6 +201,73 @@ inventing a data source.
 | `acme.compliance.os_support_days_remaining` | gauge | `host`, `cluster`, `os`, `env`, `alert_band` |
 | `acme.compliance.agent_versions_behind` | gauge | `cluster`, `env`, `alert_band` |
 
+## 9. Control-M in-flight job state — `controlm.job.*`
+
+**Class:** custom metric · **Consumed by:** `controlm-job-inflight-overrun`,
+`controlm-job-runtime-drift`, `controlm-job-late-start`,
+`controlm-job-not-executed`, `controlm-job-abnormally-short`,
+`controlm-job-failure`, `controlm-dependency-failure`,
+`controlm-job-last-success-stale`, `controlm-exporter-telemetry-loss`
+
+**Control-M has no native Datadog integration for in-flight job state.** This is
+the whole reason this section exists. What the ecosystem offers is completion
+and log oriented: end-of-job events pushed after a run finishes, and Control-M
+logs forwarded into Datadog Logs. Neither can answer the question this domain is
+actually judged on — *is the job that is running right now going to finish in
+time?* A run that is 20 minutes into a 5-minute job has produced no completion
+event, no end status, and nothing to log except that it started. Every
+completion-based signal is, by construction, an obituary.
+
+The active job pool is only readable from the **Control-M Automation API**
+(`/automation-api/run/jobs/status`, Control-M/EM), which returns each ordered
+job's current state, actual start time and the conditions it is waiting on. So
+the mechanism is an exporter that polls that API and publishes metrics.
+
+**Polling interval: 60 seconds.** The number is a deliberate trade, not a
+default:
+
+* **Why not slower.** The detection lag of every in-flight archetype is bounded
+  below by the poll interval. At 60s a job whose baseline is 5 minutes is
+  flagged at roughly 10–11 minutes elapsed (ratio 2.0 plus one poll plus the
+  5-minute evaluation window) — while there is still time to act. At 5-minute
+  polling the same job is flagged after the window it was supposed to protect.
+* **Why not faster.** The Automation API is served by Control-M/EM, the same
+  component that serves the operators' GUI during the night batch; sub-minute
+  polling of a large active pool competes with the people running the batch, and
+  the API's session tokens are re-issued rather than long-lived, so aggressive
+  polling multiplies authentication traffic too. It also multiplies custom
+  metric volume linearly — one gauge per active job per poll — for a signal
+  whose subject is measured in minutes.
+* **Emission is per active job, per poll.** Jobs not in the active order pool
+  emit nothing except `controlm.job.last_success`, which is emitted for every
+  job in the current order date whether or not it ran.
+
+**Contract.**
+
+| Metric | Type | Tags | Meaning |
+|---|---|---|---|
+| `controlm.job.running` | gauge | `folder`, `job_name`, `application`, `controlm_server`, `env`, `service`, `alert_band` | `1` while the execution is in a running state, `0` on any end state. The in-flight **gate**: monitors multiply by it so they cannot fire on a finished run |
+| `controlm.job.elapsed_seconds` | gauge | above + `job_state` (`running`\|`completed`) | Seconds since the execution's actual start time. Emitted every poll while running, and once at end with the final value |
+| `controlm.job.expected_duration` | gauge | above + `baseline_source` (`history`\|`controlm_average`) | The job's learned baseline in seconds: P95 of its last 30 **successful** runs. Falls back to Control-M's own `AVERAGE_RUNTIME` when fewer than 5 successful runs exist, which is flagged by `baseline_source` so a monitor firing on a cold baseline is recognisable |
+| `controlm.job.duration_ratio` | gauge | above + `job_state` | `elapsed_seconds / expected_duration`. Dimensionless, so one monitor threshold is correct for every job in the estate. Emitted every poll while running and once at completion with the final ratio |
+| `controlm.job.status` | count | above + `job_status` (`running`\|`completed`\|`failed`\|`late`\|`blocked`\|`not_started`) | One observation per polled state. `late` is Control-M's own verdict against the job's "must start by" time — never re-derived from a schedule copy. `blocked` is emitted only when the job is in Wait Condition **and** a job posting one of its in-conditions ended Not OK in the same order date, i.e. a real dependency failure rather than ordinary queueing |
+| `controlm.job.last_success` | gauge | `folder`, `job_name`, `application`, `controlm_server`, `env`, `service`, `alert_band` | **Hours** since this job last completed successfully. Emitted as an age, not a timestamp, because a Datadog query has no concept of "now" to subtract one from |
+
+**Why the baseline is computed in the exporter and not by `anomalies()`.**
+Datadog anomaly detection learns from a continuous series with history. An
+in-flight series is a ramp that exists only while the job runs and restarts at
+zero on the next run; anomaly detection over it learns the shape of the ramp,
+not the job's normal duration. Publishing `expected_duration` moves the
+per-job baseline off the query path, which is what lets a single archetype cover
+thousands of jobs whose runtimes differ by four orders of magnitude.
+
+**The exporter must be watched.** An expired API token or a stopped poller turns
+every Control-M monitor green simultaneously — indistinguishable from a quiet
+night. `controlm-exporter-telemetry-loss` exists for exactly that, and it is the
+reason `controlm.job.status` is emitted on every poll rather than only on state
+change: a heartbeat that only fires when something happens cannot prove nothing
+is happening.
+
 ---
 
 ## Gaps that are NOT closed here, and why
@@ -226,3 +293,4 @@ inventing a data source.
 | Database Monitoring enabled for SQL Server and Azure SQL | DBM query-level signals |
 | Azure integration enabled per subscription | every `azure.*` archetype |
 | Cloud Cost Management enabled for Azure | `azure-cost-anomaly` |
+| Control-M Automation API enabled on Control-M/EM, with a read-only service account for the exporter | every `controlm-*` archetype (§9) |

@@ -1,0 +1,335 @@
+# =============================================================================
+# MONITOR ARCHETYPE CATALOG — CONTROL-M (BMC) ENTERPRISE JOB SCHEDULING
+#
+# WHY THIS CATALOG EXISTS SEPARATELY FROM integration.yaml
+#
+# The existing batch/schedule archetypes grade jobs that have ALREADY FINISHED:
+# `batch-duration-anomaly` reads a duration that only exists once a run ends,
+# and `batch-output-freshness` reads an SLA that has already been missed. Both
+# are correct and both are too late for the failure this domain is actually
+# judged on — the overnight job that is still running at 06:00 with the
+# business opening at 08:00. By the time a completion metric exists, the only
+# remaining decision is who to apologise to.
+#
+# The headline capability here is therefore IN-FLIGHT detection: alerting on an
+# execution while `controlm.job.running` is still 1, by comparing the elapsed
+# time of the CURRENT execution against the learned baseline of that same job.
+#
+# MECHANISM CONSTRAINT, recorded because every archetype below depends on it:
+# Control-M has no Datadog integration that exposes in-flight job state. What
+# exists in the ecosystem carries completion events and log forwarding, not the
+# active job pool. Everything here reads custom metrics emitted by an exporter
+# polling the Control-M Automation API every 60 seconds. The emission contract
+# is docs/telemetry-gaps.md §9 — if a query below names a `controlm.*` metric,
+# that section says who emits it and with which tags.
+#
+# WHY THE RATIO IS A FIXED NUMBER AND NOT anomalies()
+# Datadog's anomaly detection needs a continuous series with history. An
+# in-flight series is the opposite: it exists only while a job runs, it is a
+# ramp (elapsed always rises), and it restarts from zero on the next run. Run
+# anomalies() over that and the "baseline" it learns is the shape of the ramp,
+# not the job's normal duration. The baseline therefore has to be computed per
+# job, off the metric path, by the exporter — which publishes it as
+# `controlm.job.expected_duration` (P95 of the last 30 successful runs). The
+# monitor then compares two live numbers, so the fixed threshold in the query
+# is a MULTIPLE OF THAT JOB'S OWN LEARNED BASELINE, not a wall-clock constant.
+# That is baseline detection; only the arithmetic moved off the query.
+#
+# Domain is `integration` deliberately: Control-M is the enterprise scheduler,
+# it is owned by the same team as the rest of batch, and its alerts must land
+# in the same correlation groups as the pipelines it triggers.
+# =============================================================================
+version: 2
+domain: integration
+
+archetypes:
+
+  # ---------------------------------------------------------------------------
+  # THE HEADLINE ARCHETYPE — detect the abnormal job WHILE IT IS RUNNING.
+  # ---------------------------------------------------------------------------
+  controlm-job-inflight-overrun:
+    title: Control-M Job Overrunning While Still Running
+    signal: latency
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: controlm_job
+    selector: "resource_type:controlm_job"
+    # The product with `controlm.job.running` is the in-flight GATE, and it is
+    # in the query rather than in a tag filter on purpose: it makes the alert
+    # arithmetically incapable of firing on a finished run. running is 1 while
+    # the execution is active and 0 the moment Control-M reports any end state,
+    # so the evaluated value collapses to 0 on completion and the monitor
+    # resolves itself without waiting for the ratio series to age out.
+    #
+    # duration_ratio = elapsed_seconds / expected_duration, computed by the
+    # exporter every poll. A job whose baseline is 5 minutes evaluates at 4.0
+    # once it has been running 20 minutes — caught at minute 10, not tomorrow.
+    query: 'max(last_5m):max:controlm.job.duration_ratio{__SCOPE__,job_state:running} by {folder,job_name} * max:controlm.job.running{__SCOPE__} by {folder,job_name} > 2'
+    thresholds: { critical: 2, warning: 1.5 }
+    group_by: [folder, job_name]
+    evaluation_window: last_5m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-batch-completion
+    runbook: controlm-job-inflight-overrun
+    workflow: diag-batch-job
+    failure_domain: batch-platform
+    mandatory: true
+    rationale_fixed_threshold: >
+      The number is dimensionless and relative to the job's own history, which
+      is what makes one monitor correct for four thousand jobs with wildly
+      different runtimes. 2.0 means "twice what THIS job's last thirty
+      successful runs took at P95"; 1.5 warns while there is still recovery
+      time. An absolute number of minutes could not be shared by a 40-second
+      file poll and a six-hour general ledger close, and one monitor per job
+      per threshold is the monitor explosion this platform exists to prevent.
+    notes: >
+      The only archetype in the estate that alerts on work in progress rather
+      than on an outcome. Everything else in batch monitoring — including
+      batch-duration-anomaly — needs the run to end before it has a value.
+
+  # ---------------------------------------------------------------------------
+  # The run-over-run companion: the job that is not late tonight but is getting
+  # slower every night. Predictive, and it fires days before the ratio does.
+  # ---------------------------------------------------------------------------
+  controlm-job-runtime-drift:
+    title: Control-M Job Runtime Drift
+    signal: latency
+    impact_class: risk
+    detection: seasonal_anomaly
+    monitor_type: query alert
+    resource_type: controlm_job
+    selector: "resource_type:controlm_job"
+    query: "avg(last_4h):anomalies(avg:controlm.job.elapsed_seconds{__SCOPE__,job_state:completed} by {folder,job_name}, 'robust', 3, direction='above', seasonality='daily') >= 1"
+    thresholds: { critical: 1.0 }
+    group_by: [folder, job_name]
+    evaluation_window: last_4h
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-batch-completion
+    runbook: controlm-job-runtime-drift
+    workflow: diag-batch-job
+    failure_domain: batch-platform
+    mandatory: false
+    notes: >
+      Reads COMPLETED runs, so it is the slow-burn counterpart to the in-flight
+      ratio: growth in the baseline itself. `robust`/`daily` because month-end
+      and quarter-end runs are legitimately longer and must not be treated as
+      incidents. This is also the feedback loop on the baseline — a job whose
+      expected_duration keeps climbing is a job whose batch window is closing.
+
+  # ---------------------------------------------------------------------------
+  # ABSENCE — the job that has not started, has not run, or ended too fast.
+  # ---------------------------------------------------------------------------
+  controlm-job-late-start:
+    title: Control-M Job Did Not Start By Its Deadline
+    signal: schedule_miss
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: controlm_job
+    selector: "resource_type:controlm_job"
+    # Control-M already computes lateness from the job definition's "must start
+    # by" time and exposes it as a job state. Re-deriving that deadline inside a
+    # Datadog query would create a second copy of the schedule that silently
+    # drifts from the folder every time someone edits a calendar — so the
+    # exporter forwards the scheduler's own verdict as job_status:late.
+    query: 'sum(last_15m):sum:controlm.job.status{__SCOPE__,job_status:late} by {folder,job_name}.as_count() >= 1'
+    thresholds: { critical: 1 }
+    group_by: [folder, job_name]
+    evaluation_window: last_15m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-integration-delivery
+    runbook: controlm-job-late-start
+    workflow: remediate-rerun-job
+    failure_domain: scheduler
+    mandatory: true
+    rationale_fixed_threshold: >
+      One observation of the scheduler's own LATE state is the condition. The
+      deadline lives in the job definition, not in this catalog; the threshold
+      is only "it happened at all".
+
+  controlm-job-not-executed:
+    title: Control-M Job Did Not Execute In Its Cycle
+    signal: schedule_miss
+    impact_class: customer_impact
+    detection: threshold
+    monitor_type: query alert
+    resource_type: controlm_job
+    selector: "resource_type:controlm_job"
+    query: 'sum(last_1d):sum:controlm.job.status{__SCOPE__,job_status:completed} by {folder,job_name}.as_count() < 1'
+    thresholds: { critical: 1 }
+    group_by: [folder, job_name]
+    evaluation_window: last_1d
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-integration-delivery
+    runbook: controlm-job-not-executed
+    workflow: remediate-rerun-job
+    failure_domain: scheduler
+    mandatory: true
+    notify_no_data: true
+    # A job removed from the folder, or whose calendar rolled off, stops
+    # producing a series entirely, so the `< 1` clause never evaluates for it.
+    # notify_no_data is what covers that case, and 26 hours (1560 minutes) is
+    # deliberately longer than a daily cycle plus its late window.
+    no_data_timeframe: 1560
+    rationale_fixed_threshold: >
+      Zero successful executions in a 24-hour cycle for a job that runs daily
+      is not a degraded number, it is a missed business day. The threshold is
+      the existence of one run.
+
+  controlm-job-abnormally-short:
+    title: Control-M Job Ended Abnormally Fast
+    signal: correctness
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: controlm_job
+    selector: "resource_type:controlm_job"
+    # The silent failure that job-status monitoring cannot see: Control-M ends
+    # the job OK because the script returned 0, but the run took 8 seconds
+    # instead of 5 minutes because the input file was empty, a source table was
+    # missing, or an early exit path was taken. Status is green, output is
+    # missing, and the downstream pipeline consumes nothing.
+    query: 'min(last_1h):min:controlm.job.duration_ratio{__SCOPE__,job_state:completed} by {folder,job_name} < 0.25'
+    thresholds: { critical: 0.25, warning: 0.5 }
+    group_by: [folder, job_name]
+    evaluation_window: last_1h
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-batch-completion
+    runbook: controlm-job-abnormally-short
+    workflow: diag-batch-job
+    failure_domain: batch-platform
+    mandatory: true
+    rationale_fixed_threshold: >
+      The same dimensionless ratio as the overrun archetype, read from the other
+      side. A completed run at under a quarter of the job's own P95 did not do
+      the work it exists to do — the number expresses "an order of magnitude too
+      fast to be real", and it is relative to the job, not to the clock.
+
+  # ---------------------------------------------------------------------------
+  # OUTCOMES AND DEPENDENCIES
+  # ---------------------------------------------------------------------------
+  controlm-job-failure:
+    title: Control-M Job Ended Not OK
+    signal: job_failure
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: controlm_job
+    selector: "resource_type:controlm_job"
+    query: 'sum(last_2h):sum:controlm.job.status{__SCOPE__,job_status:failed} by {folder,job_name}.as_count() >= 1'
+    thresholds: { critical: 1 }
+    group_by: [folder, job_name]
+    evaluation_window: last_2h
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-batch-completion
+    runbook: controlm-job-failure
+    workflow: remediate-rerun-job
+    failure_domain: batch-platform
+    mandatory: true
+    rationale_fixed_threshold: "An Ended Not OK run is a discrete outcome."
+    notes: >
+      Deliberately separate from the generic `batch-job-failure`: that one reads
+      `acme.batch.runs` from application batch runners, this one reads the
+      scheduler's own verdict for the jobs Control-M owns. A job can fail in
+      Control-M without the application ever emitting a run metric — the agent
+      could not start it, the script was missing, the host was down.
+
+  controlm-dependency-failure:
+    title: Control-M Job Blocked By A Failed Predecessor
+    signal: job_failure
+    impact_class: degradation
+    detection: threshold
+    monitor_type: query alert
+    resource_type: controlm_job
+    selector: "resource_type:controlm_job"
+    # Waiting on a condition is NORMAL in Control-M and alerting on it would be
+    # unbearable noise. The exporter emits job_status:blocked only when the job
+    # is in Wait Condition AND a job that posts one of its in-conditions ended
+    # Not OK in the same order date — i.e. the flow is dead, not merely queued.
+    # Without this the failure presents downstream as "the 03:00 job never ran",
+    # with no link back to the 02:40 job that broke the chain.
+    query: 'sum(last_2h):sum:controlm.job.status{__SCOPE__,job_status:blocked} by {folder,job_name}.as_count() >= 1'
+    thresholds: { critical: 1 }
+    group_by: [folder, job_name]
+    evaluation_window: last_2h
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-integration-delivery
+    runbook: controlm-dependency-failure
+    workflow: diag-dependency
+    failure_domain: scheduler
+    mandatory: true
+    rationale_fixed_threshold: >
+      A broken flow is discrete: either an upstream job in this job's condition
+      chain ended Not OK or it did not. The judgement is made in the emitter,
+      which is where the dependency graph actually lives.
+
+  # ---------------------------------------------------------------------------
+  # JOB-LEVEL FRESHNESS — the catch-all that survives every other blind spot.
+  # ---------------------------------------------------------------------------
+  controlm-job-last-success-stale:
+    title: Control-M Job Has Not Succeeded Recently
+    signal: freshness
+    impact_class: customer_impact
+    detection: threshold
+    monitor_type: query alert
+    resource_type: controlm_job
+    selector: "resource_type:controlm_job"
+    # Emitted for every job in the active order pool whether or not it ran, so
+    # this keeps reporting when every other signal above has gone quiet: a job
+    # that fails, is rerun, fails again and is then left held produces no
+    # failure burst and no missed-execution verdict, but its hours-since-success
+    # climbs past the SLA regardless.
+    query: 'max(last_1h):max:controlm.job.last_success{__SCOPE__} by {folder,job_name} > 26'
+    thresholds: { critical: 26, warning: 24 }
+    group_by: [folder, job_name]
+    evaluation_window: last_1h
+    envs: [prod]
+    bands: [critical, standard]
+    slo_id: slo-batch-completion
+    runbook: controlm-job-last-success-stale
+    workflow: remediate-rerun-job
+    failure_domain: batch-platform
+    mandatory: true
+    rationale_fixed_threshold: >
+      A daily job has a contractual delivery time; 26 hours means yesterday's
+      run never produced anything, with two hours of tolerance for schedule
+      jitter and reruns. The number is the SLA, not a tuned guess.
+
+  # ---------------------------------------------------------------------------
+  # THE OBSERVER OF THE OBSERVER — everything above is blind if the poller dies.
+  # ---------------------------------------------------------------------------
+  controlm-exporter-telemetry-loss:
+    title: Control-M Exporter Stopped Reporting
+    signal: telemetry_health
+    impact_class: hygiene
+    detection: threshold
+    monitor_type: query alert
+    resource_type: controlm_server
+    selector: "resource_type:controlm_server"
+    query: 'sum(last_30m):sum:controlm.job.status{__SCOPE__}.as_count() < 1'
+    thresholds: { critical: 1 }
+    group_by: []
+    evaluation_window: last_30m
+    envs: [prod, stage]
+    bands: [critical, standard]
+    slo_id: slo-batch-completion
+    runbook: controlm-exporter-telemetry-loss
+    workflow: diag-batch-job
+    failure_domain: scheduler
+    mandatory: true
+    notify_no_data: true
+    no_data_timeframe: 60
+    rationale_fixed_threshold: >
+      Absence of any job-state observation is binary. It matters more here than
+      in most telemetry-health archetypes: an expired Automation API session
+      token or a stopped exporter turns every Control-M monitor green at once,
+      which is indistinguishable from a quiet night unless something is watching
+      the poller itself.
