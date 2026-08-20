@@ -54,12 +54,16 @@ jobs:
           sys.exit(1 if bad else 0)
           PY
 
-      - name: "JSON schema — service registrations & monitor manifests"
+      - name: "JSON schema — entity/service registrations & monitor manifests"
         run: |
           python - <<'PY'
           import json, sys, pathlib, yaml, jsonschema
           fails = 0
+          # `service` is the SUPERSEDED format and normally matches nothing;
+          # it stays in the loop so a branch that still registers a service the
+          # old way is validated rather than ignored.
           for schema_name, glob in (("monitor", "platform/monitors/*.yaml"),
+                                    ("entity", "platform/entities/*.yaml"),
                                     ("service", "platform/services/*.yaml")):
               schema = json.loads(pathlib.Path(f"platform/schemas/{schema_name}.schema.json").read_text())
               for p in sorted(pathlib.Path().glob(glob)):

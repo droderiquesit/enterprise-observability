@@ -15,6 +15,7 @@ Checks, in the order the CI pipeline reports them:
   PRIORITY      impact_class is legal and paging stays inside policy
   COMPOSITE     identical groupings, explicit ownership, budget
   PACKS         service archetypes reference archetypes that exist
+  ENTITY        entity kinds are real, resolvable and consistent with archetype
   SLO           every archetype maps to a real SLO; members exist
   EXCEPTION     required fields, expiry, maximum lifetime, approver
   AUTOMATION    workflow classes carry their required safeguards
@@ -25,6 +26,7 @@ from __future__ import annotations
 import datetime as dt
 import sys
 
+import entity_resolver as er
 import obs_common as oc
 
 REQUIRED_ARCHETYPE_FIELDS = [
@@ -202,6 +204,30 @@ def lint() -> list[str]:
         for aid in pack["archetypes"]:
             if aid not in policy["archetypes"]:
                 err("PACKS", f"pack {pid}", f"references unknown archetype {aid!r}")
+
+    # -------------------------------------------------------------------- entity
+    # The catalog is only as good as its kinds. Every rule here is one the
+    # entity model exists to enforce: a database is a datastore, a VM is not a
+    # catalog entity at all, and a system contains things that exist.
+    entities = oc.load_entities()
+    legacy = {}
+    for f in sorted((oc.PLATFORM_DIR / "services").glob("*.yaml")):
+        legacy[oc._yaml(f)["service"]["name"]] = f.name
+    for name, ent in sorted(entities.items()):
+        where = f"entity {name}"
+        for msg in er.validate(ent, policy, entities):
+            err("ENTITY", where, msg)
+        stem = ent.get("source_file", "").removesuffix(".yaml")
+        if stem and stem != name:
+            err("ENTITY", where,
+                f"lives in {ent['source_file']} — one entity per file, named after it, "
+                f"so a reviewer can find an entity without grepping")
+        if name in legacy:
+            err("ENTITY", where,
+                f"is ALSO registered the superseded way in platform/services/"
+                f"{legacy[name]}. Two registrations for one catalog object means two "
+                f"Terraform resources writing the same Datadog entity — delete the "
+                f"platform/services/ file")
 
     # ----------------------------------------------------------------------- SLO
     for sid, s in policy["slos"].items():

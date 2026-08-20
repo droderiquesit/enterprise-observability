@@ -1,0 +1,22 @@
+# Migrated from platform/services/identity-api.yaml (Phase 1, §5/§10).
+# Every field of the old registration is here: name, team, tier → criticality,
+# service_archetype, description, envs, dependencies, links.
+#
+# `platform:` is deliberately ABSENT. Nothing in this repository records what
+# identity-api runs on, and the entity model is not the place to start
+# inventing estate facts — the field is optional precisely so that "we do not
+# know yet" stays visible instead of becoming a wrong tag on a tier0 entity.
+entity:
+  kind: service
+  name: identity-api
+  team: security
+  criticality: tier0
+  service_archetype: api
+  description: Enterprise authentication and token issuance.
+  envs: [dev, qa, stage, prod]
+  env: prod
+  slo:
+    profile: per_service       # tier0 default (tiers.yaml slo.scope), restated
+  dependencies: [entra-id, sessions-redis]
+  links:
+    - { name: Repository, type: repo, url: https://github.com/acme/identity-api }

@@ -7,7 +7,7 @@ Create service
       ↓
 Apply 5 standard tags        env · service · team · tier · service_archetype
       ↓
-Register it (one small YAML) platform/services/<service>.yaml
+Register it (one small YAML) platform/entities/<name>.yaml
       ↓
 ─────────────────────────────────────────────────────────────
 Baseline monitors            automatic   (packs for your archetype)

@@ -26,9 +26,9 @@ row was confirmed by a repository-wide search that returned zero matches.
 
 | Status | Sections |
 |---|---|
-| OK | 21 |
-| IMPROVE | 9 |
-| PARTIAL | 12 |
+| OK | 22 |
+| IMPROVE | 10 |
+| PARTIAL | 10 |
 | MISSING | 15 |
 | OBSOLETE | 1 (resolved) |
 | N/A | 2 |
@@ -61,8 +61,8 @@ presentation, survey — and on **fleet/agent operations** and **Control-M**.
 
 | § | Requirement | Status | Where | Gap → Remediation | Validation |
 |---|---|---|---|---|---|
-| 5 | Correct entity types — System, Datastore, Queue, API, Endpoint, Frontend App, Repository, External Provider | **PARTIAL** | `modules/service_catalog` emits `datadog_service_definition_yaml` only | **Every catalog object is a Service.** No System, Datastore, Queue or API entities exist. Remediation: extend the entity model to Datadog's v3 entity kinds and add `kind:` to the entity schema | catalog entity-kind census against the live API |
-| 6 | Catalog = actual managed estate | **PARTIAL** | `platform/services/` (3 services) | Live catalog holds 27 service-catalog entries; only 3 are managed here. Demo/fabricated entries not yet reconciled | `build_inventory.py --live` census vs `platform/services/` |
+| 5 | Correct entity types — System, Datastore, Queue, API, Endpoint, Frontend App, Repository, External Provider | **IMPROVE** (was PARTIAL) | `platform/schemas/entity.schema.json`, `platform/policy/entity_kinds.yaml`, `tools/entity_resolver.py`, `modules/catalog_entity` | Phase 1 delivered: `kind:` in the schema, v3 entities of the correct kind emitted by `datadog_software_catalog`, and an `infrastructure_resource` is now rejected rather than silently becoming a Service. **Two named types have no Datadog kind to map to** — the v3 entity union is exactly `service, datastore, queue, system, api` (verified against the generated API client), so `frontend_app` emits `service` + `spec.type: web` + an `entity_kind:` tag, and `repository` emits nothing. Endpoint and External Provider are modelled as `api` and `service` (archetype `saas_dependency`) | `tools/entity_resolver.py` census; `tests/test_entity_model.py` |
+| 6 | Catalog = actual managed estate | **PARTIAL** | `platform/entities/` (6 entities: 2 services, 1 frontend app, 1 datastore, 1 queue, 1 system) | Live catalog holds 27 service-catalog entries; 6 are managed here. Demo/fabricated entries not yet reconciled, and the discovered population is still emitted as v2.2 services by `modules/service_catalog` | `build_inventory.py --live` census vs `platform/entities/` |
 | 7 | Reconcile discovered vs managed, do not duplicate | **PARTIAL** | `tools/build_inventory.py` reads `/api/v1/hosts` + service definitions | Reads discovery but does not *reconcile* — no merge of discovered telemetry with YAML intent | reconciliation report showing enriched vs duplicated |
 
 ---
@@ -81,7 +81,7 @@ presentation, survey — and on **fleet/agent operations** and **Control-M**.
 | § | Requirement | Status | Where | Gap → Remediation | Validation |
 |---|---|---|---|---|---|
 | 9 | Layered inheritance: global → entity type → platform → profile → env → criticality → team → override → exception | **OK** | `platform/policy/` 8-layer hierarchy | Layer names differ (domain/archetype/band rather than entity-type/platform) but the mechanism is identical | `test_policy_model.py` |
-| 10 | One YAML onboards an entity | **PARTIAL** | `platform/services/*.yaml`, 5 fields | Works for **services**. `kind:`, `platform:`, `monitoring_profile:`, `slo.profile:`, `oncall:` and `dependencies:` from the target schema are not accepted | schema test for the §10 example document |
+| 10 | One YAML onboards an entity | **OK** (was PARTIAL) | `platform/entities/*.yaml`, `platform/schemas/entity.schema.json` | Closed. `kind:`, `platform:`, `env:`, `region:`, `criticality:`, `monitoring_profile:`, `slo.profile:`, `oncall:`, typed `dependencies:` and `components:` are all accepted, and `tier:` was renamed to the §10 name `criticality:` without changing the telemetry tag | `test_every_entity_file_validates_against_the_schema`, `test_the_migrated_services_kept_every_field` |
 
 ---
 
@@ -222,7 +222,7 @@ shippable and leaves the platform working.
 
 | Phase | Work | Unblocks |
 |---|---|---|
-| **1** | Entity model: `kind:` in the schema, entity resolver, System/Datastore/Queue/API kinds, catalog reconciliation | §5, §6, §7, §10, §41, §59 |
+| **1** | Entity model: `kind:` in the schema, entity resolver, System/Datastore/Queue/API kinds, catalog reconciliation | §5, §6, §7, §10, §41, §59 — **schema, resolver and kinds delivered**; catalog reconciliation (§7) still open |
 | **2** | Telemetry requirements on every archetype + applicability engine | §16, §38, §39 |
 | **3** | Fleet management + agent profiles + deployment metadata (`DD_VERSION`) | §8, §36, §37, §39 |
 | **4** | SLO profiles and per-service objective overrides | §11, §12, §13, §15 |

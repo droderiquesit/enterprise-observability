@@ -1,0 +1,23 @@
+# Migrated from platform/services/reporting-portal.yaml (Phase 1, §5/§10).
+#
+# `kind: frontend_app` — the §5 entity type for a browser-delivered app. Read
+# platform/policy/entity_kinds.yaml before assuming this produces a Frontend
+# App in Datadog: the v3 entity union has no UI kind, so this is emitted as
+# `kind: service` with `spec.type: web` plus the tag `entity_kind:frontend_app`.
+# The declaration is still worth making — it is what a census, a Scorecard rule
+# and the future portal filter on, and it is what changes the day Datadog ships
+# the kind.
+entity:
+  kind: frontend_app
+  name: reporting-portal
+  team: application-development
+  criticality: tier2
+  service_archetype: web
+  description: Internal reporting and analytics portal.
+  envs: [dev, qa, stage, prod]
+  env: prod
+  slo:
+    profile: domain            # tier2 default (tiers.yaml slo.scope)
+  dependencies: [warehouse, identity-api]
+  links:
+    - { name: Repository, type: repo, url: https://github.com/acme/reporting-portal }

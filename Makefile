@@ -3,8 +3,8 @@ PY ?= python3
 STACKS := stacks/coverage stacks/foundation
 MODULES := $(wildcard modules/*)
 
-.PHONY: setup fmt fmt-check validate test tf-validate matrix runbooks fixtures \
-        inventory coverage plan-offline clean
+.PHONY: setup fmt fmt-check validate test tf-validate matrix entities runbooks \
+        fixtures inventory coverage plan-offline clean
 
 # --- developer entry points --------------------------------------------------
 setup:
@@ -30,6 +30,8 @@ tf-validate:
 # --- regeneration ------------------------------------------------------------
 matrix:            ## regenerate docs/monitor-coverage-matrix.md
 	cd tools && $(PY) generate_matrix.py
+entities:          ## entity-kind census: what platform/entities/ becomes in Datadog
+	cd tools && $(PY) entity_resolver.py
 runbooks:          ## regenerate runbook drafts from the archetype catalog
 	cd tools && $(PY) generate_runbooks.py --report
 fixtures:          ## regenerate tests/fixtures/monitors_planned.json from an offline plan

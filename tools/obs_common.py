@@ -47,6 +47,7 @@ def load_policy() -> dict:
         "workflows_doc": _yaml(POLICY_DIR / "workflows.yaml"),
         "workflows": _yaml(POLICY_DIR / "workflows.yaml")["workflows"],
         "grouping": _yaml(POLICY_DIR / "grouping.yaml"),
+        "entity_kinds_doc": _yaml(POLICY_DIR / "entity_kinds.yaml"),
         "composites_doc": _yaml(POLICY_DIR / "composites.yaml"),
         "composites": _yaml(POLICY_DIR / "composites.yaml")["composites"],
         "archetypes": {},
@@ -60,16 +61,69 @@ def load_policy() -> dict:
             policy["archetypes"][aid] = arch
     policy["service_archetypes"] = policy["service_archetypes_doc"]["service_archetypes"]
     policy["packs"] = policy["service_archetypes_doc"]["packs"]
+    policy["entity_kinds"] = policy["entity_kinds_doc"]["entity_kinds"]
     return policy
 
 
+def load_entities() -> dict:
+    """Registered catalog entities (platform/entities/*.yaml), keyed by name.
+
+    Every kind, not just services — that is the whole point of the entity
+    model (§5). Callers that only want the service-shaped subset should use
+    `load_services()`, which projects these onto the legacy registration shape.
+    """
+    out = {}
+    for f in sorted((PLATFORM_DIR / "entities").glob("*.yaml")):
+        ent = _yaml(f)["entity"]
+        ent = dict(ent)
+        ent.setdefault("source_file", f.name)
+        out[ent["name"]] = ent
+    return out
+
+
+# Which legacy `service:` keys an entity carries under a different name. Only
+# `tier` was renamed (to the §10 name `criticality`); everything else in the
+# old service registration kept its name, which is what makes the projection
+# below a rename rather than a translation.
+_ENTITY_TO_SERVICE_KEY = {"criticality": "tier"}
+
+
+def entity_as_service(entity: dict) -> dict:
+    """Project an entity onto the legacy service-registration shape.
+
+    Kept so that every existing consumer — the profile engine, the self-service
+    monitor validator, the scorecard, both Terraform stacks — reads exactly
+    what it read before the entity model landed. The projection is lossy on
+    purpose: it drops the fields the old shape has no slot for (kind, platform,
+    region, oncall, slo) rather than inventing keys nobody reads.
+    """
+    svc = {_ENTITY_TO_SERVICE_KEY.get(k, k): v for k, v in entity.items()
+           if k in ("name", "team", "criticality", "service_archetype", "description",
+                    "envs", "dependencies", "links", "compliance_scope", "idempotent")}
+    return svc
+
+
 def load_services() -> dict:
-    """Registered services (platform/services/*.yaml)."""
+    """Service-shaped registrations, from BOTH registries.
+
+    `platform/entities/` is the source of truth (it can express every kind);
+    `platform/services/` is the superseded format, still read so that a branch
+    written against it keeps working — see platform/services/README.md. It
+    ships empty, so in practice this returns the entity projection.
+
+    Only entities whose kind is pack-driven (they declare a
+    `service_archetype`) appear here: a system has no packs and a queue has no
+    service archetype, so handing either to a caller expecting a service would
+    be a KeyError waiting to happen. Those callers want `load_entities()`.
+    """
     out = {}
     for f in sorted((PLATFORM_DIR / "services").glob("*.yaml")):
-        doc = _yaml(f)
-        svc = doc["service"]
+        svc = _yaml(f)["service"]
         out[svc["name"]] = svc
+    for name, ent in load_entities().items():
+        if "service_archetype" not in ent:
+            continue
+        out.setdefault(name, entity_as_service(ent))
     return out
 
 

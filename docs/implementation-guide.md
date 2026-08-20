@@ -14,7 +14,7 @@ monitor:
   # --- required ---------------------------------------------------------------
   name: self-service-example     # kebab-case, MUST match the filename
   archetype: api-latency-p99         # a catalog archetype id, or `custom`
-  service: checkout-api              # must be registered in platform/services/
+  service: checkout-api              # must be registered in platform/entities/
   team: security                     # must own that service
   env: [stage, prod]                 # dev is rejected: it does not alert
   slo: slo-api-latency               # must exist in the SLO catalog
@@ -135,7 +135,8 @@ modules/
   team_oncall/           Teams, schedules, escalation policies, routing rules
   workflow_automation/   workflows, classified and guarded by blast radius
   rbac/                  roles and service accounts, resolved by permission NAME
-  service_catalog/       service definitions (v2.2) from the registry + inventory
+  service_catalog/       service definitions (v2.2) for the DISCOVERED population
+  catalog_entity/        Software Catalog v3 entities of the correct kind
   downtime/              recurring, tag-scoped maintenance windows
 
 (Dashboards are a single resource declared directly in
@@ -224,7 +225,8 @@ platform/                         ← everything a human edits
     workflows.yaml                27 workflows, classified by blast radius
     exceptions.yaml               time-boxed, owned, approved deviations
     archetypes/*.yaml             151 monitor definitions across 14 domains
-  services/*.yaml                 service registrations (the golden path, step 1)
+  entities/*.yaml                 entity registrations, any kind (golden path, step 1)
+  services/*.yaml                 SUPERSEDED service registrations; still read, ships empty
   monitors/*.yaml                 self-service monitors — ONE FILE each
   runbooks/*.md                   152 runbooks (generated frame + human sections)
   events/correlation-rules.yaml   correlation policy
@@ -243,7 +245,7 @@ docs/                             this documentation + the GENERATED matrix + ar
 | Your layout | Here | Why |
 |---|---|---|
 | `terraform/modules/` | `modules/` | Same thing; the repo is Terraform-rooted |
-| `config/services/` | `platform/services/` | |
+| `config/services/` | `platform/entities/` | Entity model, not service-only |
 | `config/monitor_profiles/` | `platform/policy/profiles.yaml` | One file beats one file per profile at five profiles |
 | `config/monitors/` | `platform/monitors/` | |
 | `config/teams,environments,tiers/` | `platform/policy/*.yaml` | |
