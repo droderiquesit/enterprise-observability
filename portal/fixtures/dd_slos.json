@@ -1,0 +1,903 @@
+{
+ "_recorded_at": "2026-08-20T02:00:00Z",
+ "_source": "GET /api/v1/slo?limit=100 \u2014 recorded from a production read",
+ "data": [
+  {
+   "id": "slo477",
+   "name": "API availability",
+   "type": "metric",
+   "description": "API availability \u2014 domain-scoped objective.",
+   "created_at": 1769047200,
+   "modified_at": 1786154400,
+   "thresholds": [
+    {
+     "timeframe": "30d",
+     "target": 99.95,
+     "target_display": "99.95",
+     "warning": 99.963
+    }
+   ],
+   "tags": [
+    "domain:api",
+    "env:prod",
+    "managed_by:terraform",
+    "monitor_type:slo",
+    "owner:application-development",
+    "platform:api",
+    "scope:domain",
+    "service:api-services",
+    "slo_id:slo-api-availability",
+    "team:application-development"
+   ],
+   "overall_status": [
+    {
+     "timeframe": "30d",
+     "target": 99.95,
+     "span_precision": 2,
+     "indexed_at": 1787191200,
+     "sli_value": 99.989,
+     "error_budget_remaining": 78.0,
+     "raw_error_budget_remaining": {
+      "unit": "percentage",
+      "value": 78.0
+     },
+     "state": "ok"
+    }
+   ]
+  },
+  {
+   "id": "slo478",
+   "name": "API latency objective",
+   "type": "metric",
+   "description": "API latency objective \u2014 domain-scoped objective.",
+   "created_at": 1769047200,
+   "modified_at": 1786154400,
+   "thresholds": [
+    {
+     "timeframe": "30d",
+     "target": 99.5,
+     "target_display": "99.5",
+     "warning": 99.625
+    }
+   ],
+   "tags": [
+    "domain:api",
+    "env:prod",
+    "managed_by:terraform",
+    "monitor_type:slo",
+    "owner:application-development",
+    "platform:api",
+    "scope:domain",
+    "service:api-services",
+    "slo_id:slo-api-latency",
+    "team:application-development"
+   ],
+   "overall_status": [
+    {
+     "timeframe": "30d",
+     "target": 99.5,
+     "span_precision": 2,
+     "indexed_at": 1787191200,
+     "sli_value": 99.72,
+     "error_budget_remaining": 44.0,
+     "raw_error_budget_remaining": {
+      "unit": "percentage",
+      "value": 44.0
+     },
+     "state": "ok"
+    }
+   ]
+  },
+  {
+   "id": "slo479",
+   "name": "Application availability",
+   "type": "metric",
+   "description": "Application availability \u2014 domain-scoped objective.",
+   "created_at": 1769047200,
+   "modified_at": 1786154400,
+   "thresholds": [
+    {
+     "timeframe": "30d",
+     "target": 99.9,
+     "target_display": "99.9",
+     "warning": 99.925
+    }
+   ],
+   "tags": [
+    "domain:application",
+    "env:prod",
+    "managed_by:terraform",
+    "monitor_type:slo",
+    "owner:sre",
+    "platform:application",
+    "scope:domain",
+    "service:application-platform",
+    "slo_id:slo-app-availability",
+    "team:sre"
+   ],
+   "overall_status": [
+    {
+     "timeframe": "30d",
+     "target": 99.9,
+     "span_precision": 2,
+     "indexed_at": 1787191200,
+     "sli_value": 99.992,
+     "error_budget_remaining": 92.0,
+     "raw_error_budget_remaining": {
+      "unit": "percentage",
+      "value": 92.0
+     },
+     "state": "ok"
+    }
+   ]
+  },
+  {
+   "id": "slo480",
+   "name": "Application latency objective",
+   "type": "metric",
+   "description": "Application latency objective \u2014 domain-scoped objective.",
+   "created_at": 1769047200,
+   "modified_at": 1786154400,
+   "thresholds": [
+    {
+     "timeframe": "30d",
+     "target": 99.0,
+     "target_display": "99.0",
+     "warning": 99.25
+    }
+   ],
+   "tags": [
+    "domain:application",
+    "env:prod",
+    "managed_by:terraform",
+    "monitor_type:slo",
+    "owner:sre",
+    "platform:application",
+    "scope:domain",
+    "service:application-platform",
+    "slo_id:slo-app-latency",
+    "team:sre"
+   ],
+   "overall_status": [
+    {
+     "timeframe": "30d",
+     "target": 99.0,
+     "span_precision": 2,
+     "indexed_at": 1787191200,
+     "sli_value": 99.712,
+     "error_budget_remaining": 71.2,
+     "raw_error_budget_remaining": {
+      "unit": "percentage",
+      "value": 71.2
+     },
+     "state": "ok"
+    }
+   ]
+  },
+  {
+   "id": "slo481",
+   "name": "Batch completion reliability",
+   "type": "monitor",
+   "description": "Batch completion reliability \u2014 domain-scoped objective.",
+   "created_at": 1769047200,
+   "modified_at": 1786154400,
+   "thresholds": [
+    {
+     "timeframe": "30d",
+     "target": 99.0,
+     "target_display": "99.0",
+     "warning": 99.25
+    }
+   ],
+   "tags": [
+    "domain:integration",
+    "env:prod",
+    "managed_by:terraform",
+    "monitor_type:slo",
+    "owner:application-development",
+    "platform:integration",
+    "scope:domain",
+    "service:batch-platform",
+    "slo_id:slo-batch-completion",
+    "team:application-development"
+   ],
+   "overall_status": [
+    {
+     "timeframe": "30d",
+     "target": 99.0,
+     "span_precision": 2,
+     "indexed_at": 1787191200,
+     "sli_value": 99.86,
+     "error_budget_remaining": 86.0,
+     "raw_error_budget_remaining": {
+      "unit": "percentage",
+      "value": 86.0
+     },
+     "state": "ok"
+    }
+   ]
+  },
+  {
+   "id": "slo482",
+   "name": "Azure platform reliability",
+   "type": "monitor",
+   "description": "Azure platform reliability \u2014 domain-scoped objective.",
+   "created_at": 1769047200,
+   "modified_at": 1786154400,
+   "thresholds": [
+    {
+     "timeframe": "30d",
+     "target": 99.9,
+     "target_display": "99.9",
+     "warning": 99.925
+    }
+   ],
+   "tags": [
+    "domain:cloud",
+    "env:prod",
+    "managed_by:terraform",
+    "monitor_type:slo",
+    "owner:cloud-engineering",
+    "platform:azure",
+    "scope:domain",
+    "service:azure-landing-zone",
+    "slo_id:slo-cloud-platform-availability",
+    "team:cloud-engineering"
+   ],
+   "overall_status": [
+    {
+     "timeframe": "30d",
+     "target": 99.9,
+     "span_precision": 2,
+     "indexed_at": 1787191200,
+     "sli_value": 99.993,
+     "error_budget_remaining": 93.0,
+     "raw_error_budget_remaining": {
+      "unit": "percentage",
+      "value": 93.0
+     },
+     "state": "ok"
+    }
+   ]
+  },
+  {
+   "id": "slo483",
+   "name": "Data product freshness",
+   "type": "monitor",
+   "description": "Data product freshness \u2014 domain-scoped objective.",
+   "created_at": 1769047200,
+   "modified_at": 1786154400,
+   "thresholds": [
+    {
+     "timeframe": "30d",
+     "target": 99.0,
+     "target_display": "99.0",
+     "warning": 99.25
+    }
+   ],
+   "tags": [
+    "domain:data",
+    "env:prod",
+    "managed_by:terraform",
+    "monitor_type:slo",
+    "owner:data-engineering",
+    "platform:data",
+    "scope:domain",
+    "service:data-platform",
+    "slo_id:slo-data-freshness",
+    "team:data-engineering"
+   ],
+   "overall_status": [
+    {
+     "timeframe": "30d",
+     "target": 99.0,
+     "span_precision": 2,
+     "indexed_at": 1787191200,
+     "sli_value": 99.382,
+     "error_budget_remaining": 38.2,
+     "raw_error_budget_remaining": {
+      "unit": "percentage",
+      "value": 38.2
+     },
+     "state": "ok"
+    }
+   ]
+  },
+  {
+   "id": "slo484",
+   "name": "Database platform availability",
+   "type": "monitor",
+   "description": "Database platform availability \u2014 domain-scoped objective.",
+   "created_at": 1769047200,
+   "modified_at": 1786154400,
+   "thresholds": [
+    {
+     "timeframe": "30d",
+     "target": 99.95,
+     "target_display": "99.95",
+     "warning": 99.963
+    }
+   ],
+   "tags": [
+    "domain:database",
+    "env:prod",
+    "managed_by:terraform",
+    "monitor_type:slo",
+    "owner:data-engineering",
+    "platform:database",
+    "scope:domain",
+    "service:database-platform",
+    "slo_id:slo-database-availability",
+    "team:data-engineering"
+   ],
+   "overall_status": [
+    {
+     "timeframe": "30d",
+     "target": 99.95,
+     "span_precision": 2,
+     "indexed_at": 1787191200,
+     "sli_value": 99.9558,
+     "error_budget_remaining": 11.7,
+     "raw_error_budget_remaining": {
+      "unit": "percentage",
+      "value": 11.7
+     },
+     "state": "ok"
+    }
+   ]
+  },
+  {
+   "id": "slo485",
+   "name": "Database query latency objective",
+   "type": "metric",
+   "description": "Database query latency objective \u2014 domain-scoped objective.",
+   "created_at": 1769047200,
+   "modified_at": 1786154400,
+   "thresholds": [
+    {
+     "timeframe": "30d",
+     "target": 99.0,
+     "target_display": "99.0",
+     "warning": 99.25
+    }
+   ],
+   "tags": [
+    "domain:database",
+    "env:prod",
+    "managed_by:terraform",
+    "monitor_type:slo",
+    "owner:data-engineering",
+    "platform:database",
+    "scope:domain",
+    "service:database-platform",
+    "slo_id:slo-database-latency",
+    "team:data-engineering"
+   ],
+   "overall_status": [
+    {
+     "timeframe": "30d",
+     "target": 99.0,
+     "span_precision": 2,
+     "indexed_at": 1787191200,
+     "sli_value": 99.94,
+     "error_budget_remaining": 94.0,
+     "raw_error_budget_remaining": {
+      "unit": "percentage",
+      "value": 94.0
+     },
+     "state": "ok"
+    }
+   ]
+  },
+  {
+   "id": "slo486",
+   "name": "External dependency availability",
+   "type": "monitor",
+   "description": "External dependency availability \u2014 domain-scoped objective.",
+   "created_at": 1769047200,
+   "modified_at": 1786154400,
+   "thresholds": [
+    {
+     "timeframe": "30d",
+     "target": 99.5,
+     "target_display": "99.5",
+     "warning": 99.625
+    }
+   ],
+   "tags": [
+    "domain:saas",
+    "env:prod",
+    "managed_by:terraform",
+    "monitor_type:slo",
+    "owner:sre",
+    "platform:saas",
+    "scope:domain",
+    "service:external-dependencies",
+    "slo_id:slo-external-dependency",
+    "team:sre"
+   ],
+   "overall_status": [
+    {
+     "timeframe": "30d",
+     "target": 99.5,
+     "span_precision": 2,
+     "indexed_at": 1787191200,
+     "sli_value": 99.905,
+     "error_budget_remaining": 81.0,
+     "raw_error_budget_remaining": {
+      "unit": "percentage",
+      "value": 81.0
+     },
+     "state": "ok"
+    }
+   ]
+  },
+  {
+   "id": "slo487",
+   "name": "Backup success rate",
+   "type": "metric",
+   "description": "Backup success rate \u2014 domain-scoped objective.",
+   "created_at": 1769047200,
+   "modified_at": 1786154400,
+   "thresholds": [
+    {
+     "timeframe": "30d",
+     "target": 99.0,
+     "target_display": "99.0",
+     "warning": 99.25
+    }
+   ],
+   "tags": [
+    "domain:infrastructure",
+    "env:prod",
+    "managed_by:terraform",
+    "monitor_type:slo",
+    "owner:infrastructure-engineering",
+    "platform:infrastructure",
+    "scope:domain",
+    "service:backup-platform",
+    "slo_id:slo-infra-backup-success",
+    "team:infrastructure-engineering"
+   ],
+   "overall_status": [
+    {
+     "timeframe": "30d",
+     "target": 99.0,
+     "span_precision": 2,
+     "indexed_at": 1787191200,
+     "error": "The metric acme.backup.jobs was not found. The SLI cannot be computed."
+    }
+   ]
+  },
+  {
+   "id": "slo488",
+   "name": "Compute platform availability",
+   "type": "monitor",
+   "description": "Compute platform availability \u2014 domain-scoped objective.",
+   "created_at": 1769047200,
+   "modified_at": 1786154400,
+   "thresholds": [
+    {
+     "timeframe": "30d",
+     "target": 99.9,
+     "target_display": "99.9",
+     "warning": 99.925
+    }
+   ],
+   "tags": [
+    "domain:infrastructure",
+    "env:prod",
+    "managed_by:terraform",
+    "monitor_type:slo",
+    "owner:infrastructure-engineering",
+    "platform:infrastructure",
+    "scope:domain",
+    "service:compute-platform",
+    "slo_id:slo-infra-compute-availability",
+    "team:infrastructure-engineering"
+   ],
+   "overall_status": [
+    {
+     "timeframe": "30d",
+     "target": 99.9,
+     "span_precision": 2,
+     "indexed_at": 1787191200,
+     "sli_value": 99.995,
+     "error_budget_remaining": 95.0,
+     "raw_error_budget_remaining": {
+      "unit": "percentage",
+      "value": 95.0
+     },
+     "state": "ok"
+    }
+   ]
+  },
+  {
+   "id": "slo489",
+   "name": "Integration delivery reliability",
+   "type": "monitor",
+   "description": "Integration delivery reliability \u2014 domain-scoped objective.",
+   "created_at": 1769047200,
+   "modified_at": 1786154400,
+   "thresholds": [
+    {
+     "timeframe": "30d",
+     "target": 99.5,
+     "target_display": "99.5",
+     "warning": 99.625
+    }
+   ],
+   "tags": [
+    "domain:integration",
+    "env:prod",
+    "managed_by:terraform",
+    "monitor_type:slo",
+    "owner:application-development",
+    "platform:integration",
+    "scope:domain",
+    "service:integration-platform",
+    "slo_id:slo-integration-delivery",
+    "team:application-development"
+   ],
+   "overall_status": [
+    {
+     "timeframe": "30d",
+     "target": 99.5,
+     "span_precision": 2,
+     "indexed_at": 1787191200,
+     "sli_value": 99.8175,
+     "error_budget_remaining": 63.5,
+     "raw_error_budget_remaining": {
+      "unit": "percentage",
+      "value": 63.5
+     },
+     "state": "ok"
+    }
+   ]
+  },
+  {
+   "id": "slo490",
+   "name": "Kubernetes workload availability",
+   "type": "monitor",
+   "description": "Kubernetes workload availability \u2014 domain-scoped objective.",
+   "created_at": 1769047200,
+   "modified_at": 1786154400,
+   "thresholds": [
+    {
+     "timeframe": "30d",
+     "target": 99.9,
+     "target_display": "99.9",
+     "warning": 99.925
+    }
+   ],
+   "tags": [
+    "domain:kubernetes",
+    "env:prod",
+    "managed_by:terraform",
+    "monitor_type:slo",
+    "owner:cloud-engineering",
+    "platform:kubernetes",
+    "scope:domain",
+    "service:kubernetes-platform",
+    "slo_id:slo-k8s-workload-availability",
+    "team:cloud-engineering"
+   ],
+   "overall_status": [
+    {
+     "timeframe": "30d",
+     "target": 99.9,
+     "span_precision": 2,
+     "indexed_at": 1787191200,
+     "sli_value": 99.989,
+     "error_budget_remaining": 89.0,
+     "raw_error_budget_remaining": {
+      "unit": "percentage",
+      "value": 89.0
+     },
+     "state": "ok"
+    }
+   ]
+  },
+  {
+   "id": "slo491",
+   "name": "Message delivery reliability",
+   "type": "monitor",
+   "description": "Message delivery reliability \u2014 domain-scoped objective.",
+   "created_at": 1769047200,
+   "modified_at": 1786154400,
+   "thresholds": [
+    {
+     "timeframe": "30d",
+     "target": 99.9,
+     "target_display": "99.9",
+     "warning": 99.925
+    }
+   ],
+   "tags": [
+    "domain:messaging",
+    "env:prod",
+    "managed_by:terraform",
+    "monitor_type:slo",
+    "owner:cloud-engineering",
+    "platform:messaging",
+    "scope:domain",
+    "service:messaging-platform",
+    "slo_id:slo-messaging-delivery",
+    "team:cloud-engineering"
+   ],
+   "overall_status": [
+    {
+     "timeframe": "30d",
+     "target": 99.9,
+     "span_precision": 2,
+     "indexed_at": 1787191200,
+     "sli_value": 99.8916,
+     "error_budget_remaining": -8.4,
+     "raw_error_budget_remaining": {
+      "unit": "percentage",
+      "value": -8.4
+     },
+     "state": "breached"
+    }
+   ]
+  },
+  {
+   "id": "slo492",
+   "name": "Network availability",
+   "type": "monitor",
+   "description": "Network availability \u2014 domain-scoped objective.",
+   "created_at": 1769047200,
+   "modified_at": 1786154400,
+   "thresholds": [
+    {
+     "timeframe": "30d",
+     "target": 99.95,
+     "target_display": "99.95",
+     "warning": 99.963
+    }
+   ],
+   "tags": [
+    "domain:network",
+    "env:prod",
+    "managed_by:terraform",
+    "monitor_type:slo",
+    "owner:infrastructure-engineering",
+    "platform:network",
+    "scope:domain",
+    "service:network-platform",
+    "slo_id:slo-network-availability",
+    "team:infrastructure-engineering"
+   ],
+   "overall_status": [
+    {
+     "timeframe": "30d",
+     "target": 99.95,
+     "span_precision": 2,
+     "indexed_at": 1787191200,
+     "sli_value": 99.9915,
+     "error_budget_remaining": 83.0,
+     "raw_error_budget_remaining": {
+      "unit": "percentage",
+      "value": 83.0
+     },
+     "state": "ok"
+    }
+   ]
+  },
+  {
+   "id": "slo493",
+   "name": "Shared platform services availability",
+   "type": "monitor",
+   "description": "Shared platform services availability \u2014 domain-scoped objective.",
+   "created_at": 1769047200,
+   "modified_at": 1786154400,
+   "thresholds": [
+    {
+     "timeframe": "30d",
+     "target": 99.9,
+     "target_display": "99.9",
+     "warning": 99.925
+    }
+   ],
+   "tags": [
+    "domain:platform",
+    "env:prod",
+    "managed_by:terraform",
+    "monitor_type:slo",
+    "owner:observability-platform",
+    "platform:platform",
+    "scope:domain",
+    "service:platform-services",
+    "slo_id:slo-platform-services",
+    "team:observability-platform"
+   ],
+   "overall_status": [
+    {
+     "timeframe": "30d",
+     "target": 99.9,
+     "span_precision": 2,
+     "indexed_at": 1787191200,
+     "sli_value": 99.99,
+     "error_budget_remaining": 90.0,
+     "raw_error_budget_remaining": {
+      "unit": "percentage",
+      "value": 90.0
+     },
+     "state": "ok"
+    }
+   ]
+  },
+  {
+   "id": "slo494",
+   "name": "Security telemetry continuity",
+   "type": "monitor",
+   "description": "Security telemetry continuity \u2014 domain-scoped objective.",
+   "created_at": 1769047200,
+   "modified_at": 1786154400,
+   "thresholds": [
+    {
+     "timeframe": "30d",
+     "target": 99.5,
+     "target_display": "99.5",
+     "warning": 99.625
+    }
+   ],
+   "tags": [
+    "domain:security",
+    "env:prod",
+    "managed_by:terraform",
+    "monitor_type:slo",
+    "owner:security",
+    "platform:security",
+    "scope:domain",
+    "service:security-telemetry",
+    "slo_id:slo-security-telemetry",
+    "team:security"
+   ],
+   "overall_status": [
+    {
+     "timeframe": "30d",
+     "target": 99.5,
+     "span_precision": 2,
+     "indexed_at": 1787191200,
+     "sli_value": 99.985,
+     "error_budget_remaining": 97.0,
+     "raw_error_budget_remaining": {
+      "unit": "percentage",
+      "value": 97.0
+     },
+     "state": "ok"
+    }
+   ]
+  },
+  {
+   "id": "slo495",
+   "name": "Virtualization platform availability",
+   "type": "monitor",
+   "description": "Virtualization platform availability \u2014 domain-scoped objective.",
+   "created_at": 1769047200,
+   "modified_at": 1786154400,
+   "thresholds": [
+    {
+     "timeframe": "30d",
+     "target": 99.9,
+     "target_display": "99.9",
+     "warning": 99.925
+    }
+   ],
+   "tags": [
+    "domain:vmware",
+    "env:prod",
+    "managed_by:terraform",
+    "monitor_type:slo",
+    "owner:infrastructure-engineering",
+    "platform:vmware",
+    "scope:domain",
+    "service:virtualization-platform",
+    "slo_id:slo-vmware-cluster-availability",
+    "team:infrastructure-engineering"
+   ],
+   "overall_status": [
+    {
+     "timeframe": "30d",
+     "target": 99.9,
+     "span_precision": 2,
+     "indexed_at": 1787191200,
+     "sli_value": 99.984,
+     "error_budget_remaining": 84.0,
+     "raw_error_budget_remaining": {
+      "unit": "percentage",
+      "value": 84.0
+     },
+     "state": "ok"
+    }
+   ]
+  },
+  {
+   "id": "slo496",
+   "name": "Web frontend availability",
+   "type": "monitor",
+   "description": "Web frontend availability \u2014 domain-scoped objective.",
+   "created_at": 1769047200,
+   "modified_at": 1786154400,
+   "thresholds": [
+    {
+     "timeframe": "30d",
+     "target": 99.9,
+     "target_display": "99.9",
+     "warning": 99.925
+    }
+   ],
+   "tags": [
+    "domain:application",
+    "env:prod",
+    "managed_by:terraform",
+    "monitor_type:slo",
+    "owner:sre",
+    "platform:application",
+    "scope:domain",
+    "service:web-frontends",
+    "slo_id:slo-web-availability",
+    "team:sre"
+   ],
+   "overall_status": [
+    {
+     "timeframe": "30d",
+     "target": 99.9,
+     "span_precision": 2,
+     "indexed_at": 1787191200,
+     "sli_value": 99.991,
+     "error_budget_remaining": 91.0,
+     "raw_error_budget_remaining": {
+      "unit": "percentage",
+      "value": 91.0
+     },
+     "state": "ok"
+    }
+   ]
+  },
+  {
+   "id": "slo497",
+   "name": "Asynchronous processing reliability",
+   "type": "monitor",
+   "description": "Asynchronous processing reliability \u2014 domain-scoped objective.",
+   "created_at": 1769047200,
+   "modified_at": 1786154400,
+   "thresholds": [
+    {
+     "timeframe": "30d",
+     "target": 99.5,
+     "target_display": "99.5",
+     "warning": 99.625
+    }
+   ],
+   "tags": [
+    "domain:application",
+    "env:prod",
+    "managed_by:terraform",
+    "monitor_type:slo",
+    "owner:sre",
+    "platform:application",
+    "scope:domain",
+    "service:worker-platform",
+    "slo_id:slo-worker-throughput",
+    "team:sre"
+   ],
+   "overall_status": [
+    {
+     "timeframe": "30d",
+     "target": 99.5,
+     "span_precision": 2,
+     "indexed_at": 1787191200,
+     "sli_value": 99.89,
+     "error_budget_remaining": 78.0,
+     "raw_error_budget_remaining": {
+      "unit": "percentage",
+      "value": 78.0
+     },
+     "state": "ok"
+    }
+   ]
+  }
+ ]
+}

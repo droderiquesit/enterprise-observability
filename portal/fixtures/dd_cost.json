@@ -1,0 +1,899 @@
+{
+ "_recorded_at": "2026-08-20T02:00:00Z",
+ "_source": "GET /api/v2/usage/estimated_cost_by_org?view=summary",
+ "data": [
+  {
+   "id": "cost-2026-08-01",
+   "type": "cost_by_org",
+   "attributes": {
+    "org_name": "acme",
+    "public_id": "acme01",
+    "date": "2026-08-01",
+    "total_cost": 5180.0,
+    "charges": [
+     {
+      "product_name": "infra_hosts",
+      "charge_type": "on_demand",
+      "cost": 2172.63
+     },
+     {
+      "product_name": "apm_hosts",
+      "charge_type": "on_demand",
+      "cost": 981.05
+     },
+     {
+      "product_name": "logs",
+      "charge_type": "on_demand",
+      "cost": 1163.68
+     },
+     {
+      "product_name": "custom_metrics",
+      "charge_type": "on_demand",
+      "cost": 512.63
+     },
+     {
+      "product_name": "synthetics_api",
+      "charge_type": "on_demand",
+      "cost": 114.74
+     },
+     {
+      "product_name": "incident_management",
+      "charge_type": "on_demand",
+      "cost": 76.32
+     },
+     {
+      "product_name": "serverless",
+      "charge_type": "on_demand",
+      "cost": 158.95
+     }
+    ]
+   }
+  },
+  {
+   "id": "cost-2026-08-02",
+   "type": "cost_by_org",
+   "attributes": {
+    "org_name": "acme",
+    "public_id": "acme01",
+    "date": "2026-08-02",
+    "total_cost": 10360.0,
+    "charges": [
+     {
+      "product_name": "infra_hosts",
+      "charge_type": "on_demand",
+      "cost": 4345.26
+     },
+     {
+      "product_name": "apm_hosts",
+      "charge_type": "on_demand",
+      "cost": 1962.11
+     },
+     {
+      "product_name": "logs",
+      "charge_type": "on_demand",
+      "cost": 2327.37
+     },
+     {
+      "product_name": "custom_metrics",
+      "charge_type": "on_demand",
+      "cost": 1025.26
+     },
+     {
+      "product_name": "synthetics_api",
+      "charge_type": "on_demand",
+      "cost": 229.47
+     },
+     {
+      "product_name": "incident_management",
+      "charge_type": "on_demand",
+      "cost": 152.63
+     },
+     {
+      "product_name": "serverless",
+      "charge_type": "on_demand",
+      "cost": 317.89
+     }
+    ]
+   }
+  },
+  {
+   "id": "cost-2026-08-03",
+   "type": "cost_by_org",
+   "attributes": {
+    "org_name": "acme",
+    "public_id": "acme01",
+    "date": "2026-08-03",
+    "total_cost": 15540.0,
+    "charges": [
+     {
+      "product_name": "infra_hosts",
+      "charge_type": "on_demand",
+      "cost": 6517.89
+     },
+     {
+      "product_name": "apm_hosts",
+      "charge_type": "on_demand",
+      "cost": 2943.16
+     },
+     {
+      "product_name": "logs",
+      "charge_type": "on_demand",
+      "cost": 3491.05
+     },
+     {
+      "product_name": "custom_metrics",
+      "charge_type": "on_demand",
+      "cost": 1537.89
+     },
+     {
+      "product_name": "synthetics_api",
+      "charge_type": "on_demand",
+      "cost": 344.21
+     },
+     {
+      "product_name": "incident_management",
+      "charge_type": "on_demand",
+      "cost": 228.95
+     },
+     {
+      "product_name": "serverless",
+      "charge_type": "on_demand",
+      "cost": 476.84
+     }
+    ]
+   }
+  },
+  {
+   "id": "cost-2026-08-04",
+   "type": "cost_by_org",
+   "attributes": {
+    "org_name": "acme",
+    "public_id": "acme01",
+    "date": "2026-08-04",
+    "total_cost": 20720.0,
+    "charges": [
+     {
+      "product_name": "infra_hosts",
+      "charge_type": "on_demand",
+      "cost": 8690.53
+     },
+     {
+      "product_name": "apm_hosts",
+      "charge_type": "on_demand",
+      "cost": 3924.21
+     },
+     {
+      "product_name": "logs",
+      "charge_type": "on_demand",
+      "cost": 4654.74
+     },
+     {
+      "product_name": "custom_metrics",
+      "charge_type": "on_demand",
+      "cost": 2050.53
+     },
+     {
+      "product_name": "synthetics_api",
+      "charge_type": "on_demand",
+      "cost": 458.95
+     },
+     {
+      "product_name": "incident_management",
+      "charge_type": "on_demand",
+      "cost": 305.26
+     },
+     {
+      "product_name": "serverless",
+      "charge_type": "on_demand",
+      "cost": 635.79
+     }
+    ]
+   }
+  },
+  {
+   "id": "cost-2026-08-05",
+   "type": "cost_by_org",
+   "attributes": {
+    "org_name": "acme",
+    "public_id": "acme01",
+    "date": "2026-08-05",
+    "total_cost": 25900.0,
+    "charges": [
+     {
+      "product_name": "infra_hosts",
+      "charge_type": "on_demand",
+      "cost": 10863.16
+     },
+     {
+      "product_name": "apm_hosts",
+      "charge_type": "on_demand",
+      "cost": 4905.26
+     },
+     {
+      "product_name": "logs",
+      "charge_type": "on_demand",
+      "cost": 5818.42
+     },
+     {
+      "product_name": "custom_metrics",
+      "charge_type": "on_demand",
+      "cost": 2563.16
+     },
+     {
+      "product_name": "synthetics_api",
+      "charge_type": "on_demand",
+      "cost": 573.68
+     },
+     {
+      "product_name": "incident_management",
+      "charge_type": "on_demand",
+      "cost": 381.58
+     },
+     {
+      "product_name": "serverless",
+      "charge_type": "on_demand",
+      "cost": 794.74
+     }
+    ]
+   }
+  },
+  {
+   "id": "cost-2026-08-06",
+   "type": "cost_by_org",
+   "attributes": {
+    "org_name": "acme",
+    "public_id": "acme01",
+    "date": "2026-08-06",
+    "total_cost": 31080.0,
+    "charges": [
+     {
+      "product_name": "infra_hosts",
+      "charge_type": "on_demand",
+      "cost": 13035.79
+     },
+     {
+      "product_name": "apm_hosts",
+      "charge_type": "on_demand",
+      "cost": 5886.32
+     },
+     {
+      "product_name": "logs",
+      "charge_type": "on_demand",
+      "cost": 6982.11
+     },
+     {
+      "product_name": "custom_metrics",
+      "charge_type": "on_demand",
+      "cost": 3075.79
+     },
+     {
+      "product_name": "synthetics_api",
+      "charge_type": "on_demand",
+      "cost": 688.42
+     },
+     {
+      "product_name": "incident_management",
+      "charge_type": "on_demand",
+      "cost": 457.89
+     },
+     {
+      "product_name": "serverless",
+      "charge_type": "on_demand",
+      "cost": 953.68
+     }
+    ]
+   }
+  },
+  {
+   "id": "cost-2026-08-07",
+   "type": "cost_by_org",
+   "attributes": {
+    "org_name": "acme",
+    "public_id": "acme01",
+    "date": "2026-08-07",
+    "total_cost": 36260.0,
+    "charges": [
+     {
+      "product_name": "infra_hosts",
+      "charge_type": "on_demand",
+      "cost": 15208.42
+     },
+     {
+      "product_name": "apm_hosts",
+      "charge_type": "on_demand",
+      "cost": 6867.37
+     },
+     {
+      "product_name": "logs",
+      "charge_type": "on_demand",
+      "cost": 8145.79
+     },
+     {
+      "product_name": "custom_metrics",
+      "charge_type": "on_demand",
+      "cost": 3588.42
+     },
+     {
+      "product_name": "synthetics_api",
+      "charge_type": "on_demand",
+      "cost": 803.16
+     },
+     {
+      "product_name": "incident_management",
+      "charge_type": "on_demand",
+      "cost": 534.21
+     },
+     {
+      "product_name": "serverless",
+      "charge_type": "on_demand",
+      "cost": 1112.63
+     }
+    ]
+   }
+  },
+  {
+   "id": "cost-2026-08-08",
+   "type": "cost_by_org",
+   "attributes": {
+    "org_name": "acme",
+    "public_id": "acme01",
+    "date": "2026-08-08",
+    "total_cost": 41440.0,
+    "charges": [
+     {
+      "product_name": "infra_hosts",
+      "charge_type": "on_demand",
+      "cost": 17381.05
+     },
+     {
+      "product_name": "apm_hosts",
+      "charge_type": "on_demand",
+      "cost": 7848.42
+     },
+     {
+      "product_name": "logs",
+      "charge_type": "on_demand",
+      "cost": 9309.47
+     },
+     {
+      "product_name": "custom_metrics",
+      "charge_type": "on_demand",
+      "cost": 4101.05
+     },
+     {
+      "product_name": "synthetics_api",
+      "charge_type": "on_demand",
+      "cost": 917.89
+     },
+     {
+      "product_name": "incident_management",
+      "charge_type": "on_demand",
+      "cost": 610.53
+     },
+     {
+      "product_name": "serverless",
+      "charge_type": "on_demand",
+      "cost": 1271.58
+     }
+    ]
+   }
+  },
+  {
+   "id": "cost-2026-08-09",
+   "type": "cost_by_org",
+   "attributes": {
+    "org_name": "acme",
+    "public_id": "acme01",
+    "date": "2026-08-09",
+    "total_cost": 46620.0,
+    "charges": [
+     {
+      "product_name": "infra_hosts",
+      "charge_type": "on_demand",
+      "cost": 19553.68
+     },
+     {
+      "product_name": "apm_hosts",
+      "charge_type": "on_demand",
+      "cost": 8829.47
+     },
+     {
+      "product_name": "logs",
+      "charge_type": "on_demand",
+      "cost": 10473.16
+     },
+     {
+      "product_name": "custom_metrics",
+      "charge_type": "on_demand",
+      "cost": 4613.68
+     },
+     {
+      "product_name": "synthetics_api",
+      "charge_type": "on_demand",
+      "cost": 1032.63
+     },
+     {
+      "product_name": "incident_management",
+      "charge_type": "on_demand",
+      "cost": 686.84
+     },
+     {
+      "product_name": "serverless",
+      "charge_type": "on_demand",
+      "cost": 1430.53
+     }
+    ]
+   }
+  },
+  {
+   "id": "cost-2026-08-10",
+   "type": "cost_by_org",
+   "attributes": {
+    "org_name": "acme",
+    "public_id": "acme01",
+    "date": "2026-08-10",
+    "total_cost": 51800.0,
+    "charges": [
+     {
+      "product_name": "infra_hosts",
+      "charge_type": "on_demand",
+      "cost": 21726.32
+     },
+     {
+      "product_name": "apm_hosts",
+      "charge_type": "on_demand",
+      "cost": 9810.53
+     },
+     {
+      "product_name": "logs",
+      "charge_type": "on_demand",
+      "cost": 11636.84
+     },
+     {
+      "product_name": "custom_metrics",
+      "charge_type": "on_demand",
+      "cost": 5126.32
+     },
+     {
+      "product_name": "synthetics_api",
+      "charge_type": "on_demand",
+      "cost": 1147.37
+     },
+     {
+      "product_name": "incident_management",
+      "charge_type": "on_demand",
+      "cost": 763.16
+     },
+     {
+      "product_name": "serverless",
+      "charge_type": "on_demand",
+      "cost": 1589.47
+     }
+    ]
+   }
+  },
+  {
+   "id": "cost-2026-08-11",
+   "type": "cost_by_org",
+   "attributes": {
+    "org_name": "acme",
+    "public_id": "acme01",
+    "date": "2026-08-11",
+    "total_cost": 56980.0,
+    "charges": [
+     {
+      "product_name": "infra_hosts",
+      "charge_type": "on_demand",
+      "cost": 23898.95
+     },
+     {
+      "product_name": "apm_hosts",
+      "charge_type": "on_demand",
+      "cost": 10791.58
+     },
+     {
+      "product_name": "logs",
+      "charge_type": "on_demand",
+      "cost": 12800.53
+     },
+     {
+      "product_name": "custom_metrics",
+      "charge_type": "on_demand",
+      "cost": 5638.95
+     },
+     {
+      "product_name": "synthetics_api",
+      "charge_type": "on_demand",
+      "cost": 1262.11
+     },
+     {
+      "product_name": "incident_management",
+      "charge_type": "on_demand",
+      "cost": 839.47
+     },
+     {
+      "product_name": "serverless",
+      "charge_type": "on_demand",
+      "cost": 1748.42
+     }
+    ]
+   }
+  },
+  {
+   "id": "cost-2026-08-12",
+   "type": "cost_by_org",
+   "attributes": {
+    "org_name": "acme",
+    "public_id": "acme01",
+    "date": "2026-08-12",
+    "total_cost": 62160.0,
+    "charges": [
+     {
+      "product_name": "infra_hosts",
+      "charge_type": "on_demand",
+      "cost": 26071.58
+     },
+     {
+      "product_name": "apm_hosts",
+      "charge_type": "on_demand",
+      "cost": 11772.63
+     },
+     {
+      "product_name": "logs",
+      "charge_type": "on_demand",
+      "cost": 13964.21
+     },
+     {
+      "product_name": "custom_metrics",
+      "charge_type": "on_demand",
+      "cost": 6151.58
+     },
+     {
+      "product_name": "synthetics_api",
+      "charge_type": "on_demand",
+      "cost": 1376.84
+     },
+     {
+      "product_name": "incident_management",
+      "charge_type": "on_demand",
+      "cost": 915.79
+     },
+     {
+      "product_name": "serverless",
+      "charge_type": "on_demand",
+      "cost": 1907.37
+     }
+    ]
+   }
+  },
+  {
+   "id": "cost-2026-08-13",
+   "type": "cost_by_org",
+   "attributes": {
+    "org_name": "acme",
+    "public_id": "acme01",
+    "date": "2026-08-13",
+    "total_cost": 67340.0,
+    "charges": [
+     {
+      "product_name": "infra_hosts",
+      "charge_type": "on_demand",
+      "cost": 28244.21
+     },
+     {
+      "product_name": "apm_hosts",
+      "charge_type": "on_demand",
+      "cost": 12753.68
+     },
+     {
+      "product_name": "logs",
+      "charge_type": "on_demand",
+      "cost": 15127.89
+     },
+     {
+      "product_name": "custom_metrics",
+      "charge_type": "on_demand",
+      "cost": 6664.21
+     },
+     {
+      "product_name": "synthetics_api",
+      "charge_type": "on_demand",
+      "cost": 1491.58
+     },
+     {
+      "product_name": "incident_management",
+      "charge_type": "on_demand",
+      "cost": 992.11
+     },
+     {
+      "product_name": "serverless",
+      "charge_type": "on_demand",
+      "cost": 2066.32
+     }
+    ]
+   }
+  },
+  {
+   "id": "cost-2026-08-14",
+   "type": "cost_by_org",
+   "attributes": {
+    "org_name": "acme",
+    "public_id": "acme01",
+    "date": "2026-08-14",
+    "total_cost": 72520.0,
+    "charges": [
+     {
+      "product_name": "infra_hosts",
+      "charge_type": "on_demand",
+      "cost": 30416.84
+     },
+     {
+      "product_name": "apm_hosts",
+      "charge_type": "on_demand",
+      "cost": 13734.74
+     },
+     {
+      "product_name": "logs",
+      "charge_type": "on_demand",
+      "cost": 16291.58
+     },
+     {
+      "product_name": "custom_metrics",
+      "charge_type": "on_demand",
+      "cost": 7176.84
+     },
+     {
+      "product_name": "synthetics_api",
+      "charge_type": "on_demand",
+      "cost": 1606.32
+     },
+     {
+      "product_name": "incident_management",
+      "charge_type": "on_demand",
+      "cost": 1068.42
+     },
+     {
+      "product_name": "serverless",
+      "charge_type": "on_demand",
+      "cost": 2225.26
+     }
+    ]
+   }
+  },
+  {
+   "id": "cost-2026-08-15",
+   "type": "cost_by_org",
+   "attributes": {
+    "org_name": "acme",
+    "public_id": "acme01",
+    "date": "2026-08-15",
+    "total_cost": 77700.0,
+    "charges": [
+     {
+      "product_name": "infra_hosts",
+      "charge_type": "on_demand",
+      "cost": 32589.47
+     },
+     {
+      "product_name": "apm_hosts",
+      "charge_type": "on_demand",
+      "cost": 14715.79
+     },
+     {
+      "product_name": "logs",
+      "charge_type": "on_demand",
+      "cost": 17455.26
+     },
+     {
+      "product_name": "custom_metrics",
+      "charge_type": "on_demand",
+      "cost": 7689.47
+     },
+     {
+      "product_name": "synthetics_api",
+      "charge_type": "on_demand",
+      "cost": 1721.05
+     },
+     {
+      "product_name": "incident_management",
+      "charge_type": "on_demand",
+      "cost": 1144.74
+     },
+     {
+      "product_name": "serverless",
+      "charge_type": "on_demand",
+      "cost": 2384.21
+     }
+    ]
+   }
+  },
+  {
+   "id": "cost-2026-08-16",
+   "type": "cost_by_org",
+   "attributes": {
+    "org_name": "acme",
+    "public_id": "acme01",
+    "date": "2026-08-16",
+    "total_cost": 82880.0,
+    "charges": [
+     {
+      "product_name": "infra_hosts",
+      "charge_type": "on_demand",
+      "cost": 34762.11
+     },
+     {
+      "product_name": "apm_hosts",
+      "charge_type": "on_demand",
+      "cost": 15696.84
+     },
+     {
+      "product_name": "logs",
+      "charge_type": "on_demand",
+      "cost": 18618.95
+     },
+     {
+      "product_name": "custom_metrics",
+      "charge_type": "on_demand",
+      "cost": 8202.11
+     },
+     {
+      "product_name": "synthetics_api",
+      "charge_type": "on_demand",
+      "cost": 1835.79
+     },
+     {
+      "product_name": "incident_management",
+      "charge_type": "on_demand",
+      "cost": 1221.05
+     },
+     {
+      "product_name": "serverless",
+      "charge_type": "on_demand",
+      "cost": 2543.16
+     }
+    ]
+   }
+  },
+  {
+   "id": "cost-2026-08-17",
+   "type": "cost_by_org",
+   "attributes": {
+    "org_name": "acme",
+    "public_id": "acme01",
+    "date": "2026-08-17",
+    "total_cost": 88060.0,
+    "charges": [
+     {
+      "product_name": "infra_hosts",
+      "charge_type": "on_demand",
+      "cost": 36934.74
+     },
+     {
+      "product_name": "apm_hosts",
+      "charge_type": "on_demand",
+      "cost": 16677.89
+     },
+     {
+      "product_name": "logs",
+      "charge_type": "on_demand",
+      "cost": 19782.63
+     },
+     {
+      "product_name": "custom_metrics",
+      "charge_type": "on_demand",
+      "cost": 8714.74
+     },
+     {
+      "product_name": "synthetics_api",
+      "charge_type": "on_demand",
+      "cost": 1950.53
+     },
+     {
+      "product_name": "incident_management",
+      "charge_type": "on_demand",
+      "cost": 1297.37
+     },
+     {
+      "product_name": "serverless",
+      "charge_type": "on_demand",
+      "cost": 2702.11
+     }
+    ]
+   }
+  },
+  {
+   "id": "cost-2026-08-18",
+   "type": "cost_by_org",
+   "attributes": {
+    "org_name": "acme",
+    "public_id": "acme01",
+    "date": "2026-08-18",
+    "total_cost": 93240.0,
+    "charges": [
+     {
+      "product_name": "infra_hosts",
+      "charge_type": "on_demand",
+      "cost": 39107.37
+     },
+     {
+      "product_name": "apm_hosts",
+      "charge_type": "on_demand",
+      "cost": 17658.95
+     },
+     {
+      "product_name": "logs",
+      "charge_type": "on_demand",
+      "cost": 20946.32
+     },
+     {
+      "product_name": "custom_metrics",
+      "charge_type": "on_demand",
+      "cost": 9227.37
+     },
+     {
+      "product_name": "synthetics_api",
+      "charge_type": "on_demand",
+      "cost": 2065.26
+     },
+     {
+      "product_name": "incident_management",
+      "charge_type": "on_demand",
+      "cost": 1373.68
+     },
+     {
+      "product_name": "serverless",
+      "charge_type": "on_demand",
+      "cost": 2861.05
+     }
+    ]
+   }
+  },
+  {
+   "id": "cost-2026-08-19",
+   "type": "cost_by_org",
+   "attributes": {
+    "org_name": "acme",
+    "public_id": "acme01",
+    "date": "2026-08-19",
+    "total_cost": 98420.0,
+    "charges": [
+     {
+      "product_name": "infra_hosts",
+      "charge_type": "on_demand",
+      "cost": 41280.0
+     },
+     {
+      "product_name": "apm_hosts",
+      "charge_type": "on_demand",
+      "cost": 18640.0
+     },
+     {
+      "product_name": "logs",
+      "charge_type": "on_demand",
+      "cost": 22110.0
+     },
+     {
+      "product_name": "custom_metrics",
+      "charge_type": "on_demand",
+      "cost": 9740.0
+     },
+     {
+      "product_name": "synthetics_api",
+      "charge_type": "on_demand",
+      "cost": 2180.0
+     },
+     {
+      "product_name": "incident_management",
+      "charge_type": "on_demand",
+      "cost": 1450.0
+     },
+     {
+      "product_name": "serverless",
+      "charge_type": "on_demand",
+      "cost": 3020.0
+     }
+    ]
+   }
+  }
+ ]
+}

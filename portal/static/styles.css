@@ -1,0 +1,373 @@
+/* =============================================================================
+   Executive portal — visual system.
+
+   Design constraints, all of them from §49 and from the audience:
+
+   1. STATUS IS NEVER COLOUR ALONE. Every status carries a distinct glyph
+      (● ◆ ▲ ■ ?) and a word ("Healthy", "Watch", "Degraded", "Critical",
+      "No data"). Read in greyscale, printed, or by someone with deuteranopia,
+      the page still says the same thing. The colours are a second channel, not
+      the channel.
+   2. NO CHART JUNK. Bars are bars. There are no gradients on data, no 3-D, no
+      donuts, no sparkline without its number beside it.
+   3. CONTRAST. Every text and status colour below was measured against all
+      three surfaces it can land on (--bg, --surface, --surface-2) and clears
+      WCAG AA 4.5:1 in BOTH themes. The palettes were derived from that
+      constraint, not sampled from a brand deck — `--text-faint` in light mode
+      is darker than it looks like it should be for exactly this reason
+      (#6d7684 measured 4.21:1 on --bg, which is where section subtitles sit).
+   4. RESPONSIVE WITHOUT A BREAKPOINT ZOO. One fluid grid, two collapse points.
+      A 13" laptop on a boardroom projector and a phone in a taxi are the two
+      real devices.
+   ============================================================================= */
+
+/* Light is the base; dark overrides only the tokens. Both are declared, so a
+   viewer with no preference and a viewer with an explicit choice both get a
+   fully painted page rather than inheriting the host background. */
+:root {
+  color-scheme: light dark;
+
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #eef0f3;
+  --border: #d4d8de;
+  --border-strong: #b3bac4;
+  --text: #16191d;
+  --text-muted: #545c68;
+  --text-faint: #5f6874;
+
+  --ok: #1a6b3c;
+  --ok-bg: #e3f2e8;
+  --watch: #8a5a00;
+  --watch-bg: #fbf0da;
+  --risk: #a5410a;
+  --risk-bg: #fdeae0;
+  --critical: #b0121c;
+  --critical-bg: #fce8e9;
+  --unknown: #4a4f8c;
+  --unknown-bg: #e9eaf6;
+  --neutral: #3c4654;
+  --neutral-bg: #e9ecf1;
+
+  --accent: #1f4f8f;
+  --focus: #1f4f8f;
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(16, 20, 26, .06), 0 4px 14px rgba(16, 20, 26, .05);
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1116;
+    --surface: #161b22;
+    --surface-2: #1d232c;
+    --border: #2b323c;
+    --border-strong: #3d4653;
+    --text: #eef1f5;
+    --text-muted: #a9b3c0;
+    --text-faint: #8b95a3;
+
+    --ok: #62d093;
+    --ok-bg: #12291d;
+    --watch: #ecc06a;
+    --watch-bg: #2c2313;
+    --risk: #f79765;
+    --risk-bg: #31200f;
+    --critical: #ff8189;
+    --critical-bg: #351317;
+    --unknown: #a3a8ec;
+    --unknown-bg: #1d1f33;
+    --neutral: #c3ccd9;
+    --neutral-bg: #1e242d;
+
+    --accent: #7fb0f0;
+    --focus: #7fb0f0;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 6px 18px rgba(0, 0, 0, .35);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0e1116;
+  --surface: #161b22;
+  --surface-2: #1d232c;
+  --border: #2b323c;
+  --border-strong: #3d4653;
+  --text: #eef1f5;
+  --text-muted: #a9b3c0;
+  --text-faint: #8b95a3;
+  --ok: #62d093;
+  --ok-bg: #12291d;
+  --watch: #ecc06a;
+  --watch-bg: #2c2313;
+  --risk: #f79765;
+  --risk-bg: #31200f;
+  --critical: #ff8189;
+  --critical-bg: #351317;
+  --unknown: #a3a8ec;
+  --unknown-bg: #1d1f33;
+  --neutral: #c3ccd9;
+  --neutral-bg: #1e242d;
+  --accent: #7fb0f0;
+  --focus: #7fb0f0;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 6px 18px rgba(0, 0, 0, .35);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.5 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+
+.skip {
+  position: absolute; left: -9999px; top: 0; background: var(--surface);
+  padding: .6rem 1rem; z-index: 20; border: 2px solid var(--focus);
+}
+.skip:focus { left: .5rem; top: .5rem; }
+
+/* --- header ---------------------------------------------------------------- */
+.topbar {
+  display: flex; flex-wrap: wrap; gap: 1rem; align-items: center;
+  justify-content: space-between;
+  padding: .9rem clamp(1rem, 3vw, 2.2rem);
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 10;
+}
+.brand { display: flex; gap: .8rem; align-items: center; }
+.brand-mark {
+  width: 12px; height: 34px; border-radius: 3px;
+  background: linear-gradient(var(--accent), var(--accent)); flex: none;
+}
+.topbar h1 { font-size: 1.05rem; margin: 0; letter-spacing: -.01em; }
+.brand-sub { margin: 0; font-size: .8rem; color: var(--text-muted); }
+.topbar-right { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+
+.btn {
+  font: inherit; font-size: .85rem; color: var(--text);
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: .45rem .8rem; cursor: pointer;
+}
+.btn:hover { border-color: var(--border-strong); }
+
+/* --- status tokens --------------------------------------------------------- */
+.pill {
+  display: inline-flex; align-items: center; gap: .4rem;
+  font-size: .8rem; font-weight: 600; letter-spacing: .01em;
+  padding: .28rem .6rem; border-radius: 999px; border: 1px solid;
+  white-space: nowrap;
+}
+.pill .glyph { font-size: .85em; line-height: 1; }
+.pill-ok       { color: var(--ok);       background: var(--ok-bg);       border-color: var(--ok); }
+.pill-watch    { color: var(--watch);    background: var(--watch-bg);    border-color: var(--watch); }
+.pill-risk     { color: var(--risk);     background: var(--risk-bg);     border-color: var(--risk); }
+.pill-critical { color: var(--critical); background: var(--critical-bg); border-color: var(--critical); }
+.pill-unknown  { color: var(--unknown);  background: var(--unknown-bg);  border-color: var(--unknown); }
+.pill-neutral  { color: var(--neutral);  background: var(--neutral-bg);  border-color: var(--border-strong); }
+
+.freshness { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; }
+.freshness .age { font-size: .78rem; color: var(--text-muted); }
+
+/* --- layout ---------------------------------------------------------------- */
+main { padding: clamp(1rem, 3vw, 2.2rem); max-width: 1440px; margin: 0 auto; }
+.loading { color: var(--text-muted); }
+
+.crumbs {
+  padding: .55rem clamp(1rem, 3vw, 2.2rem); font-size: .85rem;
+  border-bottom: 1px solid var(--border); background: var(--surface-2);
+  display: flex; gap: .45rem; flex-wrap: wrap; align-items: center;
+}
+.crumbs a { color: var(--accent); text-decoration: none; }
+.crumbs a:hover { text-decoration: underline; }
+.crumbs .sep { color: var(--text-faint); }
+.crumbs .here { color: var(--text-muted); }
+
+section { margin: 0 0 1.7rem; }
+section > h2 {
+  font-size: .78rem; text-transform: uppercase; letter-spacing: .09em;
+  color: var(--text-muted); margin: 0 0 .1rem;
+}
+section > .sub { margin: 0 0 .7rem; font-size: .82rem; color: var(--text-faint); }
+
+.grid { display: grid; gap: .9rem; }
+.g2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+/* The six-tile panels (reliability, risk, coverage) are capped at three
+   columns rather than left to auto-fit. Auto-fit on a wide screen produces a
+   row of five and an orphan, and the orphan reads as an afterthought — which
+   is the opposite of the point when the orphan is "agent coverage: no data". */
+.g3 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+@media (min-width: 1040px) { .g3 { grid-template-columns: repeat(3, 1fr); } }
+.gsys { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: .95rem 1.05rem; box-shadow: var(--shadow);
+}
+.card h3 {
+  margin: 0 0 .35rem; font-size: .76rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted);
+}
+.card .value {
+  font-size: clamp(1.5rem, 3.4vw, 2rem); font-weight: 650; line-height: 1.1;
+  letter-spacing: -.02em; margin: .1rem 0 .3rem;
+}
+/* A sentence is not a number. "1 exhausted · 1 under 25%" set at headline size
+   wraps to two lines and out-shouts the figures either side of it, so textual
+   values step down a size while keeping the same weight and position. */
+.card .value.is-text { font-size: clamp(1.1rem, 2.1vw, 1.35rem); line-height: 1.25; }
+.card .value .unit { font-size: .5em; font-weight: 600; color: var(--text-muted); margin-left: .15em; }
+.card .label { font-size: .9rem; margin: 0 0 .35rem; }
+.card .note {
+  font-size: .76rem; color: var(--text-faint); margin: .35rem 0 0;
+  border-top: 1px dashed var(--border); padding-top: .4rem;
+}
+.card .src { font-family: var(--mono); font-size: .68rem; color: var(--text-faint); }
+
+/* An unknown value must LOOK different, not just read differently: the hatched
+   surface makes a missing tile obvious in a screenshot at arm's length. */
+.card.is-unknown {
+  border-style: dashed; border-color: var(--unknown);
+  background:
+    repeating-linear-gradient(135deg, transparent 0 9px,
+      color-mix(in srgb, var(--unknown) 8%, transparent) 9px 18px),
+    var(--surface);
+}
+.card.is-unknown .value { color: var(--unknown); font-size: 1.15rem; }
+
+/* --- headline -------------------------------------------------------------- */
+.headline {
+  display: grid; gap: 1rem; align-items: center; margin: 0 0 1.7rem;
+  grid-template-columns: minmax(240px, 1fr) minmax(240px, 1.4fr);
+  background: var(--surface); border: 1px solid var(--border);
+  border-left: 8px solid var(--border-strong);
+  border-radius: var(--radius); padding: 1.1rem 1.3rem; box-shadow: var(--shadow);
+}
+.headline.state-ok       { border-left-color: var(--ok); }
+.headline.state-watch    { border-left-color: var(--watch); }
+.headline.state-risk     { border-left-color: var(--risk); }
+.headline.state-critical { border-left-color: var(--critical); }
+.headline.state-unknown  { border-left-color: var(--unknown); }
+.headline .status-word {
+  font-size: clamp(2rem, 5.5vw, 3.1rem); font-weight: 700; letter-spacing: -.03em;
+  line-height: 1; margin: .2rem 0 .4rem; display: flex; gap: .5rem; align-items: baseline;
+}
+.headline .status-word .glyph { font-size: .55em; }
+.state-ok .status-word       { color: var(--ok); }
+.state-watch .status-word    { color: var(--watch); }
+.state-risk .status-word     { color: var(--risk); }
+.state-critical .status-word { color: var(--critical); }
+.state-unknown .status-word  { color: var(--unknown); }
+.headline .say { font-size: 1rem; margin: 0; color: var(--text); }
+.headline .counts { display: flex; gap: .7rem; flex-wrap: wrap; }
+.headline .count-box {
+  flex: 1 1 130px; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: .6rem .75rem;
+}
+.headline .count-box .n { font-size: 1.7rem; font-weight: 700; line-height: 1; }
+.headline .count-box .k { font-size: .74rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; }
+
+/* --- meters and bars ------------------------------------------------------- */
+.meter { height: 8px; background: var(--surface-2); border-radius: 999px; overflow: hidden;
+         border: 1px solid var(--border); }
+.meter > span { display: block; height: 100%; }
+.meter.state-ok > span       { background: var(--ok); }
+.meter.state-watch > span    { background: var(--watch); }
+.meter.state-risk > span     { background: var(--risk); }
+.meter.state-critical > span { background: var(--critical); }
+.meter.state-unknown > span  { background: var(--unknown); }
+
+.funnel { display: grid; gap: .55rem; }
+.funnel-row { display: grid; grid-template-columns: 190px 1fr auto; gap: .75rem; align-items: center; }
+.funnel-row .fbar { height: 26px; background: var(--surface-2); border: 1px solid var(--border);
+                    border-radius: 5px; overflow: hidden; }
+.funnel-row .fbar > span { display: block; height: 100%; background: var(--accent); opacity: .82; }
+.funnel-row .fn { font-variant-numeric: tabular-nums; font-weight: 700; min-width: 4ch; text-align: right; }
+.funnel-row .fk { font-size: .85rem; }
+.funnel-row .fd { grid-column: 1 / -1; font-size: .74rem; color: var(--text-faint); margin: -.3rem 0 .2rem; }
+
+.spark { display: flex; gap: 3px; align-items: flex-end; height: 34px; margin-top: .4rem; }
+.spark i { flex: 1; background: var(--neutral); opacity: .55; border-radius: 2px 2px 0 0; min-height: 2px; }
+.spark i:last-child { opacity: 1; }
+
+/* --- lists and tables ------------------------------------------------------ */
+.rows { list-style: none; margin: .5rem 0 0; padding: 0; display: grid; gap: .35rem; }
+.rows li { display: flex; gap: .55rem; align-items: baseline; font-size: .85rem;
+           padding: .3rem 0; border-top: 1px solid var(--border); }
+.rows li:first-child { border-top: 0; }
+.rows .k { color: var(--text-muted); }
+.rows .v { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+.tablewrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius);
+             background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .85rem; }
+th, td { text-align: left; padding: .55rem .7rem; border-bottom: 1px solid var(--border);
+         vertical-align: top; }
+th { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em;
+     color: var(--text-muted); background: var(--surface-2); position: sticky; top: 0; }
+tbody tr:last-child td { border-bottom: 0; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+td .mono, .mono { font-family: var(--mono); font-size: .95em; }
+
+/* --- incident cards -------------------------------------------------------- */
+.incident {
+  background: var(--surface); border: 1px solid var(--border);
+  border-left: 6px solid var(--border-strong);
+  border-radius: var(--radius); padding: .9rem 1.05rem; box-shadow: var(--shadow);
+}
+.incident.state-critical { border-left-color: var(--critical); }
+.incident.state-risk     { border-left-color: var(--risk); }
+.incident.state-watch    { border-left-color: var(--watch); }
+.incident h3 { margin: .35rem 0 .45rem; font-size: 1rem; text-transform: none;
+               letter-spacing: 0; color: var(--text); }
+.incident dl, .card dl {
+  display: grid; grid-template-columns: minmax(7rem, auto) 1fr; gap: .3rem .9rem;
+  margin: .5rem 0 0; font-size: .87rem;
+}
+.incident dt, .card dt { color: var(--text-muted); }
+.incident dd, .card dd { margin: 0; }
+@media (max-width: 560px) {
+  .incident dl, .card dl { grid-template-columns: 1fr; gap: 0 0; }
+  .incident dt, .card dt { margin-top: .5rem; }
+}
+
+.drill { color: var(--accent); text-decoration: none; font-weight: 600; font-size: .82rem; }
+.drill:hover { text-decoration: underline; }
+.ext::after { content: " ↗"; font-size: .85em; }
+
+.banner {
+  border: 1px solid var(--critical); background: var(--critical-bg); color: var(--critical);
+  border-radius: var(--radius); padding: .7rem .9rem; margin: 0 0 1.1rem; font-size: .88rem;
+}
+.banner.warn { border-color: var(--watch); background: var(--watch-bg); color: var(--watch); }
+.banner strong { font-weight: 700; }
+
+.empty { color: var(--text-faint); font-size: .88rem; margin: .4rem 0 0; }
+
+.foot { padding: 1.2rem clamp(1rem, 3vw, 2.2rem) 2.4rem; color: var(--text-faint);
+        font-size: .78rem; border-top: 1px solid var(--border); }
+.foot p { margin: 0 0 .35rem; max-width: 80ch; }
+.foot-session { font-family: var(--mono); }
+
+@media (max-width: 720px) {
+  .headline { grid-template-columns: 1fr; }
+  .funnel-row { grid-template-columns: 1fr; }
+  .funnel-row .fn { text-align: left; }
+  /* On a phone the header wraps to three rows; sticking it to the top would
+     spend a third of the screen on chrome. The freshness pill is still the
+     first thing above the fold. */
+  .topbar { position: static; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .meter > span, .fbar > span { transition: width .3s ease; }
+}
+
+@media print {
+  .topbar, .crumbs, .btn { position: static; }
+  .card, .incident, .headline { box-shadow: none; break-inside: avoid; }
+}

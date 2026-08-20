@@ -5,7 +5,7 @@ MODULES := $(wildcard modules/*)
 
 .PHONY: setup fmt fmt-check validate test test-mcp tf-validate matrix entities \
         runbooks fixtures applicability fleet reports reports-live inventory \
-        coverage mcp plan-offline clean
+        coverage mcp plan-offline portal portal-test clean
 
 # --- developer entry points --------------------------------------------------
 setup:
@@ -15,7 +15,7 @@ setup:
 
 ## validate — the same offline gate CI runs (YAML/schema/pytest live inside
 ## the test suite; credentialed stages only run in CI).
-validate: fmt-check test test-mcp tf-validate
+validate: fmt-check test test-mcp portal-test tf-validate
 
 fmt:
 	$(TF) fmt -recursive
@@ -30,6 +30,9 @@ test:              ## policy lint, manifests, runbooks, generated docs, scorecar
 ## fully offline, no credentials.
 test-mcp:          ## MCP server contracts, governance, grounding, GitOps
 	$(PY) -m pytest mcp/tests -q
+
+portal-test:       ## executive portal: offline render, freshness, failure states
+	$(PY) -m pytest portal/tests -q
 
 tf-validate:
 	for d in $(MODULES) $(STACKS); do echo "== $$d"; (cd $$d && $(TF) validate) || exit 1; done
@@ -81,6 +84,12 @@ reports-live:      ## report families against the live org (credentialed)
 # --- MCP server (offline by default; live reads need DD keys + OBS_MCP_LIVE=1)
 mcp:               ## smoke-test the MCP server against the offline fixtures
 	$(PY) mcp/server.py --self-test
+
+# --- executive portal (§47-§49) ---------------------------------------------
+## portal — read-only executive view. Offline by default against recorded data
+## in portal/fixtures/; add --live (with DD_API_KEY/DD_APP_KEY) for the org.
+portal:
+	$(PY) portal/server.py
 
 clean:
 	find . -name ".terraform" -type d -prune -exec rm -rf {} +

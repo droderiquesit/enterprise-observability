@@ -1,0 +1,605 @@
+{
+  "accepted_findings": [
+    {
+      "accepted": 27,
+      "check": "C3",
+      "class": "discovered_resources",
+      "exception": "EXC-2026-006",
+      "expires": "2026-11-17",
+      "findings": 66,
+      "over_budget": 39,
+      "owner": "observability-platform"
+    },
+    {
+      "accepted": 1,
+      "check": "C13",
+      "class": "declared_telemetry_dependency",
+      "exception": "EXC-2026-007",
+      "expires": "2026-11-17",
+      "findings": 1,
+      "over_budget": 0,
+      "owner": "infrastructure-engineering"
+    }
+  ],
+  "checks": {
+    "C1": [],
+    "C10": [],
+    "C11": [],
+    "C12": [],
+    "C13": [
+      {
+        "problem": "telemetry dependency: acme.backup.jobs \u2014 custom metric, producer must be deployed",
+        "slo_id": "slo-infra-backup-success"
+      }
+    ],
+    "C14": [],
+    "C15": [],
+    "C16": [],
+    "C17": [],
+    "C2": [],
+    "C3": [
+      {
+        "id": "queue:0baa7607c956",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "host:b4edd51a624d",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "host:9924566cf7f8",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "service:93e3f1c4b87c",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "service:905c00808d30",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "service:06a6c6d04c1b",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "host:a37e09804c60",
+        "violations": [
+          "invalid_tier:gold"
+        ]
+      },
+      {
+        "id": "host:12bb44cb627f",
+        "violations": [
+          "invalid_tier:gold"
+        ]
+      },
+      {
+        "id": "certificate:fa2304a993d0",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "host:638843439c7e",
+        "violations": [
+          "invalid_tier:gold"
+        ]
+      },
+      {
+        "id": "service:7d948a2fac09",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "kube_deployment:a41f927b299f",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "host:3919df0f4e6e",
+        "violations": [
+          "invalid_tier:gold"
+        ]
+      },
+      {
+        "id": "pipeline:e3c51b191893",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "host:7f2e920d6be8",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "certificate:4f352ec000df",
+        "violations": [
+          "invalid_tier:gold"
+        ]
+      },
+      {
+        "id": "service:30be8f4fae22",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "host:806ed4e61818",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "pipeline:0f7a40fe7af5",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "pipeline:afa7e96adc16",
+        "violations": [
+          "invalid_tier:gold"
+        ]
+      },
+      {
+        "id": "service:14d5a55cac12",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "host:2628f427ad8f",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "azure_resource:6f0465476ff8",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "queue:608f6776534b",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "host:c4d097fde040",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "azure_resource:a165b9f7a3e9",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "host:f72465e687d0",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "database:8760ada879f2",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "service:a681ac4d14e0",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "service:b5dc9aeac607",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "service:75a9709b04e6",
+        "violations": [
+          "invalid_tier:gold"
+        ]
+      },
+      {
+        "id": "certificate:6e863741f0fe",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "kube_deployment:8519ec84605e",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "service:564916ae6837",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "service:be1f84a6cc92",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "pipeline:80a793dace9b",
+        "violations": [
+          "invalid_tier:gold"
+        ]
+      },
+      {
+        "id": "database:7c35815e162e",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "certificate:12ce0441a415",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "host:ea32a6eb5d62",
+        "violations": [
+          "invalid_tier:gold"
+        ]
+      },
+      {
+        "id": "pipeline:895a1c362d8a",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "kube_deployment:d8df9b6ad66b",
+        "violations": [
+          "invalid_tier:gold"
+        ]
+      },
+      {
+        "id": "kube_deployment:07871ab59b34",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "kube_deployment:48ea2dfe1323",
+        "violations": [
+          "invalid_tier:gold"
+        ]
+      },
+      {
+        "id": "queue:b2715f67a7fa",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "log_source:0b436a49a62c",
+        "violations": [
+          "invalid_tier:gold"
+        ]
+      },
+      {
+        "id": "kube_deployment:4cb1920b2af1",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "host:507a7db0d4cb",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "kube_deployment:5c91b82aa035",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "certificate:f5c4fed54ce2",
+        "violations": [
+          "invalid_tier:gold"
+        ]
+      },
+      {
+        "id": "host:6d4092b6b050",
+        "violations": [
+          "invalid_tier:gold"
+        ]
+      },
+      {
+        "id": "host:737a2c9ec10a",
+        "violations": [
+          "invalid_tier:gold"
+        ]
+      },
+      {
+        "id": "host:7f4150d961ba",
+        "violations": [
+          "invalid_tier:gold"
+        ]
+      },
+      {
+        "id": "host:b7a84c51b07c",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "host:0963323f7acb",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "queue:283ef5329e75",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "log_source:f0e3d041867e",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "queue:2b003a6c43a4",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "host:3d4cb618de0a",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "host:7e14cfcde508",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "azure_resource:3db4e3a9fca1",
+        "violations": [
+          "invalid_tier:gold"
+        ]
+      },
+      {
+        "id": "certificate:d6ae00fbf63f",
+        "violations": [
+          "invalid_tier:gold"
+        ]
+      },
+      {
+        "id": "pipeline:00998dc93ca8",
+        "violations": [
+          "invalid_tier:gold"
+        ]
+      },
+      {
+        "id": "pipeline:ca0376b8b5da",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "azure_resource:9c3fbc939f29",
+        "violations": [
+          "invalid_tier:gold"
+        ]
+      },
+      {
+        "id": "queue:31dd9e8cb8ff",
+        "violations": [
+          "invalid_env:production"
+        ]
+      },
+      {
+        "id": "database:e3b136fce81e",
+        "violations": [
+          "invalid_env:production"
+        ]
+      }
+    ],
+    "C4": [],
+    "C5": [],
+    "C6": [],
+    "C7": [],
+    "C8": [],
+    "C9": []
+  },
+  "generated_at": "2026-08-20T02:22:17.465517+00:00",
+  "observe_only_sample": [
+    "service:3dca197ef90a",
+    "service:9ce44410d7ff",
+    "pipeline:c99d2b4534a3",
+    "queue:1adf691266b7",
+    "host:f08be0e18f6f",
+    "host:57a0f37a3c77",
+    "kube_deployment:315692aab6a6",
+    "database:8b6cb7aa0659",
+    "certificate:7686499db195",
+    "log_source:3695e199ac9b",
+    "service:99d49b46f349",
+    "service:28a3115684f1",
+    "pipeline:dd6cd2d03b0b",
+    "queue:a45adefa3721",
+    "host:b071e8123940",
+    "host:982adbd9c88e",
+    "kube_deployment:8a28ea724d42",
+    "database:b8ab88b0c239",
+    "certificate:0865d23dc536",
+    "log_source:df1b0d6fd19d",
+    "service:a4beabf9b439",
+    "service:81b80bbe115b",
+    "pipeline:a332d08bb7b1",
+    "queue:5a92f08d1a39",
+    "host:aa5ce54fe894",
+    "host:ce340e58e2cc",
+    "kube_deployment:e95a37605fb4",
+    "database:0954c8ee6e2e",
+    "certificate:3775afdd1404",
+    "log_source:8cbd876d5b9a",
+    "service:e13dd7dfe537",
+    "service:b7ee2d064a01",
+    "pipeline:63b947b173b6",
+    "queue:0645f4095867",
+    "host:a37e09804c60",
+    "host:12bb44cb627f",
+    "host:05b2d32acbab",
+    "kube_deployment:6591e9cfba81",
+    "database:d0ee61379ee1",
+    "certificate:fa2304a993d0",
+    "log_source:51764e9eff46",
+    "service:520cfc49c7c5",
+    "service:3f4249a2384a",
+    "pipeline:d0443f514b08",
+    "queue:553e7f721ab5",
+    "host:638843439c7e",
+    "host:40b550a4406a",
+    "kube_deployment:54cb6c6d5e87",
+    "database:263219989a2b",
+    "certificate:461740aa7edf"
+  ],
+  "summary": {
+    "accepted_counts": {
+      "C1": 0,
+      "C10": 0,
+      "C11": 0,
+      "C12": 0,
+      "C13": 1,
+      "C14": 0,
+      "C15": 0,
+      "C16": 0,
+      "C17": 0,
+      "C2": 0,
+      "C3": 27,
+      "C4": 0,
+      "C5": 0,
+      "C6": 0,
+      "C7": 0,
+      "C8": 0,
+      "C9": 0
+    },
+    "check_counts": {
+      "C1": 0,
+      "C10": 0,
+      "C11": 0,
+      "C12": 0,
+      "C13": 1,
+      "C14": 0,
+      "C15": 0,
+      "C16": 0,
+      "C17": 0,
+      "C2": 0,
+      "C3": 66,
+      "C4": 0,
+      "C5": 0,
+      "C6": 0,
+      "C7": 0,
+      "C8": 0,
+      "C9": 0
+    },
+    "coverage_pct": 100.0,
+    "deploy_blocking_counts": {
+      "C1": 0,
+      "C10": 0,
+      "C11": 0,
+      "C12": 0,
+      "C13": 0,
+      "C14": 0,
+      "C15": 0,
+      "C16": 0,
+      "C17": 0,
+      "C2": 0,
+      "C3": 0,
+      "C4": 0,
+      "C5": 0,
+      "C6": 0,
+      "C7": 0,
+      "C8": 0,
+      "C9": 0
+    },
+    "deploy_pass": true,
+    "deploy_unaccepted_counts": {
+      "C1": 0,
+      "C10": 0,
+      "C11": 0,
+      "C12": 0,
+      "C13": 0,
+      "C14": 0,
+      "C15": 0,
+      "C16": 0,
+      "C17": 0,
+      "C2": 0,
+      "C3": 0,
+      "C4": 0,
+      "C5": 0,
+      "C6": 0,
+      "C7": 0,
+      "C8": 0,
+      "C9": 0
+    },
+    "monitors_managed": 651,
+    "monitors_paging": 70,
+    "monitors_total": 651,
+    "pass": false,
+    "resources_alertable": 1493,
+    "resources_covered": 1493,
+    "resources_observe_only": 507,
+    "resources_total": 2000,
+    "unaccepted_counts": {
+      "C1": 0,
+      "C10": 0,
+      "C11": 0,
+      "C12": 0,
+      "C13": 0,
+      "C14": 0,
+      "C15": 0,
+      "C16": 0,
+      "C17": 0,
+      "C2": 0,
+      "C3": 39,
+      "C4": 0,
+      "C5": 0,
+      "C6": 0,
+      "C7": 0,
+      "C8": 0,
+      "C9": 0
+    }
+  }
+}

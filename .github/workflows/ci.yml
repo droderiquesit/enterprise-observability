@@ -84,6 +84,7 @@ jobs:
       # the difference between a report family that exists and one anybody reads.
       - name: "Report families — offline against tests/fixtures"
         run: cd tools && python reports.py --fixtures ../tests/fixtures
+
       # A separate step rather than a wider pytest path, for two reasons: the
       # MCP server needs jsonschema at RUNTIME (it enforces every tool's
       # published inputSchema), and a distinct step name means a failure here
@@ -94,6 +95,14 @@ jobs:
         run: |
           pip install -r mcp/requirements.txt
           python -m pytest mcp/tests -q
+
+      # The executive portal (§47-§49) is gated OFFLINE, with no credentials:
+      # it must render from portal/fixtures/ alone, report data freshness, and
+      # show an explicit error state — never a confident zero — when an
+      # upstream fails. A reporting surface that only works against production
+      # is a reporting surface nobody reviews.
+      - name: "Executive portal — offline render, freshness, failure states"
+        run: python -m pytest portal/tests -q
 
       - uses: actions/upload-artifact@v4
         if: always()
