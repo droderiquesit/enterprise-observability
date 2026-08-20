@@ -19,6 +19,14 @@ on:
           report from a previous run first.
         type: boolean
         default: false
+      max_delete:
+        description: >-
+          Cap on objects removed in one purge. The default refuses a large
+          sweep on purpose: a reconciler that deletes hundreds of objects
+          because a path changed is worse than the drift it was fixing. Raise
+          it only after reading a dry-run report that says how many and which.
+        type: string
+        default: "40"
 # Each cron fires ONE job (gated per job below) — GitHub itself triggers the
 # whole workflow on every schedule, so without the gates both jobs would run
 # on both crons. workflow_dispatch runs both.
@@ -146,6 +154,7 @@ jobs:
         run: |
           cd tools
           python catalog_reconcile.py \
+            --max-delete "${{ (github.event_name == 'workflow_dispatch' && inputs.max_delete) || '40' }}" \
             ${{ (github.event_name == 'workflow_dispatch' && inputs.purge_unmanaged) && '--delete' || '' }}
 
       # Fleet compliance decays exactly the way coverage does — an agent that
