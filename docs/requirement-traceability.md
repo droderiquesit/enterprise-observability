@@ -26,16 +26,17 @@ row was confirmed by a repository-wide search that returned zero matches.
 
 | Status | Sections |
 |---|---|
-| OK | 21 |
-| IMPROVE | 9 |
-| PARTIAL | 12 |
-| MISSING | 15 |
+| OK | 22 |
+| IMPROVE | 10 |
+| PARTIAL | 11 |
+| MISSING | 14 |
 | OBSOLETE | 1 (resolved) |
 | N/A | 2 |
 
 The platform is strong on the **monitor → SLO → routing → runbook** spine and
 absent on the **product surfaces** — MCP server, executive portal,
-presentation, survey — and on **fleet/agent operations** and **Control-M**.
+presentation, survey — and on **fleet/agent operations**. **Control-M** moved
+from MISSING to OK in phase 5 (§24).
 
 ---
 
@@ -123,10 +124,16 @@ presentation, survey — and on **fleet/agent operations** and **Control-M**.
 
 | § | Requirement | Status | Where | Gap → Remediation | Validation |
 |---|---|---|---|---|---|
-| 24 | Real-time in-flight job anomaly detection | **MISSING** | — (repo-wide search for `control_m`/`controlm` returns **0 files**) | No Control-M integration, metrics, archetypes or runbooks. Remediation: define the six `controlm.job.*` custom metrics, an emitter contract in `telemetry-gaps.md`, and archetypes for in-flight duration ratio, missed start, abnormal short run, dependency failure | duration-ratio anomaly firing on a synthetic long-running job |
+| 24 | Real-time in-flight job anomaly detection | **OK** | `platform/policy/archetypes/controlm.yaml` (9 archetypes), `docs/telemetry-gaps.md` §9, `platform/runbooks/controlm-*.md` | Closed. The six `controlm.job.*` metrics have an emission contract (Automation API exporter, 60s poll); `controlm-job-inflight-overrun` alerts on a running job by multiplying `controlm.job.duration_ratio` by `controlm.job.running`, so it cannot fire on a completed run and does not need one to fire. Late start, missing execution, abnormally short run, job failure, dependency failure, job freshness and exporter health are covered alongside it | `tests/test_controlm.py` — a 5-minute job 20 minutes in (ratio 4.0) alerts while `controlm.job.running` is 1, and evaluates to 0 once it is not |
 
 Note: an earlier instruction in this engagement removed Control-M from scope.
 This prompt reinstates it; the reinstatement is treated as authoritative.
+
+Remaining, deliberately not built: nothing here *acts* on Control-M. The
+`remediate-rerun-job` workflow raises the rerun as a ServiceNow task rather than
+calling the Automation API's `run/job/{id}/rerun` — an automated rerun of a
+financial batch job is a change, not a remediation, and it needs the change
+board before it needs code.
 
 ---
 
@@ -135,7 +142,7 @@ This prompt reinstates it; the reinstatement is treated as authoritative.
 | § | Requirement | Status | Where | Gap → Remediation | Validation |
 |---|---|---|---|---|---|
 | 25 | Event Management pipeline | **PARTIAL** | `platform/events/correlation-rules.yaml`, `tools/correlate_events.py` | Rules exist as an **executable specification**; `correlation_key`/`dedup_key` are stamped on every monitor so native aggregation works. Nothing configures Datadog Event Management itself | correlation test + live event-aggregation check |
-| 26 | Correlation examples (database, VMware, network, deployment, Control-M) | **PARTIAL** | same | 6 rules with root-cause ranking; Control-M rule absent | `test_correlation.py` |
+| 26 | Correlation examples (database, VMware, network, deployment, Control-M) | **IMPROVE** | same | 7 rules with root-cause ranking. Control-M rule added (`scheduler-job-suppresses-downstream-data-symptoms`): overrunning job → missed downstream pipeline → stale data collapse into one incident rooted at the job, keeping the worst child priority. Still nothing configures Datadog Event Management itself | `test_correlation.py`, `test_controlm.py` |
 | 27 | Incident Management + Incident Command | **PARTIAL** | `notification_profiles.yaml` (`datadog_incident: SEV-1`) | Severity → incident intent is declared; no incident-command role model, no timeline/PIR automation | live incident created from a P1 |
 | 28 | On-Call: teams, schedules, escalation, routing, recovery | **IMPROVE** | `modules/team_oncall` | 7 teams, 14 schedules, 7 four-step policies. **Rosters are empty** — every position is unassigned, so a page reaches nobody | schedule occupancy check |
 | 29 | Centralized routing, no PagerDuty/Slack | **OK** | `modules/notification_rules` (111 rules) | Monitors carry no destinations | route resolution: 651/651 resolve |
@@ -226,7 +233,7 @@ shippable and leaves the platform working.
 | **2** | Telemetry requirements on every archetype + applicability engine | §16, §38, §39 |
 | **3** | Fleet management + agent profiles + deployment metadata (`DD_VERSION`) | §8, §36, §37, §39 |
 | **4** | SLO profiles and per-service objective overrides | §11, §12, §13, §15 |
-| **5** | Control-M in-flight monitoring | §24, §26 |
+| **5** | Control-M in-flight monitoring — **done** | §24, §26 |
 | **6** | Reports catalog + dashboard consolidation + survey + scorecards | §33, §34, §35, §41 |
 | **7** | MCP server: Ask, then Act, then governance | §42–§46 |
 | **8** | Executive portal | §47–§49 |
