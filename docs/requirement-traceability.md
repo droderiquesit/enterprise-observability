@@ -26,16 +26,23 @@ row was confirmed by a repository-wide search that returned zero matches.
 
 | Status | Sections |
 |---|---|
-| OK | 21 |
+| OK | 23 |
 | IMPROVE | 9 |
 | PARTIAL | 12 |
-| MISSING | 15 |
+| MISSING | 13 |
 | OBSOLETE | 1 (resolved) |
 | N/A | 2 |
 
 The platform is strong on the **monitor → SLO → routing → runbook** spine and
 absent on the **product surfaces** — MCP server, executive portal,
-presentation, survey — and on **fleet/agent operations** and **Control-M**.
+presentation, survey — and on **Control-M**.
+
+Fleet and agent operations (§36, §37, §39) moved in phase 3: the profiles and
+the compliance measurement are implemented and tested; the agent INSTALLATION
+is documented rather than automated, because the mechanisms that perform it —
+Azure Policy assignment, the golden image, configuration management — are owned
+by other repositories. `docs/fleet-management.md` §5 is the line between the
+two, and it is deliberately the bluntest table in this repository.
 
 ---
 
@@ -72,7 +79,7 @@ presentation, survey — and on **fleet/agent operations** and **Control-M**.
 | § | Requirement | Status | Where | Gap → Remediation | Validation |
 |---|---|---|---|---|---|
 | 8 | Consistent `service` / `env` / `version` identity across APM, logs, metrics, RUM, monitors, SLOs, catalog | **PARTIAL** | `docs/tagging-standard.md`, `platform/policy/global.yaml` | Standard is written and complete. **Nothing emits `alert_band` onto telemetry**, so every query filters to an empty set; `version` is grouped on but not emitted | `profile_engine.py` violations; `deployment-version-tag-missing` archetype |
-| 8 | Fix CI/CD so deployment metadata reaches Datadog | **MISSING** | — | No pipeline sets `DD_VERSION` / `DD_GIT_COMMIT_SHA`. Remediation: add to the deploy workflow and document per-runtime | deployment events visible in Datadog |
+| 8 | Fix CI/CD so deployment metadata reaches Datadog | **PARTIAL** | `.github/workflows/deploy.yml`, `tools/emit_deployment_event.py`, `docs/tagging-standard.md` § Deployment metadata | The deploy workflow now sets all three variables and emits a deployment marker for the one service this repo deploys (the monitoring configuration). The per-runtime requirement is documented for every stack in the estate; **the estate's own application pipelines still have to implement it** — no code here can reach them | deployment events visible in Datadog; `deployment-version-tag-missing` |
 
 ---
 
@@ -159,10 +166,10 @@ This prompt reinstates it; the reinstatement is treated as authoritative.
 
 | § | Requirement | Status | Where | Gap → Remediation | Validation |
 |---|---|---|---|---|---|
-| 36 | Fleet Management standard and automation | **MISSING** | mentioned in 5 docs, implemented nowhere | No agent deployment automation, no Azure Policy/extension/golden-image path | fleet compliance percentage |
-| 37 | Standard agent profiles (base, Windows, Linux, application, SQL Server) | **MISSING** | — | Remediation: `platform/policy/agent_profiles.yaml` + per-profile check configuration | profile → check census |
+| 36 | Fleet Management standard and automation | **PARTIAL** | `docs/fleet-management.md`, `platform/policy/agent_profiles.yaml` | Standard written: Azure Policy + VM extension, golden image + configuration management, Arc, manual as the recorded exception. The **installation itself is not automated from this repository** and cannot be — the policy assignment and the CM roles live in the landing-zone and infrastructure repos. §5 of the standard is the honest split | `fleet_compliance.py` percentage |
+| 37 | Standard agent profiles (base, Windows, Linux, application, SQL Server) | **OK** | `platform/policy/agent_profiles.yaml` | Five profiles, each declaring its checks, integrations, telemetry emitted and the archetypes it enables. No Kubernetes profile — recorded under `conditional_profiles` with its trigger, because the estate has none | `tests/test_fleet.py` asserts every enabled archetype exists |
 | 38 | Every monitor declares required telemetry | **MISSING** | — | Archetypes declare `resource_type` and `detection` but not a `telemetry:` requirement, so "can this monitor ever fire here?" is unanswerable | applicability engine report |
-| 39 | Fleet compliance detection and percentage | **PARTIAL** | `agent-version-drift`, `host-agent-unhealthy`, `os-*` archetypes | Detects agent health and drift; no compliant/required ratio | compliance metric |
+| 39 | Fleet compliance detection and percentage | **OK** | `tools/fleet_compliance.py` | Eight checks (agent missing/offline/out of date, integration, DBM, APM, tags, ownership) over an inventory denominator; one finding per host, percentage = compliant/required. Report-only until the first rollout wave — `compliance.ratio.report_targets` records the trigger for making it a gate | offline fixture run in CI; `--live` in the nightly governance loop |
 | 40 | Private synthetic locations | **N/A → verify** | `saas.yaml` uses `synthetics.*` metrics | No `datadog_synthetics_test` or private-location resources. Requirement is conditional on internal apps needing them | inventory of internal endpoints |
 | 41 | Entity-aware Datadog Scorecards | **PARTIAL** | `tools/monitor_scorecard.py` | A **local Python** scorecard over the catalog, not Datadog Scorecards, and it grades monitors rather than entities | Datadog scorecard rule census |
 
