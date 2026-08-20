@@ -1,0 +1,73 @@
+# =============================================================================
+# ONE STACK, ONE ENVIRONMENT — restore state, plan, apply, persist state.
+#
+# The ordering here is not stylistic. State is persisted even when `apply`
+# FAILS, because a partial apply has already created real Datadog resources:
+# discarding the state that tracks them turns a red build into an orphaned
+# fleet that the next run will try to create a second time. The apply's exit
+# code is captured, state is written, and only then does the step fail.
+#
+# State lives on the orphan `tfstate` branch (ADR-016). tools/tfstate-git.sh
+# moves it in and out with git plumbing and pushes fast-forward-only with
+# rebuild-on-race, so a lost push never overwrites another run's commit.
+# =============================================================================
+parameters:
+  - name: stack                 # foundation | coverage
+    type: string
+  - name: environment           # dev | qa | stage | prod
+    type: string
+  - name: planArgs              # extra -var flags for `terraform plan`
+    type: string
+    default: ''
+  - name: displayName
+    type: string
+    default: ''
+
+steps:
+  - bash: |
+      set -euo pipefail
+      STACK="${{ parameters.stack }}"
+      ENVNAME="${{ parameters.environment }}"
+
+      # tfstate-git.sh writes commits; a committer identity must exist or the
+      # plumbing call fails with an unhelpful error deep inside git.
+      git config user.name  "observability-deploy[bot]"
+      git config user.email "observability-deploy@users.noreply.local"
+
+      cd "stacks/${STACK}"
+
+      echo "── restore state ──────────────────────────────────────────────"
+      ../../tools/tfstate-git.sh restore "$STACK" "$ENVNAME"
+
+      echo "── init ───────────────────────────────────────────────────────"
+      # -reconfigure: a self-hosted agent reuses its workspace, and a
+      # .terraform/ left by an earlier run records a backend this repository no
+      # longer declares (state is git-backed, ADR-016). Without it the init
+      # fails with "Backend initialization required" on the second run only —
+      # the worst kind of failure, because it never reproduces on a hosted
+      # agent.
+      terraform init -input=false -no-color -reconfigure
+
+      echo "── plan ───────────────────────────────────────────────────────"
+      terraform plan -input=false -no-color ${{ parameters.planArgs }} -out=tfplan
+
+      echo "── apply ──────────────────────────────────────────────────────"
+      rc=0
+      terraform apply -input=false -no-color tfplan || rc=$?
+
+      # Persist BEFORE honouring the failure — see the header.
+      if [ -f terraform.tfstate ]; then
+        echo "── persist state (apply rc=${rc}) ───────────────────────────"
+        ../../tools/tfstate-git.sh persist "$STACK" "$ENVNAME"
+      else
+        echo "no local state file produced — nothing to persist"
+      fi
+
+      if [ "$rc" -ne 0 ]; then
+        echo "##vso[task.logissue type=error]terraform apply failed for ${STACK}/${ENVNAME} (exit ${rc}); state has been persisted so the next run reconciles rather than duplicates."
+        exit "$rc"
+      fi
+    displayName: ${{ coalesce(parameters.displayName, format('Apply · {0} → {1}', parameters.stack, parameters.environment)) }}
+    env:
+      DD_API_KEY: $(DD_API_KEY)
+      DD_APP_KEY: $(DD_APP_KEY)

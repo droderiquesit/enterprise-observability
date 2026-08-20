@@ -1,0 +1,150 @@
+# =============================================================================
+# ONE ENVIRONMENT. Every step runs inside AzureCLI@2 because each of those
+# tasks carries the federated login context from the service connection — a
+# plain `bash:` step would not be authenticated to Azure.
+#
+# The steps call deploy/otel-collector/scripts/*, which are the SAME
+# scripts the GitHub Actions workflow runs.
+# =============================================================================
+parameters:
+  - name: environment          # dev | qa | stage | prod
+    type: string
+  - name: serviceConnection    # ARM service connection (workload identity federation)
+    type: string
+  - name: resourceGroup
+    type: string
+  - name: location
+    type: string
+  - name: imageRepository
+    type: string
+  - name: imageTag
+    type: string
+  - name: appVersion
+    type: string
+  - name: acrName
+    type: string
+    default: ''
+  - name: acrLoginServer
+    type: string
+    default: ''
+  - name: keyVaultName
+    type: string
+    default: ''
+  - name: datadogKeyVaultUrl
+    type: string
+    default: ''
+  - name: bicepVersion
+    type: string
+    default: 'v0.30.23'
+
+steps:
+  - checkout: self
+    fetchDepth: 1
+
+  - bash: |
+      set -euo pipefail
+      command -v az >/dev/null || { echo "##vso[task.logissue type=error]Azure CLI is not installed on this agent. Microsoft-hosted images include it; a self-hosted agent needs it pre-installed."; exit 1; }
+      command -v jq >/dev/null || {
+        if command -v sudo >/dev/null && command -v apt-get >/dev/null; then sudo apt-get install -y -qq jq;
+        else echo "##vso[task.logissue type=error]jq missing and cannot be installed on this agent."; exit 1; fi; }
+      # Pin Bicep: `az` otherwise downloads a floating version on first use, so
+      # the compiler differs between agents and over time.
+      az bicep install --version "${{ parameters.bicepVersion }}"
+      echo "az    $(az version --query '"azure-cli"' -o tsv)"
+      echo "bicep $(az bicep version)"
+      echo "jq    $(jq --version)"
+      chmod +x deploy/otel-collector/scripts/*.sh
+    displayName: "Toolchain · Azure CLI, Bicep (pinned), jq"
+    retryCountOnTaskFailure: 2
+
+  - task: AzureCLI@2
+    displayName: "Preflight · auth, inputs, image exists, providers"
+    inputs:
+      azureSubscription: ${{ parameters.serviceConnection }}
+      scriptType: bash
+      scriptLocation: scriptPath
+      scriptPath: deploy/otel-collector/scripts/preflight.sh
+      arguments: ${{ parameters.environment }}
+    env:
+      RESOURCE_GROUP: ${{ parameters.resourceGroup }}
+      LOCATION: ${{ parameters.location }}
+      IMAGE_REPOSITORY: ${{ parameters.imageRepository }}
+      IMAGE_TAG: ${{ parameters.imageTag }}
+      APP_VERSION: ${{ parameters.appVersion }}
+      ACR_NAME: ${{ parameters.acrName }}
+      ACR_LOGIN_SERVER: ${{ parameters.acrLoginServer }}
+      KEY_VAULT_NAME: ${{ parameters.keyVaultName }}
+      DD_API_KEY_VAULT_URL: ${{ parameters.datadogKeyVaultUrl }}
+
+  - task: AzureCLI@2
+    displayName: "Deploy · what-if preview, then apply"
+    inputs:
+      azureSubscription: ${{ parameters.serviceConnection }}
+      scriptType: bash
+      scriptLocation: scriptPath
+      scriptPath: deploy/otel-collector/scripts/deploy.sh
+      arguments: ${{ parameters.environment }}
+    env:
+      RESOURCE_GROUP: ${{ parameters.resourceGroup }}
+      LOCATION: ${{ parameters.location }}
+      IMAGE_REPOSITORY: ${{ parameters.imageRepository }}
+      IMAGE_TAG: ${{ parameters.imageTag }}
+      APP_VERSION: ${{ parameters.appVersion }}
+      ACR_NAME: ${{ parameters.acrName }}
+      ACR_LOGIN_SERVER: ${{ parameters.acrLoginServer }}
+      KEY_VAULT_NAME: ${{ parameters.keyVaultName }}
+      DD_API_KEY_VAULT_URL: ${{ parameters.datadogKeyVaultUrl }}
+      GIT_COMMIT_SHA: $(Build.SourceVersion)
+      GIT_REPOSITORY_URL: $(Build.Repository.Uri)
+      BUILD_ID: $(Build.BuildId)
+
+  - task: AzureCLI@2
+    displayName: "Idempotency gate · a second deployment must change nothing"
+    inputs:
+      azureSubscription: ${{ parameters.serviceConnection }}
+      scriptType: bash
+      scriptLocation: scriptPath
+      scriptPath: deploy/otel-collector/scripts/idempotency-gate.sh
+      arguments: ${{ parameters.environment }}
+    env:
+      RESOURCE_GROUP: ${{ parameters.resourceGroup }}
+      LOCATION: ${{ parameters.location }}
+      IMAGE_REPOSITORY: ${{ parameters.imageRepository }}
+      IMAGE_TAG: ${{ parameters.imageTag }}
+      APP_VERSION: ${{ parameters.appVersion }}
+      ACR_NAME: ${{ parameters.acrName }}
+      ACR_LOGIN_SERVER: ${{ parameters.acrLoginServer }}
+      KEY_VAULT_NAME: ${{ parameters.keyVaultName }}
+      DD_API_KEY_VAULT_URL: ${{ parameters.datadogKeyVaultUrl }}
+      GIT_COMMIT_SHA: $(Build.SourceVersion)
+      GIT_REPOSITORY_URL: $(Build.Repository.Uri)
+      BUILD_ID: $(Build.BuildId)
+
+  - task: AzureCLI@2
+    displayName: "Smoke · the revision actually started"
+    inputs:
+      azureSubscription: ${{ parameters.serviceConnection }}
+      scriptType: bash
+      scriptLocation: scriptPath
+      scriptPath: deploy/otel-collector/scripts/smoke.sh
+      arguments: ${{ parameters.environment }}
+    env:
+      RESOURCE_GROUP: ${{ parameters.resourceGroup }}
+
+  - task: AzureCLI@2
+    displayName: "Diagnostics on failure"
+    condition: failed()
+    continueOnError: true
+    inputs:
+      azureSubscription: ${{ parameters.serviceConnection }}
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        set +e
+        echo "── recent deployments ──"
+        az deployment group list -g "${{ parameters.resourceGroup }}" \
+          --query "sort_by([].{name:name,state:properties.provisioningState,ts:properties.timestamp}, &ts)[-5:]" -o table
+        echo "── container app ──"
+        az containerapp show -n "ca-otel-collector-${{ parameters.environment }}" \
+          -g "${{ parameters.resourceGroup }}" \
+          --query "properties.{state:provisioningState,rev:latestRevisionName}" -o json

@@ -1,0 +1,104 @@
+name: otel-collector (environment)
+# =============================================================================
+# REUSABLE: deploys the OpenTelemetry Collector into ONE Container Apps
+# Environment. Called once per environment by the promotion workflow, so the
+# steps exist in exactly one place.
+#
+# Everything of substance lives in deploy/otel-collector/scripts/ —
+# the same scripts the Azure DevOps pipeline runs. Two thin wrappers over one
+# implementation, so a fix cannot land in one CI system and not the other.
+# =============================================================================
+on:
+  workflow_call:
+    inputs:
+      environment:        { required: true,  type: string }   # dev | qa | prod
+      gitHubEnvironment:  { required: true,  type: string }   # GitHub env holding the approval
+      resourceGroup:      { required: true,  type: string }
+      location:           { required: true,  type: string }
+      imageRepository:    { required: true,  type: string }
+      imageTag:           { required: true,  type: string }
+      appVersion:         { required: true,  type: string }
+      acrName:            { required: false, type: string, default: '' }
+      acrLoginServer:     { required: false, type: string, default: '' }
+      keyVaultName:       { required: false, type: string, default: '' }
+      datadogKeyVaultUrl: { required: false, type: string, default: '' }
+      bicepVersion:       { required: false, type: string, default: 'v0.30.23' }
+    secrets:
+      AZURE_CLIENT_ID:       { required: true }
+      AZURE_TENANT_ID:       { required: true }
+      AZURE_SUBSCRIPTION_ID: { required: true }
+
+permissions:
+  id-token: write     # OIDC federation — no client secret is ever stored
+  contents: read
+
+jobs:
+  deploy:
+    name: "deploy → ${{ inputs.environment }}"
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.gitHubEnvironment }}
+    timeout-minutes: 60
+    # One deployment per environment at a time. Two concurrent runs against the
+    # same resource group race on the same resources.
+    concurrency:
+      group: otel-collector-${{ inputs.environment }}
+      cancel-in-progress: false
+    env:
+      RESOURCE_GROUP:        ${{ inputs.resourceGroup }}
+      LOCATION:              ${{ inputs.location }}
+      IMAGE_REPOSITORY:      ${{ inputs.imageRepository }}
+      IMAGE_TAG:             ${{ inputs.imageTag }}
+      APP_VERSION:           ${{ inputs.appVersion }}
+      ACR_NAME:              ${{ inputs.acrName }}
+      ACR_LOGIN_SERVER:      ${{ inputs.acrLoginServer }}
+      KEY_VAULT_NAME:        ${{ inputs.keyVaultName }}
+      DD_API_KEY_VAULT_URL:  ${{ inputs.datadogKeyVaultUrl }}
+      GIT_COMMIT_SHA:        ${{ github.sha }}
+      GIT_REPOSITORY_URL:    ${{ github.server_url }}/${{ github.repository }}
+      BUILD_ID:              ${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Azure CLI ships on ubuntu-latest; the Bicep CLI does not, and `az`
+      # would otherwise silently fetch a floating version on first use.
+      - name: "Toolchain — Azure CLI, Bicep (pinned), jq"
+        run: |
+          set -euo pipefail
+          command -v az >/dev/null || { echo "::error::Azure CLI missing from the runner image"; exit 1; }
+          command -v jq >/dev/null || sudo apt-get install -y -qq jq
+          az bicep install --version "${{ inputs.bicepVersion }}"
+          echo "az    $(az version --query '"azure-cli"' -o tsv)"
+          echo "bicep $(az bicep version)"
+          echo "jq    $(jq --version)"
+
+      - name: "Azure login (OIDC)"
+        uses: azure/login@v2
+        with:
+          client-id:       ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: "Preflight"
+        run: ./deploy/otel-collector/scripts/preflight.sh "${{ inputs.environment }}"
+
+      - name: "Deploy (what-if preview, then apply)"
+        run: ./deploy/otel-collector/scripts/deploy.sh "${{ inputs.environment }}"
+
+      # The gate: re-run what-if and fail if anything would still change.
+      - name: "Idempotency gate — a second deployment must change nothing"
+        run: ./deploy/otel-collector/scripts/idempotency-gate.sh "${{ inputs.environment }}"
+
+      - name: "Smoke — the revision actually started"
+        run: ./deploy/otel-collector/scripts/smoke.sh "${{ inputs.environment }}"
+
+      - name: "Diagnostics on failure"
+        if: failure()
+        continue-on-error: true
+        run: |
+          set +e
+          echo "── recent deployments ──"
+          az deployment group list -g "$RESOURCE_GROUP" \
+            --query "sort_by([].{name:name,state:properties.provisioningState,ts:properties.timestamp}, &ts)[-5:]" -o table
+          echo "── container app ──"
+          az containerapp show -n "ca-otel-collector-${{ inputs.environment }}" \
+            -g "$RESOURCE_GROUP" --query "properties.{state:provisioningState,rev:latestRevisionName}" -o json
