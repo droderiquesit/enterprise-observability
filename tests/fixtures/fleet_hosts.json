@@ -1,0 +1,148 @@
+[
+ {
+  "apps": [
+   "system",
+   "disk",
+   "ntp",
+   "windows_service",
+   "windows_event_log",
+   "wmi_check",
+   "apm",
+   "iis"
+  ],
+  "is_muted": false,
+  "last_reported_time": 1785542280.0,
+  "meta": {
+   "agent_version": "7.58.1",
+   "platform": "Windows Server 2022"
+  },
+  "name": "app-win-01",
+  "tags_by_source": {
+   "Datadog": []
+  },
+  "up": true
+ },
+ {
+  "apps": [
+   "system",
+   "disk",
+   "ntp",
+   "windows_service",
+   "windows_event_log",
+   "wmi_check",
+   "sqlserver"
+  ],
+  "is_muted": false,
+  "last_reported_time": 1785542280.0,
+  "meta": {
+   "agent_version": "7.57.0",
+   "platform": "Windows Server 2019"
+  },
+  "name": "sql-win-02",
+  "tags_by_source": {
+   "Datadog": []
+  },
+  "up": true
+ },
+ {
+  "apps": [
+   "system",
+   "disk",
+   "ntp",
+   "systemd",
+   "journald"
+  ],
+  "is_muted": false,
+  "last_reported_time": 1785542280.0,
+  "meta": {
+   "agent_version": "7.40.2",
+   "platform": "Linux"
+  },
+  "name": "app-lin-03",
+  "tags_by_source": {
+   "Datadog": []
+  },
+  "up": true
+ },
+ {
+  "apps": [
+   "system",
+   "disk",
+   "ntp",
+   "systemd",
+   "journald"
+  ],
+  "is_muted": false,
+  "last_reported_time": 1785528000.0,
+  "meta": {
+   "agent_version": "7.58.1",
+   "platform": "Linux"
+  },
+  "name": "batch-lin-05",
+  "tags_by_source": {
+   "Datadog": []
+  },
+  "up": false
+ },
+ {
+  "apps": [
+   "system",
+   "disk",
+   "ntp",
+   "systemd",
+   "journald",
+   "apm"
+  ],
+  "is_muted": false,
+  "last_reported_time": 1785542280.0,
+  "meta": {
+   "agent_version": "7.58.1",
+   "platform": "Linux"
+  },
+  "name": "app-lin-07",
+  "tags_by_source": {
+   "Datadog": []
+  },
+  "up": true
+ },
+ {
+  "apps": [
+   "system",
+   "disk",
+   "ntp",
+   "windows_service",
+   "windows_event_log"
+  ],
+  "is_muted": false,
+  "last_reported_time": 1785542280.0,
+  "meta": {
+   "agent_version": "7.58.1",
+   "platform": "Windows Server 2016"
+  },
+  "name": "file-win-08",
+  "tags_by_source": {
+   "Datadog": []
+  },
+  "up": true
+ },
+ {
+  "apps": [
+   "system",
+   "disk",
+   "ntp",
+   "systemd",
+   "journald"
+  ],
+  "is_muted": false,
+  "last_reported_time": 1785542280.0,
+  "meta": {
+   "agent_version": "7.58.1",
+   "platform": "Linux"
+  },
+  "name": "orphan-lin-99",
+  "tags_by_source": {
+   "Datadog": []
+  },
+  "up": true
+ }
+]

@@ -238,6 +238,103 @@ owned — not a permanent waiver.
 
 ---
 
+## Deployment metadata — emitting `version`
+
+`version` is the only Tier 2 key in this document that no integration can
+supply for you. Azure knows what a resource is; the agent knows what a host is;
+nothing except your deployment pipeline knows what *code* is running.
+
+Today nothing in the estate emits it. Two archetypes group by it —
+`deployment-regression` and `deployment-error-spike` — so both currently group
+by a tag nobody sends, evaluate against an empty set, and report healthy.
+Deployment→incident correlation is, until this is done, fiction.
+`deployment-version-tag-missing` exists to detect exactly that state.
+
+### The three variables
+
+| Variable | Value | What breaks without it |
+|---|---|---|
+| `DD_VERSION` | The immutable build identifier — the same string in the artifact, the release and the telemetry | Deployment archetypes group on an absent tag; "did the deploy cause this?" is unanswerable |
+| `DD_GIT_COMMIT_SHA` | Full 40-character commit SHA | No link from a deployment to a diff; incident review starts from memory |
+| `DD_GIT_REPOSITORY_URL` | `https://github.com/<org>/<repo>` (no credentials, no `.git` suffix) | Source Code Integration is off, so a stack frame stays text instead of becoming a link |
+
+Set all three, or set none — a version with no commit is a label you cannot act
+on. Use one build identifier per artifact and never reuse it: `2026.08.19.417`
+or `1.14.3+a1b2c3d`, not `latest`, not the branch name, not a timestamp
+recomputed at start-up (which makes every restart look like a deploy).
+
+### Per runtime
+
+These are process-level environment variables. They must reach the
+**application** process, not the agent — the agent cannot know what version of
+somebody else's code is running.
+
+| Runtime | Where it goes |
+|---|---|
+| .NET Framework on IIS | Application-pool environment variables, or `C:\ProgramData\Datadog .NET Tracer\datadog.json`. An `AppSettings` entry in `web.config` does **not** reach the tracer |
+| .NET (Core) on Windows service / IIS | Service environment block (`HKLM\SYSTEM\CurrentControlSet\Services\<svc>\Environment`, REG_MULTI_SZ) or the app-pool variables |
+| .NET / Java / Node / Python on Linux | `Environment=` or `EnvironmentFile=` in the systemd unit — written by configuration management, not by hand |
+| Java | `DD_VERSION`, or `-Ddd.version=` in `JAVA_TOOL_OPTIONS`. Set it before the JVM starts; `dd-trace` reads it at agent-attach time |
+| Node.js | Environment variables, set **before** `require('dd-trace').init()`. Passing `version` in the init options works too, but then two places can disagree |
+| Python | Environment variables, with `ddtrace-run` or the equivalent `patch_all()` entry point |
+| Azure App Service / Functions | Application settings on the site (they arrive as environment variables) — set them from the release pipeline, not in the portal, or the next deployment loses them |
+| Anything with no APM tracer | The application is not traced, so there is no `version` on its telemetry and the deployment archetypes cannot cover it. Do not fake it with a host tag: a host runs several services and would stamp one version on all of them |
+
+### From the pipeline
+
+The pipeline is the only place that knows the build identity, so it is the only
+correct source. GitHub Actions:
+
+```yaml
+env:
+  DD_VERSION: ${{ github.run_number }}-${{ github.sha }}
+  DD_GIT_COMMIT_SHA: ${{ github.sha }}
+  DD_GIT_REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
+```
+
+Azure DevOps:
+
+```yaml
+variables:
+  DD_VERSION: $(Build.BuildNumber)
+  DD_GIT_COMMIT_SHA: $(Build.SourceVersion)
+  DD_GIT_REPOSITORY_URL: $(Build.Repository.Uri)
+```
+
+Then the release stage writes them into wherever the runtime reads its
+environment from — app settings, the systemd unit, the app-pool configuration.
+Setting them only in the build job is the most common way this is done wrong:
+the build has them, the running process does not, and the telemetry still
+carries no version.
+
+### What this repository wires
+
+`.github/workflows/deploy.yml` sets all three variables and posts a deployment
+event to Datadog after a production apply, for **its own** service
+(`observability-platform`). That is the whole of what this repository controls:
+it deploys monitors, SLOs and runbooks, so its version is the configuration
+version, and a change to alerting correlating with a change in alert behaviour
+is a real thing to be able to see.
+
+It does **not** and cannot set `DD_VERSION` for the estate's applications.
+Those live in their own pipelines, owned by their own teams; this section is
+the contract they implement. `platform/policy/agent_profiles.yaml` → the
+`application` profile carries the same requirement as machine-readable policy,
+and `docs/fleet-management.md` §5 records the split.
+
+### Checking it
+
+```bash
+# Services whose APM telemetry carries no version, per env:
+#   sum:trace.http.request.hits{env:prod} by {service,version}
+# A `version:` group of N/A or absent is a service that has not done this.
+```
+
+`deployment-version-tag-missing` alerts on the same condition continuously, so
+this is a one-time check rather than a recurring audit.
+
+---
+
 ## The short version
 
 Tag six things on your telemetry:

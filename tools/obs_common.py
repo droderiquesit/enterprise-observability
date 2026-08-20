@@ -64,6 +64,17 @@ def load_policy() -> dict:
     return policy
 
 
+def load_agent_profiles() -> dict:
+    """Agent profiles (platform/policy/agent_profiles.yaml, §37).
+
+    Deliberately NOT folded into load_policy(): agent profiles describe how
+    telemetry is PRODUCED, and load_policy() is the contract for what the
+    monitor factory consumes. Terraform never reads this file, so putting it in
+    the same dict would imply a coupling that does not exist.
+    """
+    return _yaml(POLICY_DIR / "agent_profiles.yaml")
+
+
 def load_services() -> dict:
     """Registered services (platform/services/*.yaml)."""
     out = {}

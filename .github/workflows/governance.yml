@@ -121,6 +121,19 @@ jobs:
           python profile_engine.py
           python coverage_report.py --live --gate governance
 
+      # Fleet compliance decays exactly the way coverage does — an agent that
+      # stops, a VM built without the extension, an integration switched off
+      # during a change — so it is measured on the same nightly cadence.
+      # REPORT-ONLY until the first rollout wave completes; the threshold and
+      # the condition for turning it into a gate live in
+      # platform/policy/agent_profiles.yaml → compliance.ratio.report_targets.
+      - name: Fleet compliance — agent, integration and tag coverage
+        if: always()
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        run: cd tools && python fleet_compliance.py --live
+
       - name: Monitor quality scorecard
         if: always()
         run: cd tools && python monitor_scorecard.py --min-fleet-score 85 --max-failing 0
@@ -128,6 +141,9 @@ jobs:
       - name: Publish the report to the run summary
         if: always()
         run: |
+          if [ -f generated/fleet_compliance.md ]; then
+            cat generated/fleet_compliance.md >> "$GITHUB_STEP_SUMMARY"
+          fi
           if [ -f generated/coverage_report.md ]; then
             cat generated/coverage_report.md >> "$GITHUB_STEP_SUMMARY"
           else

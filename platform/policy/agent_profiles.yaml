@@ -1,0 +1,626 @@
+# =============================================================================
+# LAYER 0 — AGENT PROFILES (§37)
+#
+# Every other layer in this platform assumes telemetry already exists. This is
+# the layer that produces it. An archetype whose metric no agent collects is a
+# monitor that evaluates, returns no data, and looks exactly like healthy — the
+# failure this repository exists to prevent. So the profiles here are written
+# the same way the archetypes are: each one names the checks it turns on, the
+# telemetry those checks emit, and the archetypes that become answerable as a
+# result. If an archetype is not listed under some profile, nothing in the
+# estate is collecting what it reads.
+#
+# COMPOSITION, NOT INHERITANCE-BY-COPY. A host gets `base-infrastructure`
+# always, exactly one OS profile, and zero or more role profiles. Five profiles
+# cover the estate because the estate is Azure + VMware + Windows/Linux +
+# SQL Server; a sixth profile per application stack would be profile sprawl,
+# which is the same failure `platform/policy/profiles.yaml` avoids at layer 3.
+#
+# NO KUBERNETES PROFILE. The audit found no Kubernetes in the real estate. The
+# archetypes in `archetypes/kubernetes.yaml` exist and are correct, and they
+# cover nothing today. Writing a cluster-agent profile now would be inventing a
+# fleet — see `conditional_profiles` at the bottom for the trigger and the
+# shape it takes if that changes.
+#
+# ASSIGNMENT IS FROM ENTITY TAGS, NOT FROM A HOST LIST. The same rule that
+# makes monitor onboarding zero-touch makes agent configuration zero-touch: tag
+# the entity, and the profile follows. A hand-maintained host→profile mapping
+# decays the moment somebody builds a VM without opening it.
+# =============================================================================
+version: 2
+
+# -----------------------------------------------------------------------------
+# FLEET-WIDE SETTINGS
+# The numbers the compliance calculation reads. They live here, not in
+# tools/fleet_compliance.py, so the standard and the measurement cannot drift.
+# -----------------------------------------------------------------------------
+fleet:
+  # Datadog supports N-2 minor versions. Below this an agent still reports, so
+  # nothing looks broken — it just silently lacks checks the archetypes read.
+  minimum_agent_version: "7.55.0"
+
+  # A host that has not reported for this long is OFFLINE, not missing: the
+  # difference matters because "missing" means nobody ever installed an agent
+  # and "offline" means somebody did and it stopped. They have different
+  # owners and different remediation.
+  offline_after_minutes: 30
+
+  # Hosts the fleet standard deliberately does not require an agent on.
+  # Anything here must carry a reason; an unexplained exclusion is how a fleet
+  # quietly stops being a fleet.
+  exempt_when_tags:
+    - tag: fleet_exempt
+      values: ["true"]
+      reason: >
+        Appliance or vendor-managed instance where a third-party agent is not
+        permitted by the support contract. Requires a recorded exception in
+        platform/policy/exceptions.yaml; the compliance report counts these in
+        the denominator's exempt column, never in `compliant`.
+
+  # Which facts the assignment rules match on, and where each one comes from.
+  # `os_family` is derived rather than tagged because Datadog already knows it
+  # and a hand-applied `os` tag would be a second, wrong source of truth.
+  facts:
+    os_family:
+      source: datadog_host_meta
+      field: platform
+      values: [windows, linux]
+    service_archetype:
+      source: entity_tag
+      values:
+        [api, web, worker, event_consumer, batch_job, scheduled_job,
+         integration_flow, saas_dependency, external_endpoint, platform_service,
+         datastore, infrastructure_resource]
+    db_engine:
+      source: entity_tag
+      values: [sqlserver, azuresql, cosmosdb, snowflake]
+      note: >
+        `service_archetype: datastore` cannot tell SQL Server from Cosmos DB,
+        and they need completely different agent configuration. This tag is the
+        minimum extra fact required to assign a database profile. It is a fleet
+        tag, not a monitor-selection tag — no archetype query groups by it.
+    env:
+      source: entity_tag
+      values: [dev, qa, stage, prod]
+
+# -----------------------------------------------------------------------------
+# THE FIVE STANDARD PROFILES
+#
+# `kind` decides how many a host may hold:
+#   base   exactly one, always      os     exactly one, by os_family
+#   role   zero or more, by what the entity IS
+#
+# `emits` is the contract. It is what makes "can this monitor ever fire here?"
+# answerable: an archetype reading a metric prefix no assigned profile emits is
+# uncovered on that host, and tools/fleet_compliance.py says so by name.
+# -----------------------------------------------------------------------------
+agent_profiles:
+
+  # --- 1 · BASE INFRASTRUCTURE ----------------------------------------------
+  base-infrastructure:
+    display: Base Infrastructure
+    kind: base
+    description: >
+      The floor. Every host with an agent has this, including hosts whose only
+      job is to run one database. It answers "is this machine alive, reachable,
+      and telling us the truth about itself?" — and nothing more, because
+      everything more belongs to a profile somebody chose.
+    match:
+      all_hosts: true
+    agent_config:
+      # Host tags come from the agent, not from the Azure/vSphere integration,
+      # because a host must carry its identity even when the cloud integration
+      # is unavailable — which is exactly when you need to know whose it is.
+      tags_from: entity_tags
+      required_host_tags: [env, service, team, tier, service_archetype, alert_band]
+      logs_enabled: true
+      process_config_enabled: true
+      inventories_configuration_enabled: true
+    checks:
+      - name: system_core
+        why: CPU, memory, disk, filesystem, IO and network counters — the
+          denominators every infrastructure archetype divides by.
+      - name: disk
+        why: Filesystem usage AND mount state. `host-filesystem-readonly` reads
+          the mount state, which the plain system check does not report.
+      - name: process
+        why: >
+          Per-process liveness for the processes the entity declares. This is
+          opt-in per host by design: a process check with no configured
+          patterns collects nothing and reports success, which is the worst
+          possible outcome.
+      - name: ntp
+        why: Clock drift invalidates every correlation the platform performs.
+          A skewed host makes deployment→incident ordering meaningless.
+      - name: agent_health
+        why: The agent reporting on itself. Without it an agent that stops has
+          no signal at all — silence is indistinguishable from health.
+    # `integrations` is the ALWAYS-REQUIRED set — what every host on this
+    # profile must report, and what tools/fleet_compliance.py measures.
+    # `conditional_integrations` are real requirements that depend on a fact
+    # the platform does not hold (does this host run a process worth watching?
+    # is it physical?). They are documented, not measured: a compliance check
+    # that fires on a condition it cannot evaluate produces false positives,
+    # and a report with false positives is a report people stop reading.
+    integrations: [system, disk, ntp]
+    conditional_integrations:
+      - name: process
+        when: the entity declares processes whose absence is a fault
+    emits:
+      metrics:
+        - system.cpu.*
+        - system.mem.*
+        - system.disk.*
+        - system.fs.inodes.*
+        - system.io.*
+        - system.swap.*
+        - system.net.*
+        - ntp.offset
+        - process.up
+        - datadog.agent.running
+        - datadog.agent.started
+      service_checks: [datadog.agent.up, process.up, ntp.in_sync, disk.read_write]
+      logs: [system, security]
+      events: [agent_start, agent_stop]
+    enables_archetypes:
+      - host-unavailable
+      - host-cpu-baseline-deviation
+      - host-memory-pressure
+      - host-disk-exhaustion-forecast
+      - host-filesystem-readonly
+      - host-inode-exhaustion-forecast
+      - host-process-down
+      - host-agent-unhealthy
+      - host-clock-drift
+      - host-swap-pressure
+      - host-swap-exhaustion-forecast
+      - storage-latency-anomaly
+    compliance_checks:
+      [agent_missing, agent_offline, agent_out_of_date, tags_missing,
+       ownership_missing]
+
+  # --- 2 · WINDOWS ----------------------------------------------------------
+  windows-server:
+    display: Windows Server
+    kind: os
+    extends: base-infrastructure
+    description: >
+      Windows-specific collection. The estate is Windows-majority, and the
+      failure modes that actually page — a stopped service, an exhausted page
+      file, an event-log burst — are all Windows-only signals that the base
+      profile cannot see.
+    match:
+      os_family: [windows]
+    agent_config:
+      # The Windows agent runs as a service under a dedicated account. Local
+      # Administrator is NOT required for these checks and granting it is how a
+      # monitoring agent becomes a lateral-movement path.
+      service_account: managed_service_account
+      logs_enabled: true
+    checks:
+      - name: windows_service
+        why: >
+          Service state for the services the entity declares. `winservice.state`
+          is what `host-process-down` reads on Windows; the Linux process check
+          does not exist here.
+      - name: windows_event_log
+        why: System and Application channels, filtered to Error and Critical.
+          Unfiltered collection is a cost incident, not observability.
+      - name: wmi_check
+        why: Page file, handle counts and per-process counters that the core
+          system check does not expose on Windows.
+      - name: windows_performance_counters
+        why: The .NET CLR and IIS counter sets, where the estate runs .NET on
+          IIS rather than in a container.
+    integrations: [windows_service, windows_event_log, wmi_check]
+    conditional_integrations:
+      - name: iis
+        when: the host serves HTTP from IIS
+    emits:
+      metrics:
+        - winservice.state
+        - system.mem.pagefile.*
+        - iis.httpd_request_method.*
+        - iis.net.*
+        - .NET CLR counters (runtime.dotnet.* when APM is also enabled)
+      service_checks: [windows_service.state]
+      logs: [windows.system, windows.application, iis]
+      events: [windows_event_log]
+    enables_archetypes:
+      - host-process-down
+      - os-critical-patch-missing
+      - os-patch-age-excessive
+      - os-end-of-life
+    telemetry_gaps:
+      - metric: acme.compliance.missing_critical_patches
+        note: >
+          Patch state is NOT observable from the agent. It comes from the
+          configuration-management inventory export — see docs/telemetry-gaps.md
+          §8. The profile is listed against the os-* archetypes because the
+          profile is what makes the host appear in that inventory at all.
+    compliance_checks:
+      [agent_missing, agent_offline, agent_out_of_date, integration_missing,
+       tags_missing, ownership_missing]
+
+  # --- 3 · LINUX ------------------------------------------------------------
+  linux-server:
+    display: Linux Server
+    kind: os
+    extends: base-infrastructure
+    description: >
+      Linux-specific collection. Smaller than the Windows profile because the
+      base system check already covers most of what matters on Linux; what it
+      adds is unit state, journald, and the hardware sensors that only exist on
+      physical machines.
+    match:
+      os_family: [linux]
+    agent_config:
+      # dd-agent needs the `systemd-journal` group for journald, and nothing
+      # else. Running the agent as root to "make logs work" is the single most
+      # common Linux agent misconfiguration in the field.
+      run_as: dd-agent
+      supplementary_groups: [systemd-journal, docker]
+      logs_enabled: true
+    checks:
+      - name: systemd
+        why: Unit state and restart counts. `host-process-down` reads process.up,
+          but a unit that is flapping under systemd's restart policy keeps
+          process.up green while never actually serving.
+      - name: journald_logs
+        why: The system log source. On Linux there is no equivalent of the
+          Windows event-log channels, so journald is the whole signal.
+      - name: ipmi
+        why: >
+          Physical-host sensors only. IPMI sensor NAMES are vendor-specific, so
+          the check output is normalised to acme.hardware.* by the exporter
+          described in docs/telemetry-gaps.md §7 rather than monitored raw.
+        applies_when: { virtualization: [bare_metal] }
+    integrations: [systemd, journald]
+    conditional_integrations:
+      - name: ipmi
+        when: bare metal — a virtual machine has no BMC to read
+    emits:
+      metrics:
+        - systemd.unit.*
+        - system.load.*
+        - acme.hardware.component_health
+        - acme.hardware.temperature_celsius
+      service_checks: [systemd.unit.active, ipmi.can_connect]
+      logs: [journald]
+      events: []
+    enables_archetypes:
+      - host-process-down
+      - hardware-component-fault
+      - hardware-thermal-trend
+      - os-critical-patch-missing
+      - os-patch-age-excessive
+      - os-end-of-life
+    compliance_checks:
+      [agent_missing, agent_offline, agent_out_of_date, integration_missing,
+       tags_missing, ownership_missing]
+
+  # --- 4 · APPLICATION ------------------------------------------------------
+  application:
+    display: Application Host
+    kind: role
+    extends: base-infrastructure
+    description: >
+      Everything that turns a host into a place applications are observable
+      from: the trace agent, DogStatsD, runtime metrics, and the unified
+      service tags. This is also the profile that carries the deployment
+      metadata contract — DD_VERSION and the git facts — because a host can be
+      perfectly healthy while its deployment correlation is fiction.
+    match:
+      service_archetype:
+        [api, web, worker, event_consumer, batch_job, scheduled_job,
+         integration_flow]
+    agent_config:
+      apm_enabled: true
+      apm_non_local_traffic: true      # the app is a sibling process, not the agent's child
+      dogstatsd_enabled: true
+      dogstatsd_non_local_traffic: true
+      logs_enabled: true
+      # Runtime metrics are the ONLY source of jvm.* and runtime.dotnet.*.
+      # Four archetypes read them and none of them can fire without this flag.
+      runtime_metrics_enabled: true
+    checks:
+      - name: trace_agent
+        why: APM spans. Six application archetypes read trace.* and none of
+          them exist without it.
+      - name: dogstatsd
+        why: The transport for the acme.app.* custom metrics whose emission
+          contracts are in docs/telemetry-gaps.md — connection pools above all.
+      - name: runtime_metrics
+        why: jvm.* and runtime.dotnet.* — heap, GC pause and thread-pool
+          saturation. Enabled agent-side AND in the tracer; either one off
+          produces no data.
+      - name: log_collection
+        why: Application logs correlated to traces by trace_id injection.
+    required_runtime_env:
+      # This is the deployment-metadata contract. It is set by the DEPLOYMENT
+      # PIPELINE on the application process, not by the agent — the agent
+      # cannot know what version of somebody else's code is running. See
+      # docs/tagging-standard.md § "Deployment metadata".
+      - name: DD_ENV
+        required: true
+      - name: DD_SERVICE
+        required: true
+      - name: DD_VERSION
+        required: true
+        why: >
+          `deployment-regression` and `deployment-error-spike` group by
+          `version`. Without this they group by a tag nobody sends, so the
+          monitors evaluate against an empty set and report healthy.
+          `deployment-version-tag-missing` exists to detect exactly this.
+      - name: DD_GIT_COMMIT_SHA
+        required: true
+        why: Links the deployment to the commit, which is what makes "what
+          changed?" answerable during an incident instead of after it.
+      - name: DD_GIT_REPOSITORY_URL
+        required: true
+        why: Source Code Integration — the stack frame becomes a link.
+      - name: DD_TAGS
+        required: true
+        why: Carries team, tier, service_archetype and alert_band onto APM
+          telemetry, which host tags do not reach.
+    integrations: [apm]
+    conditional_integrations:
+      - name: dogstatsd
+        when: >
+          the service emits acme.app.* custom metrics. DogStatsD is a TRANSPORT,
+          not a reporting integration — Datadog exposes no host fact for "is
+          DogStatsD listening", so its absence cannot be measured here. It
+          shows up instead as the acme.app.db_pool.* series never arriving,
+          which docs/telemetry-gaps.md §6 owns.
+    emits:
+      metrics:
+        - trace.*
+        - jvm.*
+        - runtime.dotnet.*
+        - runtime.memory.*
+        - runtime.thread_pool.*
+        - acme.app.db_pool.*
+      service_checks: [datadog.trace_agent.up]
+      logs: [application]
+      events: [deployment]
+    enables_archetypes:
+      - app-crash-anomaly
+      - app-saturation-threadpool
+      - app-memory-leak-forecast
+      - app-telemetry-loss
+      - app-jvm-gc-pause-degradation
+      - app-jvm-heap-pressure
+      - app-dotnet-gc-pause-degradation
+      - app-dotnet-gen2-collection-anomaly
+      - app-connection-pool-saturation
+      - app-connection-acquisition-latency
+      - dependency-error-anomaly
+      - dependency-latency-degradation
+      - deployment-regression
+      - deployment-error-spike
+      - deployment-version-tag-missing
+      - worker-throughput-anomaly
+      - worker-processing-latency
+      - worker-error-anomaly
+      - worker-stalled
+    compliance_checks:
+      [agent_missing, agent_offline, agent_out_of_date, integration_missing,
+       apm_missing, tags_missing, ownership_missing]
+
+  # --- 5 · SQL SERVER -------------------------------------------------------
+  sqlserver:
+    display: SQL Server
+    kind: role
+    extends: base-infrastructure
+    description: >
+      The SQL Server integration plus Database Monitoring. Split deliberately
+      into two levels, because they have different prerequisites and different
+      failure modes: the integration needs a login and gives you instance
+      health; DBM needs additional grants and a schema, and gives you query
+      performance. Claiming DBM while only the integration is deployed is how
+      an organisation believes it can see query plans that it cannot.
+    match:
+      service_archetype: [datastore]
+      db_engine: [sqlserver]
+    agent_config:
+      # A dedicated SQL login with the minimum grants. `sysadmin` is not
+      # required and asking for it is how database teams refuse the rollout.
+      connection: sql_login
+      grants:
+        integration: [CONNECT SQL, VIEW SERVER STATE, VIEW ANY DEFINITION]
+        dbm_additional:
+          [VIEW SERVER PERFORMANCE STATE, datadog schema in each monitored database]
+      dbm: true
+      # There is no host-level fact in the Datadog API that says "DBM is on"
+      # for this instance, so the check configuration stamps one. Without this
+      # tag the compliance report cannot tell a DBM instance from an
+      # integration-only instance, and would have to guess — which for a
+      # capability the platform then CLAIMS is worse than reporting it missing.
+      check_tags: ["dbm:true"]
+    checks:
+      - name: sqlserver
+        why: Instance connectivity, buffer, locks, tempdb, log flush,
+          Always On replica state — sixteen archetypes read these.
+      - name: sqlserver_dbm
+        why: >
+          Query-level metrics, execution plans and blocking chains. The
+          traceability matrix records SQL Server per-query latency as
+          "requires DBM"; this is the requirement.
+        requires: [dbm]
+      - name: windows_service
+        why: The MSSQLSERVER and SQLSERVERAGENT services. An instance whose
+          Agent service is stopped runs no jobs and no backups while the
+          engine itself stays perfectly healthy.
+        inherited_from: windows-server
+    integrations: [sqlserver, dbm]
+    emits:
+      metrics:
+        - sqlserver.stats.*
+        - sqlserver.buffer.*
+        - sqlserver.locks.*
+        - sqlserver.database.*
+        - sqlserver.tempdb.*
+        - sqlserver.transactions.*
+        - sqlserver.ao.*
+        - datadog.dbm.*
+      service_checks: [sqlserver.can_connect]
+      logs: [sqlserver.errorlog, sqlserver.agent]
+      events: []
+    enables_archetypes:
+      - sqlserver-instance-unreachable
+      - sqlserver-blocking-sessions
+      - sqlserver-lock-wait-degradation
+      - sqlserver-deadlock-anomaly
+      - sqlserver-long-running-transaction
+      - sqlserver-memory-pressure
+      - sqlserver-tempdb-space-exhaustion
+      - sqlserver-tempdb-version-store-growth
+      - sqlserver-log-flush-wait-degradation
+      - sqlserver-data-file-growth-forecast
+      - sqlserver-connection-saturation
+      - sqlserver-ag-no-primary
+      - sqlserver-ag-sync-unhealthy
+      - sqlserver-replica-not-synchronized
+      - sqlserver-replica-lag
+    telemetry_gaps:
+      - metric: acme.database.restore_verification_age_hours
+        note: >
+          Recoverability is not observable from any agent — no product knows
+          whether a restore would succeed, because nothing tries. The
+          verification job emits it; docs/telemetry-gaps.md §1 is the contract.
+          Listed here so the SQL Server rollout does not conclude that
+          `sqlserver-restore-verification-stale` is covered by the integration.
+    compliance_checks:
+      [agent_missing, agent_offline, agent_out_of_date, integration_missing,
+       dbm_missing, tags_missing, ownership_missing]
+
+# -----------------------------------------------------------------------------
+# CONDITIONAL — DEFINED, DELIBERATELY NOT INSTANTIATED
+#
+# Recorded rather than omitted: the next person to read this should find the
+# decision, not the absence. `enabled: false` keeps it out of every assignment
+# and out of the compliance denominator.
+# -----------------------------------------------------------------------------
+conditional_profiles:
+
+  kubernetes-node:
+    display: Kubernetes Node / Cluster Agent
+    enabled: false
+    reason: >
+      The audit found NO Kubernetes in the real estate. `archetypes/kubernetes.yaml`
+      exists and is correct, and covers nothing today. A cluster-agent profile
+      written now would describe a fleet that does not exist, and its
+      compliance denominator would be zero — which reports as 100% compliant,
+      the exact false-green this platform is built to avoid.
+    enable_when: >
+      An AKS cluster or on-prem Kubernetes appears in the inventory
+      (`build_inventory.py` reports resources of kind `kube_node`).
+    shape_if_enabled:
+      kind: os
+      match: { os_family: [linux], workload: [kubernetes] }
+      checks: [kubelet, kube_state_metrics, cluster_agent, container_runtime]
+      emits:
+        metrics: [kubernetes.*, kubernetes_state.*, container.*]
+      enables_archetypes_from: archetypes/kubernetes.yaml
+      note: >
+        Deployed as a DaemonSet + Cluster Agent through the Helm chart, NOT by
+        the VM extension or configuration-management paths in
+        docs/fleet-management.md — the delivery mechanism is genuinely
+        different, which is the main reason it is a separate profile.
+
+# -----------------------------------------------------------------------------
+# COMPLIANCE CHECK DEFINITIONS (§39)
+#
+# The eight conditions that make a host non-compliant. Definitions live HERE so
+# tools/fleet_compliance.py measures exactly what the standard states — the
+# same reason the priority matrix lives in policy rather than in the scorecard.
+#
+# `blocking: true` means the finding counts against the compliance percentage.
+# Nothing is advisory today: a fleet standard with advisory items is a fleet
+# standard nobody finishes.
+# -----------------------------------------------------------------------------
+compliance:
+
+  checks:
+    agent_missing:
+      title: Agent not installed
+      description: >
+        The entity is in the inventory as a host or VM and no agent has ever
+        reported for it. This is the only check whose evidence is an ABSENCE,
+        which is why the inventory — not the Datadog host list — is the
+        denominator. Measuring agent coverage from the list of hosts that have
+        agents always returns 100%.
+      blocking: true
+    agent_offline:
+      title: Agent installed but not reporting
+      description: >
+        An agent reported once and has not reported within
+        `fleet.offline_after_minutes`. Distinct from `agent_missing` because
+        the remediation and the owner are different.
+      blocking: true
+    agent_out_of_date:
+      title: Agent below the minimum supported version
+      description: >
+        Below `fleet.minimum_agent_version`. Such an agent still reports, so
+        nothing looks wrong; it just lacks checks that newer archetypes read.
+        `agent-version-drift` alerts on the same condition from the other side.
+      blocking: true
+    integration_missing:
+      title: A profile-required integration is not reporting
+      description: >
+        The host's assigned profiles require an integration that the host does
+        not report. This is the check that turns "we deployed agents" into "the
+        monitors can actually fire", and it is where most real fleets fail.
+      blocking: true
+    dbm_missing:
+      title: Database Monitoring not enabled where required
+      description: >
+        A host on the `sqlserver` profile reporting the integration but not
+        DBM. Query-level signals are unavailable and the platform must not
+        claim them.
+      blocking: true
+    apm_missing:
+      title: APM not reporting where required
+      description: >
+        A host on the `application` profile with no trace telemetry. Every
+        application and deployment archetype is silent on that host.
+      blocking: true
+    tags_missing:
+      title: Required host tags absent or invalid
+      description: >
+        Missing or out-of-vocabulary values among the Tier 1 tags in
+        docs/tagging-standard.md. An untagged host is not selected by any
+        monitor, and no monitor will say so.
+      blocking: true
+    ownership_missing:
+      title: No resolvable owning team
+      description: >
+        No `team` tag resolving to platform/policy/teams.yaml. An alert on this
+        host has nowhere to go, which makes every other check on it academic.
+      blocking: true
+
+  # How the percentage is computed. Stated explicitly because "compliance
+  # percentage" is the number most often quoted and least often defined.
+  #
+  #   required   = inventory hosts/VMs, minus exempt
+  #   compliant  = required hosts with ZERO blocking findings
+  #   percentage = compliant / required * 100
+  #
+  # A host with three findings counts once, not three times: the question the
+  # number answers is "how much of the fleet is fully instrumented", and
+  # per-finding weighting lets a fleet improve its score without a single host
+  # becoming correct.
+  ratio:
+    denominator: inventory_hosts_minus_exempt
+    numerator: hosts_with_zero_blocking_findings
+    report_targets:
+      # Not a gate today, by decision. The estate reports zero agent-bearing
+      # hosts (docs/tagging-standard.md, "Where the estate stands today"), so
+      # gating on a percentage now would only produce a permanently red job
+      # that everybody learns to ignore. The threshold becomes a gate once the
+      # first rollout wave completes.
+      target_pct: 95
+      gate: false
+      gate_when: >
+        The first Azure Policy rollout wave has completed and the measured
+        percentage has exceeded the target once.

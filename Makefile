@@ -4,7 +4,7 @@ STACKS := stacks/coverage stacks/foundation
 MODULES := $(wildcard modules/*)
 
 .PHONY: setup fmt fmt-check validate test tf-validate matrix runbooks fixtures \
-        applicability inventory coverage plan-offline clean
+        applicability fleet inventory coverage plan-offline clean
 
 # --- developer entry points --------------------------------------------------
 setup:
@@ -55,6 +55,10 @@ inventory:         ## rebuild the inventory and reassign profiles
 	cd tools && $(PY) build_inventory.py --live && $(PY) profile_engine.py
 coverage:          ## coverage & compliance report against the live org
 	cd tools && $(PY) coverage_report.py --live
+## fleet — agent/integration/tag compliance across the estate. Report-only
+## until the first rollout wave completes; pass --min-compliance to gate.
+fleet:
+	cd tools && $(PY) fleet_compliance.py --live
 
 clean:
 	find . -name ".terraform" -type d -prune -exec rm -rf {} +
