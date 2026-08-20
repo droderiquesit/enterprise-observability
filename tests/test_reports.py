@@ -169,19 +169,60 @@ def test_oncall_coverage_is_clean_on_the_committed_policy():
     assert r["summary"]["paging_monitors"] > 0
 
 
-def test_runbook_coverage_sees_every_monitor_as_attached():
-    """C16 in the coverage report and this report must not disagree."""
-    r = rp.REPORTS["ops-runbook-coverage"](_ctx())
-    assert r["summary"]["monitors_without_an_attached_notebook"] == 0
+def _unpublished_runbooks():
+    """Runbooks with a source file but no notebook id yet.
+
+    Notebooks are created by tools/publish_runbooks.py, which needs credentials
+    and therefore runs in the deploy job — BEFORE the coverage apply, precisely
+    so a newly added runbook is published before the monitors that attach it.
+    The fixture in this repository is generated from an OFFLINE plan, so for any
+    runbook added since the last deploy it necessarily records the pre-publication
+    state. That is expected; a runbook that is not registered at all, or is
+    published and still not attached, is not.
+    """
+    return {rid for rid, r in POLICY["runbooks"].items()
+            if not r.get("id") and (oc.PLATFORM_DIR / "runbooks" / r["source"]).exists()}
+
+
+def test_every_monitor_has_a_registered_runbook():
+    """The failure this catches is a monitor deployed with nothing to open at
+    3am. Registration is the part that must hold offline; attachment follows
+    from it once the notebook is published."""
+    missing = sorted({a["runbook"] for a in POLICY["archetypes"].values()
+                      if a["runbook"] not in POLICY["runbooks"]})
+    assert missing == [], f"archetypes reference unregistered runbooks: {missing}"
+
+
+def test_the_only_unattached_monitors_are_awaiting_first_publication():
+    """C16 in the coverage report and this report must not disagree — and the
+    set of monitors they may both excuse is bounded to runbooks that have never
+    been published, never to one whose notebook exists."""
+    ctx = _ctx()
+    pending = _unpublished_runbooks()
+    unattached = [(m.get("name"), t.get("archetype")) for m, t in ctx.monitor_rows()
+                  if not t.get("runbook_notebook")]
+    offenders = [(n, a) for n, a in unattached
+                 if POLICY["archetypes"].get(a, {}).get("runbook") not in pending]
+    assert offenders == [], f"attached-runbook gap not explained by publication: {offenders}"
+    r = rp.REPORTS["ops-runbook-coverage"](ctx)
     assert r["summary"]["runbooks_with_unfinished_sections"] == 0
+    if not pending:
+        assert r["summary"]["monitors_without_an_attached_notebook"] == 0
 
 
 def test_runbook_coverage_notices_an_unattached_notebook():
+    ctx = _ctx()
+    baseline = rp.REPORTS["ops-runbook-coverage"](ctx)["summary"][
+        "monitors_without_an_attached_notebook"]
     stripped = [dict(m, tags=[t for t in m["tags"]
                               if not t.startswith("runbook_notebook:")])
                 for m in MONITORS[:20]] + MONITORS[20:]
     r = rp.REPORTS["ops-runbook-coverage"](_ctx(monitors=stripped))
-    assert r["summary"]["monitors_without_an_attached_notebook"] == 20
+    # Measured as a DELTA against the baseline: stripping 20 attachments must
+    # add exactly 20 findings, whatever the pre-publication baseline happens
+    # to be. Hard-coding the total made this test fail whenever a new runbook
+    # was added — a signal about the fixture, not about the report.
+    assert r["summary"]["monitors_without_an_attached_notebook"] == baseline + 20
 
 
 def test_missing_ownership_separates_the_pool_from_an_inferred_default():
