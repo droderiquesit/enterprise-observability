@@ -26,12 +26,16 @@ row was confirmed by a repository-wide search that returned zero matches.
 
 | Status | Sections |
 |---|---|
-| OK | 21 |
+| OK | 24 |
 | IMPROVE | 9 |
-| PARTIAL | 12 |
-| MISSING | 15 |
+| PARTIAL | 11 |
+| MISSING | 13 |
 | OBSOLETE | 1 (resolved) |
 | N/A | 2 |
+
+Phase 6 closed §33, §34 and §35 and moved §41 from PARTIAL to IMPROVE: the
+entity-aware *rules* exist and are enforced; the remaining gap is publishing
+them into Datadog Scorecards, which has no Terraform resource.
 
 The platform is strong on the **monitor → SLO → routing → runbook** spine and
 absent on the **product surfaces** — MCP server, executive portal,
@@ -149,9 +153,9 @@ This prompt reinstates it; the reinstatement is treated as authoritative.
 |---|---|---|---|---|---|
 | 31 | Real Datadog-native runbooks, not repository links | **OK** | `platform/runbooks/` (261), `tools/publish_runbooks.py` | Published as notebooks, attached via the monitor `assets` field | 651/651 attached, 0 URLs in messages |
 | 32 | Workflow Automation with a safety contract | **IMPROVE** | `modules/workflow_automation`, `workflows.yaml` (27) | Catalogued with manual/guided/approval/automatic classes. **Only 2 deploy** — the org workflow quota is held by 18 legacy workflows | quota release, then budget raise |
-| 33 | Minimal dashboards (~3–4) | **IMPROVE** | `stacks/foundation/dashboards.tf` | **18 dashboards**: 4 hand-authored + 14 generated per-domain. Requirement is ~4. Remediation: keep enterprise / operations / SLO-executive, retire the per-domain generator in favour of native domain views | dashboard census |
-| 34 | Reports catalog (executive, ops, platform, database, Azure) | **MISSING** | — | `tools/coverage_report.py` and the scorecard produce two reports; the five report families in §34 do not exist | report catalog with named outputs |
-| 35 | Observability survey | **MISSING** | — (repo-wide search for `survey` returns **0 files**) | Remediation: a short YAML/markdown questionnaire capturing only what cannot be inferred | onboarding walkthrough |
+| 33 | Minimal dashboards (~3–4) | **OK** | `stacks/foundation/dashboards.tf` | Resolved. **18 → 3**: Enterprise Observability Overview, Operations & Reliability, SLO & Executive Health. The per-domain generator and its template are deleted; domain views are the native filtered monitor list, Service Catalog, APM and Infrastructure (ADR-010 revised) | `test_the_estate_holds_at_most_four_dashboards`; offline foundation plan |
+| 34 | Reports catalog (executive, ops, platform, database, Azure) | **OK** | `platform/policy/reports.yaml`, `tools/reports.py` | Resolved. 20 reports across the five families, catalog-as-data (id, audience, question, data source, cadence, action), all runnable offline against `tests/fixtures` and with `--live`. Includes the seven operations reports that were missing: never-triggered, noisy, flapping, services without telemetry, missing ownership, runbook coverage, on-call coverage (ADR-019) | `tests/test_reports.py` — catalog and implementation asserted equal in both directions |
+| 35 | Observability survey | **OK** | `docs/observability-survey.md` | Resolved. 16 questions, each stating why it **cannot** be inferred from telemetry or policy, plus an explicit list of the questions it refuses to ask because the policy engine already decides them | `test_every_survey_question_says_why_it_cannot_be_inferred` |
 
 ---
 
@@ -164,7 +168,7 @@ This prompt reinstates it; the reinstatement is treated as authoritative.
 | 38 | Every monitor declares required telemetry | **MISSING** | — | Archetypes declare `resource_type` and `detection` but not a `telemetry:` requirement, so "can this monitor ever fire here?" is unanswerable | applicability engine report |
 | 39 | Fleet compliance detection and percentage | **PARTIAL** | `agent-version-drift`, `host-agent-unhealthy`, `os-*` archetypes | Detects agent health and drift; no compliant/required ratio | compliance metric |
 | 40 | Private synthetic locations | **N/A → verify** | `saas.yaml` uses `synthetics.*` metrics | No `datadog_synthetics_test` or private-location resources. Requirement is conditional on internal apps needing them | inventory of internal endpoints |
-| 41 | Entity-aware Datadog Scorecards | **PARTIAL** | `tools/monitor_scorecard.py` | A **local Python** scorecard over the catalog, not Datadog Scorecards, and it grades monitors rather than entities | Datadog scorecard rule census |
+| 41 | Entity-aware Datadog Scorecards | **IMPROVE** | `platform/policy/scorecards.yaml`, `tools/monitor_scorecard.py` | Entity awareness delivered: service / datastore / infrastructure graded by different weights and four kind-specific rules, with an exhaustive validated `resource_type` classification (ADR-020). Remaining gap is the *surface* — these are still local scores rather than rules pushed into Datadog Scorecards, which has no Terraform resource | `tests/test_entity_scorecard.py`; `by_entity_kind` in `generated/scorecard.md` |
 
 ---
 
@@ -227,7 +231,7 @@ shippable and leaves the platform working.
 | **3** | Fleet management + agent profiles + deployment metadata (`DD_VERSION`) | §8, §36, §37, §39 |
 | **4** | SLO profiles and per-service objective overrides | §11, §12, §13, §15 |
 | **5** | Control-M in-flight monitoring | §24, §26 |
-| **6** | Reports catalog + dashboard consolidation + survey + scorecards | §33, §34, §35, §41 |
+| **6** ✅ | Reports catalog + dashboard consolidation + survey + scorecards | §33, §34, §35, §41 — delivered |
 | **7** | MCP server: Ask, then Act, then governance | §42–§46 |
 | **8** | Executive portal | §47–§49 |
 | **9** | Presentation and final traceability review | §50, §58–§60 |

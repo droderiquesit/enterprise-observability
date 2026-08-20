@@ -147,7 +147,7 @@ What is still open, and who can do it:
 |---|---|---|
 | ~18 legacy workflow automations (2026-08-07 experiment) hold the org's workflow quota | Delete in the Datadog UI, then raise `workflow_budget` in `stacks/foundation/budget.auto.tfvars` (ADR-017) | Their owning login — CI gets 403 |
 | 58 stale legacy notebooks (unclaimed by the registry; reported by `publish_runbooks.py` on every publish) | Review, migrate any content worth keeping into `platform/runbooks/*.md`, then retire | Platform team |
-| 5 legacy hand-made dashboards | Retire once the 18 platform dashboards are reviewed | Platform team |
+| 5 legacy hand-made dashboards | Retire once the 3 platform dashboards are reviewed | Platform team |
 | Notebook IDs not yet recorded in `platform/policy/runbooks.yaml` | Run `publish_runbooks.py --write-registry` with credentials; commit | Platform team |
 | Estate tagging: the org's demo services lack the five owner-applied tags (coverage check C3; the nightly governance run opens issues for this) | The tagging campaign — M2 below, still the project | Service owners |
 | Backup-success SLO telemetry (`acme.backup.jobs` custom metric, C13) | Deploy the metric producer | Infrastructure team |

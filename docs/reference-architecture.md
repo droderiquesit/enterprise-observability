@@ -76,8 +76,11 @@ the API pack's `by {service}` grouping on its first trace.
 
 ### What is deliberately NOT in this framework
 
-- **Per-service dashboards.** Datadog's Service Catalog, APM and Infrastructure
-  views are better and free. Four boards plus one per domain (§10, ADR-010).
+- **Per-service and per-domain dashboards.** Datadog's Service Catalog, APM,
+  Infrastructure and filtered monitor list are better, free, and correct the day
+  a new resource type appears. Three boards for the whole platform, one per
+  audience (§10, ADR-010). A periodic question is a **report**, not a board —
+  `platform/policy/reports.yaml` (ADR-019).
 - **Threat detection.** Cloud SIEM detection rules are owned by the security
   team. This framework covers the *operational health of security controls*.
 - **Per-resource thresholds.** Impossible by design. The escape hatch is one
@@ -908,22 +911,24 @@ time, so a typo fails the plan instead of silently granting nothing.
      │   teams, on-call,    │                  │   Datadog + CMDB +     │
      │   118 routing rules, │                  │   cloud → inventory    │
      │   27 workflows,      │                  │          ↓             │
-     │   18 dashboards,     │                  │ profile_engine.py      │
+     │    3 dashboards,     │                  │ profile_engine.py      │
      │   RBAC, catalog      │                  │   owner · tier ·       │
      │        ↓             │                  │   profile · ALERT BAND │
      │ stacks/coverage      │                  │          ↓             │
      │   monitor_factory ───┼──► 419 packs     │ coverage_report.py     │
      │   slo            ───┼──► 23 SLOs       │   C1–C17 governance    │
      │                      │    44 burn       │ monitor_scorecard.py   │
-     │   composite_monitor ─┼──► 7 composites  │   quality per team     │
-     │   + 4 self-service   │                  │ generate_matrix.py     │
+     │   composite_monitor ─┼──► 7 composites  │   quality + entity kind│
+     │   + 4 self-service   │                  │ reports.py             │
+     │                      │                  │   5 report families    │
+     │                      │                  │ generate_matrix.py     │
      └──────────┬───────────┘                  │ generate_runbooks.py   │
                 │                              │ correlate_events.py    │
                 ▼                              └───────────┬────────────┘
         ┌───────────────────────────────────────────────────▼──────────┐
         │  DATADOG                                                     │
         │  474 monitors · 23 SLOs · 118 notification rules ·            │
-        │  27 workflows · 18 dashboards · 8 teams · on-call · catalog   │
+        │  27 workflows ·  3 dashboards · 8 teams · on-call · catalog   │
         └───────────────────────────────────────────────────────────────┘
                 │                                          ▲
                 ▼                                          │

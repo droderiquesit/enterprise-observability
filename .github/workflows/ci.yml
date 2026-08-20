@@ -3,8 +3,8 @@ name: ci
 # VALIDATION PIPELINE — every stage is a guardrail that can fail the build.
 #
 #   YAML → schema → tests (policy lint, manifests, runbooks, generated docs,
-#   scorecard, governance & scale) → fmt → validate → offline plan →
-#   determinism → security → credentialed plan + live monitor validation
+#   scorecard, governance & scale) → offline report families → fmt → validate →
+#   offline plan → determinism → security → credentialed plan + live validation
 #
 # The per-tool checks (validate_policy, validate_monitors, runbook registry
 # sync, matrix/runbook staleness, scorecard thresholds) all run INSIDE the
@@ -73,6 +73,13 @@ jobs:
 
       - name: "Policy, manifests, runbooks, generated docs, scorecard, scale — pytest"
         run: python -m pytest tests/ -q
+
+      # The five report families, offline against the committed fixtures. Not a
+      # gate — pytest already asserts the catalog and the implementation agree —
+      # but running it here puts the review queue in the PR artifact, which is
+      # the difference between a report family that exists and one anybody reads.
+      - name: "Report families — offline against tests/fixtures"
+        run: cd tools && python reports.py --fixtures ../tests/fixtures
 
       - uses: actions/upload-artifact@v4
         if: always()
