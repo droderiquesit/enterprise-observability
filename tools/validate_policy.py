@@ -8,6 +8,7 @@ not belong in the standard.
 Checks, in the order the CI pipeline reports them:
 
   SCHEMA        archetype required fields, vocabularies
+  TELEMETRY     every archetype declares the sources it cannot fire without
   REFERENCE     slo_id / runbook / workflow / domain resolve to registries
   SCOPE         every query is scoped (no org-wide wildcards)
   CARDINALITY   ≤3 group keys, no identity keys, notify_by on wide fanouts
@@ -151,6 +152,57 @@ def lint() -> list[str]:
                 p = oc.resolve_priority(policy, a["impact_class"], band, env)
                 if oc.pages(policy, p, band, env) and env != "prod":
                     err("PRIORITY", where, f"resolves to a paging monitor in {env}")
+
+    # =========================================================================
+    # BEGIN TELEMETRY REQUIREMENTS (§38) — self-contained block, own loop.
+    #
+    # Deliberately NOT folded into REQUIRED_ARCHETYPE_FIELDS or the main
+    # archetype loop above: this rule arrives on its own branch alongside other
+    # work on the same catalog, and a block that owns its whole check merges
+    # without touching a shared list.
+    #
+    # WHY IT IS A HARD FAILURE. A monitor whose telemetry source is absent does
+    # not error — it reports OK forever. Without a declared source there is no
+    # way to tell "nothing is wrong" from "nothing is arriving", so the estate
+    # can be fully green and cover nothing. `telemetry:` is what makes that
+    # difference computable (tools/applicability.py).
+    #
+    # The declaration is checked against the archetype's own query rather than
+    # merely against the vocabulary, because a value that is spelled correctly
+    # and describes the wrong producer is worse than a missing one: it looks
+    # answered. The mapping lives in global.yaml → telemetry_sources.
+    # =========================================================================
+    telemetry_vocab = oc.telemetry_sources(policy)
+    for aid, a in policy["archetypes"].items():
+        where = f"archetype {aid}"
+        declared = a.get("telemetry")
+        if declared is None:
+            err("TELEMETRY", where,
+                "missing required field `telemetry`. Declare every source this "
+                "archetype cannot fire without, from global.yaml → "
+                "telemetry_sources; an undeclared monitor is indistinguishable "
+                "from a healthy one when its integration is absent")
+            continue
+        if not isinstance(declared, list) or not declared:
+            err("TELEMETRY", where,
+                f"telemetry must be a non-empty list of source ids, got {declared!r}")
+            continue
+        unknown = [t for t in declared if t not in telemetry_vocab]
+        if unknown:
+            err("TELEMETRY", where,
+                f"telemetry {unknown} not in the vocabulary. Add the source to "
+                "global.yaml → telemetry_sources with the contract that produces "
+                "it (and its emission contract in docs/telemetry-gaps.md if "
+                "something has to be built), or use an existing id")
+            continue
+        derived = oc.derive_telemetry(policy, a["query"])
+        if sorted(declared) != derived:
+            err("TELEMETRY", where,
+                f"declares {sorted(declared)} but its query reads {derived}. The "
+                "declaration has to match the metrics the monitor actually "
+                "queries, or the applicability report is confidently wrong")
+    # END TELEMETRY REQUIREMENTS (§38)
+    # =========================================================================
 
     # ---------------------------------------------------------------- composites
     budget = policy["composites_doc"]["budget"]

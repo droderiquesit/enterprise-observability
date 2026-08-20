@@ -19,6 +19,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: synthetic_check
+    telemetry: [synthetics]
     selector: ""
     query: 'sum(last_10m):sum:synthetics.test_runs{__SCOPE__,status:failed} by {check_id,location}.as_count() >= 3'
     thresholds: { critical: 3, warning: 1 }
@@ -43,6 +44,7 @@ archetypes:
     detection: rate_of_change
     monitor_type: query alert
     resource_type: synthetic_check
+    telemetry: [synthetics]
     selector: ""
     query: 'pct_change(avg(last_15m),last_4h):avg:synthetics.http.response_time{__SCOPE__} by {check_id} > 100'
     thresholds: { critical: 100, warning: 50 }
@@ -63,6 +65,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: synthetic_check
+    telemetry: [synthetics]
     selector: ""
     query: 'min(last_6h):min:synthetics.ssl.days_left{__SCOPE__} by {check_id} < 21'
     thresholds: { critical: 21, warning: 45 }
@@ -85,6 +88,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: saas_vendor
+    telemetry: [synthetics]
     selector: ""
     query: 'sum(last_15m):sum:synthetics.test_runs{__SCOPE__,status:failed} by {service}.as_count() >= 3'
     thresholds: { critical: 3, warning: 1 }
@@ -106,6 +110,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: saas_vendor
+    telemetry: [apm]
     selector: ""
     query: "avg(last_30m):anomalies(avg:trace.http.client.request.duration{__SCOPE__,peer.dependency_kind:external} by {service,peer.service}, 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -126,6 +131,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: saas_vendor
+    telemetry: [apm]
     selector: ""
     # Scoped to peers tagged as external dependencies. Without this filter the
     # query is byte-identical to the application domain's dependency archetype,
@@ -150,6 +156,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: saas_vendor
+    telemetry: [custom_saas_quota_exporter]
     selector: ""
     query: "max(next_1d):forecast(sum:acme.saas.api_calls{__SCOPE__} by {service}.as_count() / avg:acme.saas.api_quota{__SCOPE__} by {service}, 'linear', 1, interval='60m', history='1w') > 0.9"
     thresholds: { critical: 0.9, warning: 0.8 }

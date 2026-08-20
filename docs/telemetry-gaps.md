@@ -9,6 +9,15 @@ This document is that register. It is the companion to
 `platform/policy/archetypes/`: if an archetype queries an `acme.*` metric, its
 emission contract is here.
 
+**Machine-readable index.** Every archetype declares a `telemetry:` list naming
+the sources it cannot fire without, and the vocabulary those values come from is
+`platform/policy/global.yaml → telemetry_sources` — one id per independently
+enablable producer, including one per emitter below. `tools/applicability.py`
+joins that against an estate description to answer "which monitors can actually
+work here, and what is missing?", so the gaps in this register are countable
+rather than remembered. The lint derives each declaration from the archetype's
+own query, which is what keeps this document and the catalog from drifting.
+
 ## Classification used throughout
 
 | Class | Meaning |
@@ -204,6 +213,7 @@ inventing a data source.
 | Azure Firewall rule-processing errors | **Not available** | No metric. Rule-evaluation problems surface in firewall logs; `firewall-denied-traffic-anomaly` catches the behavioural consequence. |
 | SQL Server per-query latency | **Requires DBM** | The integration's query-level metrics need Database Monitoring enabled. Until then, blocking, lock waits, long-running transactions and log-flush waits are the covered contention signals. |
 | Snowflake query failure rate | **Not available natively** | Same shape as task failures; extend the `acme.snowflake.*` exporter to `QUERY_HISTORY` if the signal is wanted. |
+| API gateway request rate, rate limit, backend pool health — `api.gateway.*` | **Custom metric, contract not written** | Found by the applicability audit: `api-rate-limit-saturation` and `api-gateway-backend-unhealthy` read an `api.gateway.*` namespace that no integration publishes. The namespace does not start with `acme.`, so it reads as a product metric and escaped this register until every archetype had to name its producer. Tracked as `custom_api_gateway_metrics`; it needs the same treatment as the emitters above — a table of metric, type and tags — before either monitor can fire. |
 
 ## Prerequisites that are configuration, not code
 

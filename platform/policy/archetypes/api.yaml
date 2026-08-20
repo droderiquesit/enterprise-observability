@@ -15,6 +15,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: service
+    telemetry: [apm]
     selector: "service_archetype:api"
     query: 'sum(last_5m):sum:trace.http.request.hits{__SCOPE__,http.status_class:5xx} by {service}.as_count() / sum:trace.http.request.hits{__SCOPE__} by {service}.as_count() > 0.5'
     thresholds: { critical: 0.5, warning: 0.2 }
@@ -40,6 +41,7 @@ archetypes:
     detection: rate_of_change
     monitor_type: query alert
     resource_type: service
+    telemetry: [apm]
     selector: "service_archetype:api"
     query: 'pct_change(avg(last_15m),last_1h):p99:trace.http.request.duration{__SCOPE__} by {service} > 100'
     thresholds: { critical: 100, warning: 50 }
@@ -64,6 +66,7 @@ archetypes:
     detection: seasonal_anomaly
     monitor_type: query alert
     resource_type: service
+    telemetry: [apm]
     selector: "service_archetype:api"
     query: "avg(last_30m):anomalies(p95:trace.http.request.duration{__SCOPE__} by {service}, 'robust', 3, direction='above', seasonality='weekly') >= 1"
     thresholds: { critical: 1.0 }
@@ -84,6 +87,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: service
+    telemetry: [apm]
     selector: "service_archetype:api"
     query: "avg(last_15m):anomalies(sum:trace.http.request.errors{__SCOPE__,http.status_class:5xx} by {service}.as_rate(), 'agile', 3) >= 1"
     thresholds: { critical: 1.0 }
@@ -104,6 +108,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: service
+    telemetry: [apm]
     selector: "service_archetype:api"
     query: "avg(last_30m):anomalies(sum:trace.http.request.hits{__SCOPE__,http.status_class:4xx} by {service}.as_rate(), 'agile', 4) >= 1"
     thresholds: { critical: 1.0 }
@@ -128,6 +133,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: service
+    telemetry: [apm]
     selector: "service_archetype:api"
     query: "avg(last_30m):anomalies(sum:trace.http.request.hits{__SCOPE__} by {service}.as_rate(), 'agile', 3, direction='below') >= 1"
     thresholds: { critical: 1.0 }
@@ -152,6 +158,7 @@ archetypes:
     detection: outlier
     monitor_type: query alert
     resource_type: service
+    telemetry: [apm]
     selector: "service_archetype:api"
     query: "avg(last_30m):outliers(avg:trace.http.client.request.duration{__SCOPE__} by {peer.service}, 'DBSCAN', 3) > 0"
     thresholds: { critical: 0 }
@@ -172,6 +179,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: service
+    telemetry: [custom_api_gateway_metrics]
     selector: "service_archetype:api"
     query: "max(next_1d):forecast(sum:api.gateway.requests{__SCOPE__} by {service}.as_rate() / avg:api.gateway.rate_limit{__SCOPE__} by {service}, 'linear', 1, interval='15m', history='2d') > 0.9"
     thresholds: { critical: 0.9, warning: 0.75 }
@@ -192,6 +200,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: api_gateway
+    telemetry: [custom_api_gateway_metrics]
     selector: "resource_type:api_gateway"
     query: 'min(last_5m):avg:api.gateway.healthy_backend_ratio{__SCOPE__} by {gateway,backend_pool} < 0.5'
     thresholds: { critical: 0.5, warning: 0.75 }

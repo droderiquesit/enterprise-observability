@@ -30,6 +30,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: azure_front_door
+    telemetry: [azure_integration]
     selector: "resource_type:azure_front_door"
     query: "min(last_10m):avg:azure.network_frontdoors.backend_health_percentage{__SCOPE__} by {subscription_name,name} < 50"
     thresholds: { critical: 50, warning: 80 }
@@ -55,6 +56,7 @@ archetypes:
     detection: rate_of_change
     monitor_type: query alert
     resource_type: azure_front_door
+    telemetry: [azure_integration]
     selector: "resource_type:azure_front_door"
     query: "pct_change(avg(last_15m),last_4h):avg:azure.network_frontdoors.total_latency{__SCOPE__} by {subscription_name,name} > 50"
     thresholds: { critical: 50, warning: 25 }
@@ -79,6 +81,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_front_door
+    telemetry: [azure_integration]
     selector: "resource_type:azure_front_door"
     query: "avg(last_15m):anomalies(avg:azure.network_frontdoors.backend_request_latency{__SCOPE__} by {subscription_name,name}, 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -99,6 +102,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_front_door
+    telemetry: [azure_integration]
     selector: "resource_type:azure_front_door"
     query: "avg(last_30m):anomalies(sum:azure.network_frontdoors.request_count{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3) >= 1"
     thresholds: { critical: 1.0 }
@@ -123,6 +127,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_front_door
+    telemetry: [azure_integration]
     selector: "resource_type:azure_front_door"
     query: "avg(last_30m):anomalies(sum:azure.network_frontdoors.web_application_firewall_request_count{__SCOPE__,action:block} by {subscription_name,name}.as_rate(), 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -149,6 +154,7 @@ archetypes:
     detection: rate_of_change
     monitor_type: query alert
     resource_type: azure_cdn
+    telemetry: [azure_integration]
     selector: "resource_type:azure_cdn"
     query: "pct_change(avg(last_1h),last_1d):avg:azure.cdn_profiles.byte_hit_ratio{__SCOPE__} by {subscription_name,name} < -25"
     thresholds: { critical: -25, warning: -15 }
@@ -174,6 +180,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: azure_apim
+    telemetry: [azure_integration]
     selector: "resource_type:azure_apim"
     query: "max(next_12h):forecast(avg:azure.apimanagement_service.capacity{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='30m', history='1d') > 80"
     thresholds: { critical: 80, warning: 70 }
@@ -198,6 +205,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_apim
+    telemetry: [azure_integration]
     selector: "resource_type:azure_apim"
     query: "avg(last_15m):anomalies(sum:azure.apimanagement_service.failed_requests{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -222,6 +230,7 @@ archetypes:
     detection: rate_of_change
     monitor_type: query alert
     resource_type: azure_apim
+    telemetry: [azure_integration]
     selector: "resource_type:azure_apim"
     query: "pct_change(avg(last_15m),last_4h):avg:azure.apimanagement_service.overall_duration_of_gateway_requests{__SCOPE__} by {subscription_name,name} > 50"
     thresholds: { critical: 50, warning: 25 }
@@ -242,6 +251,7 @@ archetypes:
     detection: rate_of_change
     monitor_type: query alert
     resource_type: azure_apim
+    telemetry: [azure_integration]
     selector: "resource_type:azure_apim"
     query: "pct_change(avg(last_15m),last_4h):avg:azure.apimanagement_service.duration_of_backend_requests{__SCOPE__} by {subscription_name,name} > 50"
     thresholds: { critical: 50, warning: 25 }
@@ -266,6 +276,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: azure_apim
+    telemetry: [azure_integration]
     selector: "resource_type:azure_apim"
     query: "min(last_15m):min:azure.apimanagement_service.network_connectivity_status_of_resources{__SCOPE__} by {subscription_name,name} < 1"
     thresholds: { critical: 1 }
@@ -291,6 +302,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_apim
+    telemetry: [azure_integration]
     selector: "resource_type:azure_apim"
     query: "avg(last_30m):anomalies(sum:azure.apimanagement_service.unauthorized_requests{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -316,6 +328,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: azure_traffic_manager
+    telemetry: [azure_integration]
     selector: "resource_type:azure_traffic_manager"
     query: "min(last_10m):min:azure.network_trafficmanagerprofiles.probe_agent_current_endpoint_state_by_profile_resource_id{__SCOPE__} by {name,endpoint_name} < 1"
     thresholds: { critical: 1 }
@@ -341,6 +354,7 @@ archetypes:
     detection: outlier
     monitor_type: query alert
     resource_type: azure_traffic_manager
+    telemetry: [azure_integration]
     selector: "resource_type:azure_traffic_manager"
     query: "avg(last_1h):outliers(sum:azure.network_trafficmanagerprofiles.qps_by_endpoint{__SCOPE__} by {name,endpoint_name}.as_rate(), 'DBSCAN', 3) > 0"
     thresholds: { critical: 0 }

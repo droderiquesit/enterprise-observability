@@ -16,6 +16,7 @@ archetypes:
     detection: service_check
     monitor_type: service check
     resource_type: network_device
+    telemetry: [network_device_monitoring]
     selector: ""
     query: '"snmp.can_check".over("__SCOPE__").by("site","device").last(3).count_by_status()'
     thresholds: { critical: 2, warning: 1 }
@@ -38,6 +39,7 @@ archetypes:
     detection: rate_of_change
     monitor_type: query alert
     resource_type: network_device
+    telemetry: [network_device_monitoring]
     selector: ""
     query: 'pct_change(avg(last_15m),last_4h):sum:snmp.ifInErrors{__SCOPE__} by {device,interface}.as_rate() > 100'
     thresholds: { critical: 100, warning: 50 }
@@ -62,6 +64,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: network_device
+    telemetry: [network_device_monitoring]
     selector: ""
     query: "max(next_1w):forecast(avg:snmp.ifBandwidthInUsage.rate{__SCOPE__} by {device,interface}, 'linear', 1, interval='60m', history='2w') > 80"
     thresholds: { critical: 80, warning: 70 }
@@ -83,6 +86,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: network_path
+    telemetry: [network_path_monitoring]
     selector: ""
     query: 'avg(last_10m):avg:network.path.loss_pct{__SCOPE__} by {source_site,destination} > 2'
     thresholds: { critical: 2, warning: 0.5 }
@@ -107,6 +111,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: network_path
+    telemetry: [network_path_monitoring]
     selector: ""
     query: "avg(last_30m):anomalies(avg:network.path.latency{__SCOPE__} by {source_site,destination}, 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -128,6 +133,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: dns_zone
+    telemetry: [synthetics]
     selector: ""
     query: 'sum(last_10m):sum:synthetics.dns.failures{__SCOPE__} by {zone,resolver}.as_count() >= 2'
     thresholds: { critical: 2, warning: 1 }
@@ -152,6 +158,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: network_tunnel
+    telemetry: [custom_network_state_export]
     selector: ""
     query: 'min(last_10m):avg:acme.network.tunnel_up{__SCOPE__} by {site,tunnel} < 1'
     thresholds: { critical: 1 }
@@ -174,6 +181,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: load_balancer
+    telemetry: [custom_loadbalancer_export]
     selector: ""
     query: 'min(last_10m):avg:acme.lb.healthy_members{__SCOPE__} by {load_balancer,pool} / avg:acme.lb.total_members{__SCOPE__} by {load_balancer,pool} < 0.6'
     thresholds: { critical: 0.6, warning: 0.8 }
@@ -196,6 +204,7 @@ archetypes:
     detection: event
     monitor_type: event-v2 alert
     resource_type: network_device
+    telemetry: [network_automation_events]
     selector: ""
     query: 'events("source:network-automation __ESCOPE__ tags:\"event:config_change\" -tags:\"change_ticket:*\"").rollup("count").by("device").last("30m") >= 1'
     thresholds: { critical: 1 }

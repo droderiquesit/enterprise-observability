@@ -17,6 +17,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: kube_deployment
+    telemetry: [kube_state_metrics]
     selector: ""
     query: 'min(last_10m):sum:kubernetes_state.deployment.replicas_available{__SCOPE__} by {kube_cluster_name,kube_namespace,kube_deployment} < 1'
     thresholds: { critical: 1, warning: 2 }
@@ -41,6 +42,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: kube_deployment
+    telemetry: [kube_state_metrics]
     selector: ""
     query: 'min(last_15m):sum:kubernetes_state.deployment.replicas_available{__SCOPE__} by {kube_cluster_name,kube_namespace,kube_deployment} / sum:kubernetes_state.deployment.replicas_desired{__SCOPE__} by {kube_cluster_name,kube_namespace,kube_deployment} < 0.6'
     thresholds: { critical: 0.6, warning: 0.8 }
@@ -65,6 +67,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: kube_pod
+    telemetry: [kube_state_metrics]
     selector: ""
     query: 'max(last_10m):sum:kubernetes_state.container.status_report.count.waiting{__SCOPE__,reason:crashloopbackoff} by {kube_cluster_name,kube_namespace,kube_deployment} >= 1'
     thresholds: { critical: 1 }
@@ -89,6 +92,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: kube_pod
+    telemetry: [kubernetes_integration]
     selector: ""
     query: "avg(last_30m):anomalies(sum:kubernetes.containers.restarts{__SCOPE__} by {kube_cluster_name,kube_namespace,kube_deployment}.as_rate(), 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -110,6 +114,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: kube_pod
+    telemetry: [kube_state_metrics]
     selector: ""
     query: 'sum(last_15m):sum:kubernetes_state.container.status_report.count.terminated{__SCOPE__,reason:oomkilled} by {kube_cluster_name,kube_namespace,kube_deployment}.as_count() >= 1'
     thresholds: { critical: 1 }
@@ -133,6 +138,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: kube_deployment
+    telemetry: [kubernetes_integration]
     selector: ""
     query: "max(next_1d):forecast(avg:kubernetes.memory.usage_pct{__SCOPE__} by {kube_cluster_name,kube_namespace,kube_deployment}, 'linear', 1, interval='30m', history='1w') > 0.95"
     thresholds: { critical: 0.95, warning: 0.85 }
@@ -154,6 +160,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: kube_deployment
+    telemetry: [kubernetes_integration]
     selector: ""
     query: "avg(last_30m):anomalies(avg:kubernetes.cpu.throttled.periods{__SCOPE__} by {kube_cluster_name,kube_namespace,kube_deployment}.as_rate(), 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -175,6 +182,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: kube_pod
+    telemetry: [kube_state_metrics]
     selector: ""
     query: 'min(last_15m):sum:kubernetes_state.pod.status_phase{__SCOPE__,phase:pending} by {kube_cluster_name,kube_namespace} >= 3'
     thresholds: { critical: 3, warning: 1 }
@@ -199,6 +207,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: kube_node
+    telemetry: [kube_state_metrics]
     selector: ""
     query: 'max(last_10m):sum:kubernetes_state.node.status{__SCOPE__,status:false,condition:ready} by {kube_cluster_name,node} >= 1'
     thresholds: { critical: 1 }
@@ -221,6 +230,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: kube_node
+    telemetry: [kube_state_metrics]
     selector: ""
     query: 'max(last_15m):sum:kubernetes_state.node.by_condition{__SCOPE__,condition:memorypressure,status:true} by {kube_cluster_name,node} >= 1'
     thresholds: { critical: 1 }
@@ -243,6 +253,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: kube_cluster
+    telemetry: [kubernetes_integration]
     selector: ""
     query: "max(next_1w):forecast(sum:kubernetes.cpu.requests{__SCOPE__} by {kube_cluster_name} / sum:kubernetes.cpu.capacity{__SCOPE__} by {kube_cluster_name}, 'linear', 1, interval='60m', history='2w') > 0.9"
     thresholds: { critical: 0.9, warning: 0.8 }
@@ -263,6 +274,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: kube_hpa
+    telemetry: [kube_state_metrics]
     selector: ""
     query: 'min(last_30m):sum:kubernetes_state.hpa.current_replicas{__SCOPE__} by {kube_cluster_name,kube_namespace,hpa} - sum:kubernetes_state.hpa.max_replicas{__SCOPE__} by {kube_cluster_name,kube_namespace,hpa} >= 0'
     thresholds: { critical: 0 }
@@ -287,6 +299,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: kube_pvc
+    telemetry: [kubernetes_integration]
     selector: ""
     query: "max(next_1d):forecast(avg:kubernetes.kubelet.volume.stats.used_bytes{__SCOPE__} by {kube_cluster_name,kube_namespace,persistentvolumeclaim} / avg:kubernetes.kubelet.volume.stats.capacity_bytes{__SCOPE__} by {kube_cluster_name,kube_namespace,persistentvolumeclaim}, 'linear', 1, interval='60m', history='1w') > 0.9"
     thresholds: { critical: 0.9, warning: 0.8 }
@@ -308,6 +321,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: kube_cronjob
+    telemetry: [kube_state_metrics]
     selector: ""
     query: 'sum(last_1h):sum:kubernetes_state.job.failed{__SCOPE__} by {kube_cluster_name,kube_namespace,kube_cronjob}.as_count() >= 1'
     thresholds: { critical: 1 }
@@ -330,6 +344,7 @@ archetypes:
     detection: rate_of_change
     monitor_type: query alert
     resource_type: kube_cluster
+    telemetry: [kubernetes_integration]
     selector: ""
     query: 'pct_change(avg(last_15m),last_1h):avg:kubernetes.apiserver.request.latency{__SCOPE__} by {kube_cluster_name} > 150'
     thresholds: { critical: 150, warning: 75 }
@@ -350,6 +365,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: kube_cluster
+    telemetry: [kubernetes_integration]
     selector: ""
     query: 'sum(last_30m):sum:kubernetes.pods.running{__SCOPE__} by {kube_cluster_name}.as_count() < 1'
     thresholds: { critical: 1 }

@@ -26,10 +26,10 @@ row was confirmed by a repository-wide search that returned zero matches.
 
 | Status | Sections |
 |---|---|
-| OK | 21 |
-| IMPROVE | 9 |
+| OK | 23 |
+| IMPROVE | 8 |
 | PARTIAL | 12 |
-| MISSING | 15 |
+| MISSING | 14 |
 | OBSOLETE | 1 (resolved) |
 | N/A | 2 |
 
@@ -101,7 +101,7 @@ presentation, survey — and on **fleet/agent operations** and **Control-M**.
 
 | § | Requirement | Status | Where | Gap → Remediation | Validation |
 |---|---|---|---|---|---|
-| 16 | Monitoring profiles resolve from entity type + platform + env + criticality + telemetry | **IMPROVE** | `platform/policy/profiles.yaml`, `service_archetypes.yaml` packs | Resolves from service_archetype → packs → archetypes. **Telemetry availability is not an input** | applicability test with telemetry absent |
+| 16 | Monitoring profiles resolve from entity type + platform + env + criticality + telemetry | **OK** | `platform/policy/profiles.yaml`, `service_archetypes.yaml` packs, `tools/profile_engine.py` step 7 | Telemetry availability is now the last resolution step: a resolved profile whose every pack member is blocked demotes to `observe_only` with the missing sources named, and a partial gap is recorded as `telemetry_coverage_pct` rather than silently claimed as coverage | `test_a_profile_does_not_claim_coverage_it_cannot_deliver` |
 | 17 | One YAML file adds a monitor, framework supplies the rest | **OK** | `platform/policy/archetypes/*.yaml`, 264 archetypes | Naming, tags, routing, runbook, workflow, recovery, correlation all derived | `test_self_service.py`, `validate_policy.py` |
 | 18 | Predictive-first | **OK** | `global.yaml → detection_policy` | Fixed thresholds require a recorded `rationale_fixed_threshold`; lint enforces it | `test_predictive_detection_dominates` |
 
@@ -161,8 +161,8 @@ This prompt reinstates it; the reinstatement is treated as authoritative.
 |---|---|---|---|---|---|
 | 36 | Fleet Management standard and automation | **MISSING** | mentioned in 5 docs, implemented nowhere | No agent deployment automation, no Azure Policy/extension/golden-image path | fleet compliance percentage |
 | 37 | Standard agent profiles (base, Windows, Linux, application, SQL Server) | **MISSING** | — | Remediation: `platform/policy/agent_profiles.yaml` + per-profile check configuration | profile → check census |
-| 38 | Every monitor declares required telemetry | **MISSING** | — | Archetypes declare `resource_type` and `detection` but not a `telemetry:` requirement, so "can this monitor ever fire here?" is unanswerable | applicability engine report |
-| 39 | Fleet compliance detection and percentage | **PARTIAL** | `agent-version-drift`, `host-agent-unhealthy`, `os-*` archetypes | Detects agent health and drift; no compliant/required ratio | compliance metric |
+| 38 | Every monitor declares required telemetry | **OK** | `platform/policy/global.yaml → telemetry_sources` (40 ids), `telemetry:` on all 264 archetypes, `tools/applicability.py` | Every archetype names the sources it cannot fire without; the lint DERIVES the requirement from the archetype's own query and rejects a declaration that disagrees, so it cannot drift or be hand-waved | `validate_policy.py` TELEMETRY checks, `tests/test_applicability.py` |
+| 39 | Fleet compliance detection and percentage | **PARTIAL** | `agent-version-drift`, `host-agent-unhealthy`, `os-*` archetypes, `tools/applicability.py` | Detects agent health and drift, and the applicability engine now produces a coverage percentage per entity and per estate with the missing source named. Still missing the compliant/required ratio for AGENT deployment itself, which is §36/§37 work | applicability coverage report; compliance metric still outstanding |
 | 40 | Private synthetic locations | **N/A → verify** | `saas.yaml` uses `synthetics.*` metrics | No `datadog_synthetics_test` or private-location resources. Requirement is conditional on internal apps needing them | inventory of internal endpoints |
 | 41 | Entity-aware Datadog Scorecards | **PARTIAL** | `tools/monitor_scorecard.py` | A **local Python** scorecard over the catalog, not Datadog Scorecards, and it grades monitors rather than entities | Datadog scorecard rule census |
 
@@ -198,7 +198,7 @@ This prompt reinstates it; the reinstatement is treated as authoritative.
 | 51 | Expected outcomes documented | **PARTIAL** | `README.md`, `docs/operating-model.md` | Coverage/simplicity/noise are documented; no measured before/after | outcome metrics |
 | 52 | New entity SOP (28 steps) | **PARTIAL** | `docs/golden-path.md` | Covers service onboarding; not entity-kind aware | walkthrough |
 | 53 | New monitor SOP | **OK** | `docs/golden-path.md`, `docs/implementation-guide.md` | — | walkthrough |
-| 54 | CI/CD guardrails (30 validations) | **IMPROVE** | `.github/workflows/ci.yml`, `tools/validate_*.py` | ~22 of 30 present. Missing: entity kind, SLO/catalog identity, duplicate SLO, telemetry requirement, orphan resource checks | CI job matrix |
+| 54 | CI/CD guardrails (30 validations) | **IMPROVE** | `.github/workflows/ci.yml`, `tools/validate_*.py` | ~23 of 30 present. Missing: entity kind, SLO/catalog identity, duplicate SLO, orphan resource checks | CI job matrix |
 | 55 | Repository quality and directory documentation | **IMPROVE** | `README.md` | Clean and documented; examples were mixed into production config (fixed in §4) and the docs index needs the new entity/MCP/portal locations | tree review |
 | 56 | Minimal RBAC (~6 roles) | **OK** | `modules/rbac` | 4 roles; payments roles never existed separately | role census |
 | 57 | End-state architecture | **PARTIAL** | `docs/reference-architecture.md` | Documents the current spine; MCP/portal planes absent | architecture doc |

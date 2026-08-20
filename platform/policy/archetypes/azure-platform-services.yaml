@@ -25,6 +25,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_redis
+    telemetry: [azure_integration]
     selector: "resource_type:azure_redis"
     query: "avg(last_15m):anomalies(avg:azure.cache_redis.server_load{__SCOPE__} by {subscription_name,name}, 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -49,6 +50,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: azure_redis
+    telemetry: [azure_integration]
     selector: "resource_type:azure_redis"
     query: "max(next_12h):forecast(avg:azure.cache_redis.percent_processor_time{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='30m', history='1d') > 80"
     thresholds: { critical: 80, warning: 70 }
@@ -69,6 +71,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: azure_redis
+    telemetry: [azure_integration]
     selector: "resource_type:azure_redis"
     query: "max(next_12h):forecast(avg:azure.cache_redis.usedmemorypercentage{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='30m', history='1d') > 85"
     thresholds: { critical: 85, warning: 75 }
@@ -93,6 +96,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_redis
+    telemetry: [azure_integration]
     selector: "resource_type:azure_redis"
     query: "avg(last_15m):anomalies(sum:azure.cache_redis.evictedkeys{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -117,6 +121,7 @@ archetypes:
     detection: rate_of_change
     monitor_type: query alert
     resource_type: azure_redis
+    telemetry: [azure_integration]
     selector: "resource_type:azure_redis"
     query: "pct_change(avg(last_30m),last_4h):(sum:azure.cache_redis.cachehits{__SCOPE__} by {subscription_name,name} / (sum:azure.cache_redis.cachehits{__SCOPE__} by {subscription_name,name} + sum:azure.cache_redis.cachemisses{__SCOPE__} by {subscription_name,name})) < -20"
     thresholds: { critical: -20, warning: -10 }
@@ -141,6 +146,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: azure_redis
+    telemetry: [azure_integration]
     selector: "resource_type:azure_redis"
     query: "max(next_12h):forecast(avg:azure.cache_redis.connectedclients{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='15m', history='1d') > 0"
     thresholds: { critical: 0 }
@@ -165,6 +171,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_redis
+    telemetry: [azure_integration]
     selector: "resource_type:azure_redis"
     query: "avg(last_15m):anomalies(avg:azure.cache_redis.cache_latency{__SCOPE__} by {subscription_name,name}, 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -185,6 +192,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_redis
+    telemetry: [azure_integration]
     selector: "resource_type:azure_redis"
     query: "avg(last_15m):anomalies(sum:azure.cache_redis.errors{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -208,6 +216,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: azure_redis
+    telemetry: [azure_integration]
     selector: "resource_type:azure_redis"
     query: "min(last_15m):min:azure.cache_redis.geo_replication_healthy{__SCOPE__} by {subscription_name,name} < 1"
     thresholds: { critical: 1 }
@@ -233,6 +242,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_container_registry
+    telemetry: [azure_integration]
     selector: "resource_type:azure_container_registry"
     query: "avg(last_30m):anomalies(sum:azure.containerregistry_registries.total_pull_count{__SCOPE__} by {subscription_name,name}.as_rate() - sum:azure.containerregistry_registries.successful_pull_count{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -258,6 +268,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_container_registry
+    telemetry: [azure_integration]
     selector: "resource_type:azure_container_registry"
     query: "avg(last_30m):anomalies(sum:azure.containerregistry_registries.total_push_count{__SCOPE__} by {subscription_name,name}.as_rate() - sum:azure.containerregistry_registries.successful_push_count{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -282,6 +293,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: azure_container_registry
+    telemetry: [azure_integration]
     selector: "resource_type:azure_container_registry"
     query: "max(next_1w):forecast(avg:azure.containerregistry_registries.storage_used{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='1h', history='1w') > 0"
     thresholds: { critical: 0 }

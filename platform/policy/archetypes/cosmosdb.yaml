@@ -22,6 +22,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: azure_cosmos_db
+    telemetry: [azure_integration]
     selector: "resource_type:azure_cosmos_db"
     query: "min(last_10m):avg:azure.cosmosdb.service_availability{__SCOPE__} by {subscription_name,name} < 99.99"
     thresholds: { critical: 99.99, warning: 100 }
@@ -46,6 +47,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: azure_cosmos_db
+    telemetry: [azure_integration]
     selector: "resource_type:azure_cosmos_db"
     query: "sum(last_15m):sum:azure.cosmosdb.total_requests{__SCOPE__,status_code:429} by {subscription_name,name}.as_count() > 0"
     thresholds: { critical: 0 }
@@ -70,6 +72,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: azure_cosmos_db
+    telemetry: [azure_integration]
     selector: "resource_type:azure_cosmos_db"
     query: "avg(last_15m):max:azure.cosmosdb.normalized_ru_consumption{__SCOPE__} by {subscription_name,name} > 90"
     thresholds: { critical: 90, warning: 80 }
@@ -95,6 +98,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_cosmos_db
+    telemetry: [azure_integration]
     selector: "resource_type:azure_cosmos_db"
     query: "avg(last_15m):anomalies(avg:azure.cosmosdb.server_side_latency{__SCOPE__} by {subscription_name,name}, 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -119,6 +123,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: azure_cosmos_db
+    telemetry: [azure_integration]
     selector: "resource_type:azure_cosmos_db"
     query: "avg(last_30m):max:azure.cosmosdb.p99_replication_latency{__SCOPE__} by {subscription_name,name} > 300"
     thresholds: { critical: 300, warning: 120 }
@@ -143,6 +148,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: azure_cosmos_db
+    telemetry: [azure_integration]
     selector: "resource_type:azure_cosmos_db"
     query: "sum(last_15m):sum:azure.cosmosdb.region_failed_over{__SCOPE__} by {subscription_name,name}.as_count() > 0"
     thresholds: { critical: 0 }
@@ -168,6 +174,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: azure_cosmos_db
+    telemetry: [azure_integration]
     selector: "resource_type:azure_cosmos_db"
     query: "sum(last_15m):sum:azure.cosmosdb.region_offlined{__SCOPE__} by {subscription_name,name}.as_count() > 0"
     thresholds: { critical: 0 }
@@ -193,6 +200,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: azure_cosmos_db
+    telemetry: [azure_integration]
     selector: "resource_type:azure_cosmos_db"
     query: "max(next_1w):forecast(avg:azure.cosmosdb.data_usage{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='1h', history='1w') > 0"
     thresholds: { critical: 0 }
@@ -217,6 +225,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_cosmos_db
+    telemetry: [azure_integration]
     selector: "resource_type:azure_cosmos_db"
     query: "avg(last_30m):anomalies(sum:azure.cosmosdb.metadata_requests{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
