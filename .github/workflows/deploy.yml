@@ -86,6 +86,44 @@ jobs:
           DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
         run: cd tools && python publish_runbooks.py --write-registry
 
+      # COMMIT THE REGISTRY BACK, or the ids just written are discarded with the
+      # checkout. That is not cosmetic: the nightly drift job runs
+      # `publish_runbooks.py --check`, which fails on any registry entry with no
+      # id — so a registry nobody commits makes governance permanently red, and
+      # a permanently red gate is one people stop reading. It also leaves every
+      # local consumer (the coverage matrix, the catalog reconciler) working
+      # from a registry that trails production.
+      #
+      # Recorded HERE rather than in the production job because this job runs on
+      # every push and every dispatch, and publishing is idempotent — by the
+      # time production republishes there is nothing new to record.
+      #
+      # `[skip ci]` is load-bearing: a push to the default branch re-triggers
+      # this workflow, so without it every release that adds a runbook would
+      # deploy twice.
+      - name: "Record the published notebook ids in the repository"
+        run: |
+          git config user.name  "observability-deploy[bot]"
+          git config user.email "observability-deploy@users.noreply.github.com"
+          if git diff --quiet -- platform/policy/runbooks.yaml; then
+            echo "registry unchanged — every runbook already had an id"
+            exit 0
+          fi
+          git add platform/policy/runbooks.yaml
+          git commit -F - <<'MSG'
+          Record published runbook notebook ids [skip ci]
+
+          Written by publish_runbooks.py --write-registry during a deploy, so
+          that publish_runbooks.py --check stays green and monitor `assets`
+          attachment resolves from the repository rather than only from the org.
+          MSG
+          # A rejected push is not a deploy failure. The notebooks exist in
+          # Datadog either way and the next run re-adopts them by name, so
+          # failing an otherwise good apply over a git race would be the wrong
+          # trade. Warn loudly instead.
+          git push origin "HEAD:${{ github.ref_name }}" ||
+            echo "::warning::could not push the runbook registry; notebook ids remain unrecorded in git"
+
       - name: Plan & apply, one environment at a time — dev, then qa, then stage
         env:
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
