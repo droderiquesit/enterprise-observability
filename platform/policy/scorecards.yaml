@@ -179,6 +179,8 @@ resource_type_kind:
   azure_function: service
   azure_key_vault: service
   batch_job: service
+  controlm_job: service
+  controlm_server: service
   certificate: service
   identity_provider: service
   integration_flow: service

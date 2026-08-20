@@ -333,7 +333,6 @@ def archetype_telemetry(policy: dict, archetype: dict) -> list[str]:
 
 # END telemetry requirements (§38)
 # =============================================================================
-=======
 # -----------------------------------------------------------------------------
 # ENTITY KIND (§41). Implemented ONCE, here, for the same reason resolve_priority
 # is: the scorecard, the reports and the tests must not each carry their own
