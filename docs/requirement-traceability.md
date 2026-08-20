@@ -49,6 +49,20 @@ repository-wide search that returned zero matches.
 | MCP | 30 grounded questions, 23 tools |
 | Tests | 555 — 340 platform · 161 MCP · 54 portal |
 
+**Deployed to production** (deploy run #51, verified against the live org rather
+than from the run's exit code):
+
+| | Before | After |
+|---|---|---|
+| Monitors (prod) | 445 | **459** |
+| SLOs (prod) | 22 | 22 (one replaced in place) |
+| Dashboards | 18 | **3** |
+| Catalog objects | 3 service definitions | **6 typed entities** |
+| Runbook notebooks | 261 | **270** |
+
+The idempotency gate — a second plan must be empty — passed, which is the
+evidence that the apply converged rather than merely exited zero.
+
 ### What changed since the first audit
 
 The first pass recorded 14 MISSING sections. Nine parallel workstreams closed
