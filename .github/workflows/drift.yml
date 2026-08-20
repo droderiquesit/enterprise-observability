@@ -23,18 +23,31 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -r tools/requirements.txt
+      - name: Preflight — configured?
+        id: pre
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+        run: |
+          if [ -n "$DD_API_KEY" ] && [ -f stacks/backend.prod.hcl ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Drift check skipped::Platform not yet deployed (no credentials/backend). Nothing to drift against."
+          fi
       - name: Terraform drift (detailed exit code)
+        if: steps.pre.outputs.configured == 'true'
         env:
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
           DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
         run: |
           set +e; rc=0
           for d in stacks/foundation stacks/coverage; do
-            (cd $d && terraform init -input=false -backend-config=../backend.prod.hcl >/dev/null \
+            (cd $d && terraform init -reconfigure -input=false -backend-config=../backend.prod.hcl >/dev/null \
               && terraform plan -input=false -detailed-exitcode); [ $? -eq 2 ] && rc=2
           done
           exit $rc
       - name: Runbook drift
+        if: steps.pre.outputs.configured == 'true'
         env:
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
           DD_APP_KEY: ${{ secrets.DD_APP_KEY }}

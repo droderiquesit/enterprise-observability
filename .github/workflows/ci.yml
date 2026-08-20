@@ -44,13 +44,15 @@ jobs:
       - name: Unit, governance & scale tests (incl. 1.2M-resource estate)
         run: python -m pytest tests/ -q
       - name: Offline plan (no credentials; graph + preconditions + cardinality gates)
+        # -reconfigure: the validate step above initialized these dirs with
+        # -backend=false; planning needs a real (local) backend.
         run: |
           cd stacks/coverage
-          terraform init -input=false >/dev/null
+          terraform init -reconfigure -input=false >/dev/null
           DD_API_KEY=offline DD_APP_KEY=offline terraform plan -input=false \
             -var datadog_validate=false -var adopt_existing_slos=false -out=plan.out
           cd ../foundation
-          terraform init -input=false >/dev/null
+          terraform init -reconfigure -input=false >/dev/null
           DD_API_KEY=offline DD_APP_KEY=offline terraform plan -input=false \
             -var datadog_validate=false -var manage_rbac=false
       - name: Determinism — second plan must equal the first
@@ -78,8 +80,9 @@ jobs:
   credentialed-plan:
     # Runs only where the org's CI service-account secrets exist (not on
     # forks). Full plan with live provider validation: every monitor is
-    # checked against /api/v1/monitor/validate before merge.
-    if: github.event.pull_request.head.repo.fork == false
+    # checked against /api/v1/monitor/validate before merge. No-ops with a
+    # notice until the datadog-plan environment holds credentials.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
     runs-on: ubuntu-latest
     environment: datadog-plan
     steps:
@@ -92,6 +95,10 @@ jobs:
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
           DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
         run: |
-          if [ -z "$DD_API_KEY" ]; then echo "no secrets in this context — skipping"; exit 0; fi
-          cd stacks/coverage && terraform init -input=false >/dev/null
+          if [ -z "$DD_API_KEY" ] || [ -z "$DD_APP_KEY" ]; then
+            echo "::notice::Datadog credentials not configured for the datadog-plan environment — live validation skipped (offline plan already gated this PR)."
+            exit 0
+          fi
+          cd stacks/coverage
+          terraform init -reconfigure -input=false >/dev/null
           terraform plan -input=false
