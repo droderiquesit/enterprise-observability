@@ -1,0 +1,105 @@
+name: otel-collector
+# =============================================================================
+# PROMOTION: dev → qa → prod. The SAME image tag moves through all three, so
+# what production runs is what qa proved. Production is gated by the
+# `otel-collector-prod` GitHub environment's reviewers.
+# =============================================================================
+on:
+  workflow_dispatch:
+    inputs:
+      imageTag:
+        description: "Collector version to deploy, e.g. 0.109.0 (never 'latest')"
+        required: true
+        type: string
+      target:
+        description: "How far to promote"
+        required: true
+        default: qa
+        type: choice
+        options: [dev, qa, prod]
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/otel-collector/**'
+      - '.github/workflows/otel-collector-*.yml'
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  # Contrib distribution: the core collector image has no Datadog exporter.
+  IMAGE_REPOSITORY: otel/opentelemetry-collector-contrib
+  # Bumping the collector is a reviewed change to THIS line, not a floating tag.
+  DEFAULT_COLLECTOR_VERSION: "0.109.0"
+  LOCATION: eastus2
+
+jobs:
+  # A push that only changes the deployment definition still needs a tag to
+  # deploy; it re-deploys whatever is already released to dev.
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      imageTag: ${{ steps.pick.outputs.tag }}
+      appVersion: ${{ steps.pick.outputs.version }}
+    steps:
+      - id: pick
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.imageTag }}"
+          if [ -z "$TAG" ]; then
+            # Deterministic and immutable: the commit that changed the config.
+            # A config-only push has no new image; redeploy the pinned default.
+            TAG="$DEFAULT_COLLECTOR_VERSION"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${GITHUB_RUN_NUMBER}-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          echo "promoting image tag: $TAG"
+
+  dev:
+    needs: resolve
+    uses: ./.github/workflows/otel-collector-env.yml
+    with:
+      environment: dev
+      gitHubEnvironment: otel-collector-dev
+      resourceGroup: rg-otel-collector-dev
+      location: eastus2
+      imageRepository: otel/opentelemetry-collector-contrib
+      imageTag: ${{ needs.resolve.outputs.imageTag }}
+      appVersion: ${{ needs.resolve.outputs.appVersion }}
+      keyVaultName: kv-otel-dev
+      datadogKeyVaultUrl: https://kv-otel-dev.vault.azure.net/secrets/datadog-api-key
+    secrets: inherit
+
+  qa:
+    needs: [resolve, dev]
+    if: ${{ github.event_name == 'push' || inputs.target == 'qa' || inputs.target == 'prod' }}
+    uses: ./.github/workflows/otel-collector-env.yml
+    with:
+      environment: qa
+      gitHubEnvironment: otel-collector-qa
+      resourceGroup: rg-otel-collector-qa
+      location: eastus2
+      imageRepository: otel/opentelemetry-collector-contrib
+      imageTag: ${{ needs.resolve.outputs.imageTag }}
+      appVersion: ${{ needs.resolve.outputs.appVersion }}
+      keyVaultName: kv-otel-qa
+      datadogKeyVaultUrl: https://kv-otel-qa.vault.azure.net/secrets/datadog-api-key
+    secrets: inherit
+
+  prod:
+    needs: [resolve, qa]
+    # Production is NEVER promoted by a push — only a deliberate dispatch.
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'prod' }}
+    uses: ./.github/workflows/otel-collector-env.yml
+    with:
+      environment: prod
+      gitHubEnvironment: otel-collector-prod      # reviewers configured here
+      resourceGroup: rg-otel-collector-prod
+      location: eastus2
+      imageRepository: otel/opentelemetry-collector-contrib
+      imageTag: ${{ needs.resolve.outputs.imageTag }}
+      appVersion: ${{ needs.resolve.outputs.appVersion }}
+      keyVaultName: kv-otel-prod
+      datadogKeyVaultUrl: https://kv-otel-prod.vault.azure.net/secrets/datadog-api-key
+    secrets: inherit

@@ -1,0 +1,225 @@
+# =============================================================================
+# AZURE DEVOPS — OpenTelemetry Collector → Azure Container Apps Environment.
+#
+#   Validate ─▶ dev ─▶ qa ─▶ prod (approval-gated)
+#
+# The same immutable image tag is promoted through all three environments, so
+# what production runs is exactly what qa proved. Nothing is rebuilt between
+# stages.
+#
+# IDEMPOTENCY is asserted, not assumed: after every apply the pipeline re-runs
+# `az deployment group what-if` and fails if Azure reports any remaining
+# Create/Delete/Modify. Deploying twice must be a no-op the second time.
+#
+# SETUP: deploy/otel-collector/README.md — service connection (workload
+# identity federation), environments, approvals, and the RBAC the identity
+# needs.
+# =============================================================================
+
+name: $(Date:yyyyMMdd).$(Rev:r)
+
+parameters:
+  - name: imageTag
+    displayName: "Collector version to deploy, e.g. 0.109.0 (never 'latest')"
+    type: string
+
+  - name: target
+    displayName: "How far to promote"
+    type: string
+    default: qa
+    values: [validate-only, dev, qa, prod]
+
+  - name: serviceConnection
+    displayName: "ARM service connection (workload identity federation)"
+    type: string
+    default: sc-otel-collector
+
+  - name: vmImage
+    type: string
+    default: ubuntu-latest
+
+trigger:
+  batch: true
+  branches:
+    include: [main]
+  paths:
+    include:
+      - deploy/otel-collector/*
+
+pr:
+  branches:
+    include: [main]
+  paths:
+    include:
+      - deploy/otel-collector/*
+
+variables:
+  # The collector image. Public by default; set acrName/acrLoginServer only if
+  # your organisation mirrors it privately. It MUST be the contrib
+  # distribution — the core image has no Datadog exporter.
+  - name: imageRepository
+    value: otel/opentelemetry-collector-contrib
+  - name: acrName
+    value: ''
+  - name: acrLoginServer
+    value: ''
+  - name: location
+    value: eastus2
+  - name: appVersion
+    value: "$(Build.BuildNumber)-$(Build.SourceVersion)"
+
+stages:
+  # ===========================================================================
+  - stage: Validate
+    displayName: "Validate"
+    jobs:
+      - job: bicep
+        displayName: "Bicep — compile, lint, parameter files"
+        pool: { vmImage: "${{ parameters.vmImage }}" }
+        timeoutInMinutes: 20
+        workspace: { clean: all }
+        steps:
+          - checkout: self
+            fetchDepth: 1
+
+          - bash: |
+              set -euo pipefail
+              az bicep install --version v0.30.23
+              echo "bicep $(az bicep version)"
+            displayName: "Toolchain · Bicep (pinned)"
+            retryCountOnTaskFailure: 2
+
+          - bash: |
+              set -euo pipefail
+              cd deploy/otel-collector/bicep
+              # --stdout with no output redirect surfaces warnings as build log
+              # lines; any error fails the step.
+              az bicep build --file main.bicep --stdout > /tmp/main.json
+              echo "main.bicep compiled ($(wc -c < /tmp/main.json) bytes of ARM)"
+            displayName: "Compile main.bicep"
+
+          - bash: |
+              set -euo pipefail
+              cd deploy/otel-collector/bicep
+              export IMAGE_REPOSITORY="$(imageRepository)"
+              export IMAGE_TAG="${{ parameters.imageTag }}"
+              export APP_VERSION="$(appVersion)"
+              for f in params/*.bicepparam; do
+                az bicep build-params --file "$f" --stdout >/dev/null
+                echo "  ok  $f"
+              done
+            displayName: "Compile every parameter file"
+
+          # Static assertions on the COMPILED template. Each of these is a real
+          # idempotency defect that is invisible in review but obvious here.
+          - bash: |
+              set -euo pipefail
+              fail=0
+              for bad in "utcNow(" "newGuid("; do
+                if grep -q "$bad" /tmp/main.json; then
+                  echo "##vso[task.logissue type=error]$bad appears in the compiled template. It changes on every deployment, so the template can never converge."
+                  fail=1
+                fi
+              done
+              if grep -q '"revisionSuffix"' /tmp/main.json; then
+                if grep -o '"revisionSuffix":[^,]*' /tmp/main.json | grep -qiE "buildid|runid|utcnow|newguid"; then
+                  echo "##vso[task.logissue type=error]revisionSuffix is derived from a build identifier. That mints a new Container Apps revision on every run even when nothing changed."
+                  fail=1
+                fi
+              fi
+              [ "$fail" -eq 0 ] && echo "idempotency static checks passed"
+              exit $fail
+            displayName: "Idempotency · static checks on the compiled ARM"
+
+  # ===========================================================================
+  - ${{ if in(parameters.target, 'dev', 'qa', 'prod') }}:
+      - stage: Dev
+        displayName: "Deploy → dev"
+        dependsOn: Validate
+        condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+        lockBehavior: sequential
+        jobs:
+          - deployment: dev
+            environment: otel-collector-dev
+            pool: { vmImage: "${{ parameters.vmImage }}" }
+            timeoutInMinutes: 60
+            workspace: { clean: all }
+            strategy:
+              runOnce:
+                deploy:
+                  steps:
+                    - template: templates/deploy-env.yml
+                      parameters:
+                        environment: dev
+                        serviceConnection: ${{ parameters.serviceConnection }}
+                        resourceGroup: rg-otel-collector-dev
+                        location: $(location)
+                        imageRepository: $(imageRepository)
+                        imageTag: ${{ parameters.imageTag }}
+                        appVersion: $(appVersion)
+                        acrName: $(acrName)
+                        acrLoginServer: $(acrLoginServer)
+                        keyVaultName: kv-otel-dev
+                        datadogKeyVaultUrl: https://kv-otel-dev.vault.azure.net/secrets/datadog-api-key
+
+  # ===========================================================================
+  - ${{ if in(parameters.target, 'qa', 'prod') }}:
+      - stage: QA
+        displayName: "Deploy → qa"
+        dependsOn: Dev
+        condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+        lockBehavior: sequential
+        jobs:
+          - deployment: qa
+            environment: otel-collector-qa
+            pool: { vmImage: "${{ parameters.vmImage }}" }
+            timeoutInMinutes: 60
+            workspace: { clean: all }
+            strategy:
+              runOnce:
+                deploy:
+                  steps:
+                    - template: templates/deploy-env.yml
+                      parameters:
+                        environment: qa
+                        serviceConnection: ${{ parameters.serviceConnection }}
+                        resourceGroup: rg-otel-collector-qa
+                        location: $(location)
+                        imageRepository: $(imageRepository)
+                        imageTag: ${{ parameters.imageTag }}
+                        appVersion: $(appVersion)
+                        acrName: $(acrName)
+                        acrLoginServer: $(acrLoginServer)
+                        keyVaultName: kv-otel-qa
+                        datadogKeyVaultUrl: https://kv-otel-qa.vault.azure.net/secrets/datadog-api-key
+
+  # ===========================================================================
+  - ${{ if eq(parameters.target, 'prod') }}:
+      - stage: Prod
+        displayName: "Deploy → prod"
+        dependsOn: QA
+        condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+        lockBehavior: sequential
+        jobs:
+          - deployment: prod
+            environment: otel-collector-prod    # approval check lives here
+            pool: { vmImage: "${{ parameters.vmImage }}" }
+            timeoutInMinutes: 90
+            workspace: { clean: all }
+            strategy:
+              runOnce:
+                deploy:
+                  steps:
+                    - template: templates/deploy-env.yml
+                      parameters:
+                        environment: prod
+                        serviceConnection: ${{ parameters.serviceConnection }}
+                        resourceGroup: rg-otel-collector-prod
+                        location: $(location)
+                        imageRepository: $(imageRepository)
+                        imageTag: ${{ parameters.imageTag }}
+                        appVersion: $(appVersion)
+                        acrName: $(acrName)
+                        acrLoginServer: $(acrLoginServer)
+                        keyVaultName: kv-otel-prod
+                        datadogKeyVaultUrl: https://kv-otel-prod.vault.azure.net/secrets/datadog-api-key
