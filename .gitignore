@@ -29,3 +29,7 @@ generated/
 *.key
 .env
 .tfstate-worktree/
+
+# MCP principal registry — operational configuration, not documentation.
+# The committed template is mcp/principals.example.yaml.
+mcp/principals.yaml

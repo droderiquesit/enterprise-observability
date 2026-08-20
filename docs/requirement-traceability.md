@@ -26,16 +26,17 @@ row was confirmed by a repository-wide search that returned zero matches.
 
 | Status | Sections |
 |---|---|
-| OK | 21 |
+| OK | 26 |
 | IMPROVE | 9 |
 | PARTIAL | 12 |
-| MISSING | 15 |
+| MISSING | 10 |
 | OBSOLETE | 1 (resolved) |
 | N/A | 2 |
 
-The platform is strong on the **monitor → SLO → routing → runbook** spine and
-absent on the **product surfaces** — MCP server, executive portal,
-presentation, survey — and on **fleet/agent operations** and **Control-M**.
+The platform is strong on the **monitor → SLO → routing → runbook** spine, now
+carries the **MCP server** (§42–§46, phase 7 — `mcp/`), and remains absent on
+the other **product surfaces** — executive portal, presentation, survey — and
+on **fleet/agent operations** and **Control-M**.
 
 ---
 
@@ -172,11 +173,11 @@ This prompt reinstates it; the reinstatement is treated as authoritative.
 
 | § | Requirement | Status | Where | Gap → Remediation | Validation |
 |---|---|---|---|---|---|
-| 42 | Production MCP server, independent of Bits AI | **MISSING** | repo-wide search for `mcp` returns **0 files** | Nothing exists. Remediation: a server exposing catalog/monitor/SLO/event/incident/on-call/fleet/report tools over the same policy engine the Terraform uses | tool contract tests |
-| 43 | Ask mode — 30 grounded questions | **MISSING** | — | — | each question answered from live state |
-| 44 | Act mode — inspect, validate, generate, PR, plan, apply | **MISSING** | — | Must flow MCP → YAML/Git → PR → validation → Terraform → Datadog | PR created by MCP passes CI |
-| 45 | MCP safety: authn, RBAC, dry run, approval, audit | **MISSING** | — | — | negative tests: unauthorized write refused |
-| 46 | MCP architecture (intent router, read/git/ops planes) | **MISSING** | — | — | architecture doc + code layout |
+| 42 | Production MCP server, independent of Bits AI | **OK** | `mcp/server.py` — 23 tools over stdio JSON-RPC | No Bits AI dependency and no MCP SDK dependency; reads the same `obs_common.load_policy()` Terraform's inputs come from | `mcp/tests/test_tool_contracts.py` — handshake, `tools/list`, schema enforcement |
+| 43 | Ask mode — 30 grounded questions | **OK** | `mcp/obs_ask.py` — 30 questions, each returning cited evidence | 14 answerable from repository state, 5 runtime, 10 partial with disclosed caveats, 1 **blocked** (on-call rosters, §28). The envelope refuses to serialize an answerable result with no citation | `mcp/tests/test_ask_grounding.py` — every question answers with evidence or refuses with a reason |
+| 44 | Act mode — inspect, validate, generate, PR, plan, apply | **OK** (no apply, by design) | `mcp/obs_act.py`, `mcp/obs_gitops.py` | MCP → YAML → branch → PR → `ci.yml` → Terraform → Datadog. No Datadog write client exists; a write fence limits Act to `platform/services/`, `platform/monitors/`, `platform/runbooks/` and an anchored insert into `slos.yaml`. Apply stays in `deploy.yml` behind the production approval environment | `mcp/tests/test_act_gitops.py` — dry run changes nothing; `obs_act.py` contains no write verb |
+| 45 | MCP safety: authn, RBAC, dry run, approval, audit | **OK** | `mcp/obs_governance.py` | Digest-compared bearer token; the platform's existing four roles mapped to five capabilities; environment restrictions; dry-run default; plan-before-propose by content hash; second-person production approval; per-capability rate limits; two-pass secret redaction; JSONL audit of every call | `mcp/tests/test_governance.py` — unauthorized write refused, self-approval refused, tampered plan token refused, audit records every call |
+| 46 | MCP architecture (intent router, read/git/ops planes) | **OK** | `mcp/README.md`, `mcp/obs_router.py` | Intent router in front of read / operations / git-yaml planes; exactly one tool mutates and it is on the git plane | architecture doc + diagram; `test_only_the_git_yaml_plane_mutates` |
 
 ---
 
@@ -199,9 +200,9 @@ This prompt reinstates it; the reinstatement is treated as authoritative.
 | 52 | New entity SOP (28 steps) | **PARTIAL** | `docs/golden-path.md` | Covers service onboarding; not entity-kind aware | walkthrough |
 | 53 | New monitor SOP | **OK** | `docs/golden-path.md`, `docs/implementation-guide.md` | — | walkthrough |
 | 54 | CI/CD guardrails (30 validations) | **IMPROVE** | `.github/workflows/ci.yml`, `tools/validate_*.py` | ~22 of 30 present. Missing: entity kind, SLO/catalog identity, duplicate SLO, telemetry requirement, orphan resource checks | CI job matrix |
-| 55 | Repository quality and directory documentation | **IMPROVE** | `README.md` | Clean and documented; examples were mixed into production config (fixed in §4) and the docs index needs the new entity/MCP/portal locations | tree review |
+| 55 | Repository quality and directory documentation | **IMPROVE** | `README.md` | Clean and documented; examples were mixed into production config (fixed in §4) and the docs index needs the new entity/portal locations (`mcp/` is indexed) | tree review |
 | 56 | Minimal RBAC (~6 roles) | **OK** | `modules/rbac` | 4 roles; payments roles never existed separately | role census |
-| 57 | End-state architecture | **PARTIAL** | `docs/reference-architecture.md` | Documents the current spine; MCP/portal planes absent | architecture doc |
+| 57 | End-state architecture | **PARTIAL** | `docs/reference-architecture.md`, `mcp/README.md` | The monitoring spine and the MCP plane are both documented; the portal plane is still absent | architecture doc |
 
 ---
 
@@ -210,7 +211,7 @@ This prompt reinstates it; the reinstatement is treated as authoritative.
 | § | Requirement | Status | Gap |
 |---|---|---|---|
 | 58 | 56 named deliverables | **PARTIAL** | 27 complete, 14 partial, 15 not started |
-| 59 | Automation proofs (Azure SQL, VMware, Cosmos, Snowflake, Control-M, app service, custom SLO, queue, new monitor, MCP, portal) | **PARTIAL** | Monitor-inheritance and SLO proofs exist as tests; entity-kind, Control-M, MCP and portal proofs cannot exist until those are built |
+| 59 | Automation proofs (Azure SQL, VMware, Cosmos, Snowflake, Control-M, app service, custom SLO, queue, new monitor, MCP, portal) | **PARTIAL** | Monitor-inheritance, SLO and MCP proofs exist as tests (`tests/`, `mcp/tests/`); entity-kind, Control-M and portal proofs cannot exist until those are built |
 | 60 | Final acceptance criteria | **PARTIAL** | 38 of 62 criteria met today |
 
 ---
@@ -228,7 +229,7 @@ shippable and leaves the platform working.
 | **4** | SLO profiles and per-service objective overrides | §11, §12, §13, §15 |
 | **5** | Control-M in-flight monitoring | §24, §26 |
 | **6** | Reports catalog + dashboard consolidation + survey + scorecards | §33, §34, §35, §41 |
-| **7** | MCP server: Ask, then Act, then governance | §42–§46 |
+| **7** ✅ | MCP server: Ask, then Act, then governance — delivered in `mcp/` | §42–§46 |
 | **8** | Executive portal | §47–§49 |
 | **9** | Presentation and final traceability review | §50, §58–§60 |
 

@@ -3,8 +3,8 @@ PY ?= python3
 STACKS := stacks/coverage stacks/foundation
 MODULES := $(wildcard modules/*)
 
-.PHONY: setup fmt fmt-check validate test tf-validate matrix runbooks fixtures \
-        inventory coverage plan-offline clean
+.PHONY: setup fmt fmt-check validate test test-mcp tf-validate matrix runbooks fixtures \
+        inventory coverage mcp plan-offline clean
 
 # --- developer entry points --------------------------------------------------
 setup:
@@ -14,7 +14,7 @@ setup:
 
 ## validate — the same offline gate CI runs (YAML/schema/pytest live inside
 ## the test suite; credentialed stages only run in CI).
-validate: fmt-check test tf-validate
+validate: fmt-check test test-mcp tf-validate
 
 fmt:
 	$(TF) fmt -recursive
@@ -23,6 +23,12 @@ fmt-check:
 
 test:              ## policy lint, manifests, runbooks, generated docs, scorecard, scale
 	$(PY) -m pytest tests/ -q
+
+## test-mcp — the MCP server: tool contracts, governance refusals, Ask grounding,
+## Act/GitOps. A separate target because it has its own conftest and fixtures;
+## fully offline, no credentials.
+test-mcp:          ## MCP server contracts, governance, grounding, GitOps
+	$(PY) -m pytest mcp/tests -q
 
 tf-validate:
 	for d in $(MODULES) $(STACKS); do echo "== $$d"; (cd $$d && $(TF) validate) || exit 1; done
@@ -53,6 +59,10 @@ inventory:         ## rebuild the inventory and reassign profiles
 	cd tools && $(PY) build_inventory.py --live && $(PY) profile_engine.py
 coverage:          ## coverage & compliance report against the live org
 	cd tools && $(PY) coverage_report.py --live
+
+# --- MCP server (offline by default; live reads need DD keys + OBS_MCP_LIVE=1)
+mcp:               ## smoke-test the MCP server against the offline fixtures
+	$(PY) mcp/server.py --self-test
 
 clean:
 	find . -name ".terraform" -type d -prune -exec rm -rf {} +

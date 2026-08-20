@@ -74,6 +74,17 @@ jobs:
       - name: "Policy, manifests, runbooks, generated docs, scorecard, scale — pytest"
         run: python -m pytest tests/ -q
 
+      # A separate step rather than a wider pytest path, for two reasons: the
+      # MCP server needs jsonschema at RUNTIME (it enforces every tool's
+      # published inputSchema), and a distinct step name means a failure here
+      # reads as "the MCP server broke" in the CI log rather than as a policy
+      # regression. The two roots do run together fine — `make validate` runs
+      # both — this is about the install and the signal, not a collision.
+      - name: "MCP server — contracts, governance refusals, Ask grounding, GitOps"
+        run: |
+          pip install -r mcp/requirements.txt
+          python -m pytest mcp/tests -q
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
