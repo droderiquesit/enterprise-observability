@@ -1,0 +1,131 @@
+{
+  "name": "acme reference estate",
+  "description": "OFFLINE FIXTURE for tools/applicability.py. It is a description of what each entity EMITS, not of what monitors exist. The gaps are the real ones recorded in docs/requirement-traceability.md and docs/telemetry-gaps.md: the Azure integration and the Agent are deployed, Database Monitoring is not, and almost none of the acme.* emitters have been built - which is exactly why a fully green estate can still cover very little.",
+  "telemetry": [
+    "agent",
+    "azure_integration",
+    "datadog_usage_metrics",
+    "platform_self_telemetry"
+  ],
+  "entities": [
+    {
+      "id": "service:identity-api",
+      "kind": "service",
+      "service": "identity-api",
+      "env": "prod",
+      "service_archetype": "api",
+      "telemetry": ["apm", "apm_runtime_metrics"],
+      "note": "Fully instrumented reference service. Still blocked on the API gateway emitter, which nothing publishes."
+    },
+    {
+      "id": "service:reporting-portal",
+      "kind": "service",
+      "service": "reporting-portal",
+      "env": "prod",
+      "service_archetype": "web",
+      "telemetry": ["apm"],
+      "note": "RUM was never enabled, so every Core Web Vitals monitor aimed at this frontend is inert."
+    },
+    {
+      "id": "service:order-events-consumer",
+      "kind": "service",
+      "service": "order-events-consumer",
+      "env": "prod",
+      "service_archetype": "event_consumer",
+      "telemetry": ["apm"],
+      "note": "Consumer emits no acme.messaging.* metrics, so lag and absence are both unobservable."
+    },
+    {
+      "id": "service:indexing-worker",
+      "kind": "service",
+      "service": "indexing-worker",
+      "env": "prod",
+      "service_archetype": "worker",
+      "telemetry": ["apm", "apm_runtime_metrics"]
+    },
+    {
+      "id": "database:orders-sql",
+      "kind": "database",
+      "service": "orders-sql",
+      "env": "prod",
+      "service_archetype": "datastore",
+      "telemetry": ["sqlserver_integration"],
+      "note": "On-premises SQL Server with the Agent check but without DBM, backup reporting or restore verification."
+    },
+    {
+      "id": "database:analytics-warehouse",
+      "kind": "database",
+      "service": "analytics-warehouse",
+      "env": "prod",
+      "service_archetype": "datastore",
+      "telemetry": ["snowflake_integration"],
+      "note": "Snowflake integration only; the TASK_HISTORY exporter is not deployed."
+    },
+    {
+      "id": "host:vm-app-eastus2-014",
+      "kind": "host",
+      "service": "identity-api",
+      "env": "prod",
+      "service_archetype": "infrastructure_resource",
+      "telemetry": []
+    },
+    {
+      "id": "host:esxi-dc1-07",
+      "kind": "esxi_host",
+      "service": null,
+      "env": "prod",
+      "service_archetype": "infrastructure_resource",
+      "telemetry": ["vmware_integration"]
+    },
+    {
+      "id": "pipeline:nightly-settlement",
+      "kind": "pipeline",
+      "service": "nightly-settlement",
+      "env": "prod",
+      "service_archetype": "batch_job",
+      "telemetry": [],
+      "note": "No batch emitter at all: completion, duration and freshness are all unanswerable."
+    },
+    {
+      "id": "job:cert-rotation-cron",
+      "kind": "batch_job",
+      "service": "cert-rotation-cron",
+      "env": "prod",
+      "service_archetype": "scheduled_job",
+      "telemetry": ["custom_scheduler_metrics"]
+    },
+    {
+      "id": "flow:erp-to-crm-sync",
+      "kind": "pipeline",
+      "service": "erp-to-crm-sync",
+      "env": "prod",
+      "service_archetype": "integration_flow",
+      "telemetry": ["custom_integration_flow_metrics", "apm"]
+    },
+    {
+      "id": "saas:workday",
+      "kind": "azure_resource",
+      "service": "workday",
+      "env": "prod",
+      "service_archetype": "saas_dependency",
+      "telemetry": ["apm"],
+      "note": "Availability is asserted from our own traces; no synthetic test watches it from outside."
+    },
+    {
+      "id": "endpoint:www.acme.example",
+      "kind": "synthetic_check",
+      "service": "www",
+      "env": "prod",
+      "service_archetype": "external_endpoint",
+      "telemetry": ["synthetics", "custom_certificate_inventory"]
+    },
+    {
+      "id": "service:feature-flags",
+      "kind": "service",
+      "service": "feature-flags",
+      "env": "prod",
+      "service_archetype": "platform_service",
+      "telemetry": ["apm", "apm_runtime_metrics"]
+    }
+  ]
+}

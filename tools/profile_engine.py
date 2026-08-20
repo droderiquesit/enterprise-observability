@@ -13,6 +13,7 @@ Resolution order (mirrors the configuration hierarchy):
   4. owner             tags.team → registry → domain default → unowned pool
   5. profile           approved exception → overlay → tier default → env default
   6. band              profile → alert_band (what monitors select on)
+  7. telemetry         available sources → what that band can ACTUALLY deliver
 
 Nothing is ever silently skipped. A resource that cannot be resolved gets the
 safest assignment plus a recorded violation, because an unmonitored resource
@@ -26,6 +27,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+import applicability
 import obs_common as oc
 
 # Which technology domain a resource kind belongs to when no service archetype
@@ -79,8 +81,73 @@ def _exception_index(policy: dict) -> dict:
     return idx
 
 
-def assign(inventory: dict, policy: dict, services: dict | None = None) -> dict:
+# =============================================================================
+# BEGIN telemetry availability (§16/§38) — step 7 of the resolution order.
+#
+# A monitoring profile is a PROMISE: "these signal classes are watched on this
+# resource". Until now the promise was made from tags alone, so a tier0 service
+# with no APM instrumentation resolved to `critical` and got a full pack of
+# monitors that could never produce a series. Every one of them reports OK, so
+# the resource is indistinguishable from a genuinely healthy one — the profile
+# claimed coverage it could not deliver, and nothing said so.
+#
+# This step does not change how a profile is CHOSEN. It checks what the chosen
+# profile can actually deliver against the telemetry the resource emits, and:
+#
+#   * records the shortfall on every assignment (telemetry_coverage_pct plus
+#     the named missing sources), so the gap is a number somebody owns;
+#   * demotes to observe_only ONLY when nothing at all can fire, because an
+#     alerting profile whose every monitor is silent is a false claim of
+#     coverage, and observe_only is the one profile that states the truth
+#     ("collected, not alerted") and demands a recorded reason.
+#
+# Partial gaps deliberately do NOT demote: three working monitors out of eight
+# is real coverage, and quietly dropping the resource to observe_only would
+# throw away the three that work.
+#
+# telemetry=None leaves every assignment unchanged and coverage null. Absence of
+# a telemetry survey is not evidence that telemetry is absent, and guessing
+# either way here would be a fabricated input to a governance report.
+# =============================================================================
+def _telemetry_index(telemetry: dict | None) -> dict | None:
+    """Estate description → {estate_sources, by_id, by_service}.
+
+    Accepts the same document tools/applicability.py reads (see
+    tests/fixtures/telemetry_estate.json) so there is one description of what
+    the estate emits, not one per consumer.
+    """
+    if not telemetry:
+        return None
+    by_id, by_service = {}, {}
+    for e in telemetry.get("entities", []) or []:
+        sources = set(e.get("telemetry", []) or [])
+        if e.get("id"):
+            by_id[e["id"]] = sources
+        # Indexed by service too because a host and the service it runs share
+        # instrumentation the inventory records against only one of them.
+        if e.get("service"):
+            by_service.setdefault(e["service"], set()).update(sources)
+    return {
+        "estate": set(telemetry.get("telemetry", []) or []),
+        "by_id": by_id,
+        "by_service": by_service,
+    }
+
+
+def _telemetry_for(tel: dict, resource_id: str, service: str | None) -> set[str]:
+    return (tel["estate"]
+            | tel["by_id"].get(resource_id, set())
+            | tel["by_service"].get(service, set()))
+
+
+# END telemetry availability (§16/§38)
+# =============================================================================
+
+
+def assign(inventory: dict, policy: dict, services: dict | None = None,
+           telemetry: dict | None = None) -> dict:
     services = services if services is not None else {}
+    tel = _telemetry_index(telemetry)
     vocab = policy["global"]["tag_vocabulary"]
     envs = policy["environments"]
     tiers = policy["tiers"]
@@ -168,6 +235,34 @@ def assign(inventory: dict, policy: dict, services: dict | None = None) -> dict:
 
         band = profile_to_band[profile]
 
+        # --- 7. telemetry availability ---------------------------------------
+        telemetry_available: list[str] | None = None
+        telemetry_missing: list[str] = []
+        telemetry_coverage: float | None = None
+        if tel is not None:
+            sources = _telemetry_for(tel, r["id"], svc)
+            verdict = applicability.evaluate_archetypes(
+                policy, applicability.pack_archetypes(policy, sa), sources)
+            n_ok = len(verdict["applicable"])
+            n_blocked = len(verdict["blocked_by_missing_telemetry"])
+            telemetry_available = sorted(sources)
+            telemetry_missing = sorted(
+                {m for row in verdict["blocked_by_missing_telemetry"]
+                 for m in row["missing"]})
+            telemetry_coverage = applicability.coverage_pct(n_ok, n_blocked)
+            if telemetry_missing:
+                violations.append(
+                    "telemetry_missing:" + ",".join(telemetry_missing))
+            if profile != "observe_only" and n_ok == 0 and n_blocked > 0:
+                profile = "observe_only"
+                band = profile_to_band[profile]
+                reason = (
+                    "no telemetry source available for any monitor in this "
+                    f"resource's packs — missing {', '.join(telemetry_missing)}. "
+                    "An alerting profile here would report OK on monitors that "
+                    "can never evaluate."
+                )
+
         assignments.append(
             {
                 "id": r["id"],
@@ -185,6 +280,9 @@ def assign(inventory: dict, policy: dict, services: dict | None = None) -> dict:
                 "alert_band": band,
                 "support_model": tiers[tier]["support_model"],
                 "observe_only_reason": reason if profile == "observe_only" else None,
+                "telemetry_available": telemetry_available,
+                "telemetry_missing": telemetry_missing,
+                "telemetry_coverage_pct": telemetry_coverage,
                 "registered": bool(registered),
                 "violations": violations,
             }
@@ -202,6 +300,14 @@ def assign(inventory: dict, policy: dict, services: dict | None = None) -> dict:
         "with_violations": sum(1 for a in assignments if a["violations"]),
         "alertable": sum(1 for a in assignments if a["alert_band"] != "none"),
         "observe_only": sum(1 for a in assignments if a["alert_band"] == "none"),
+        # Null when no telemetry survey was supplied — see _telemetry_index.
+        "telemetry_surveyed": sum(
+            1 for a in assignments if a["telemetry_coverage_pct"] is not None),
+        "telemetry_blocked": sum(
+            1 for a in assignments if a["telemetry_missing"]),
+        "telemetry_demoted_to_observe_only": sum(
+            1 for a in assignments
+            if a["telemetry_coverage_pct"] == 0.0 and a["telemetry_missing"]),
     }
     return {
         "generated_at": oc.utcnow().isoformat(),
@@ -245,12 +351,18 @@ def main() -> int:
                     default=oc.GENERATED_DIR / "services.auto.tfvars.json")
     ap.add_argument("--catalog-limit", type=int, default=500,
                     help="Cap catalog entries per apply batch (API-friendly rollout).")
+    ap.add_argument("--telemetry", type=Path, default=None,
+                    help="Estate telemetry survey (see tests/fixtures/"
+                         "telemetry_estate.json). Omit it and every profile is "
+                         "resolved from tags alone, with telemetry coverage "
+                         "reported as null rather than assumed.")
     args = ap.parse_args()
 
     inventory = json.loads(args.inventory.read_text())
     policy = oc.load_policy()
     services = oc.load_services()
-    result = assign(inventory, policy, services)
+    telemetry = json.loads(args.telemetry.read_text()) if args.telemetry else None
+    result = assign(inventory, policy, services, telemetry)
     oc.write_json(args.out, result)
     oc.write_json(args.tfvars_out, service_catalog_tfvars(result, policy, args.catalog_limit))
     print(json.dumps(result["summary"], indent=2))

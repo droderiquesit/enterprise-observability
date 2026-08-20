@@ -48,6 +48,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: db_instance
+    telemetry: [postgresql_integration]
     selector: ""
     query: "avg(last_30m):anomalies(avg:postgresql.queries.duration{__SCOPE__} by {db_instance}, 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -68,6 +69,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: db_instance
+    telemetry: [postgresql_integration]
     selector: ""
     query: "max(next_1d):forecast(avg:postgresql.connections{__SCOPE__} by {db_instance} / avg:postgresql.max_connections{__SCOPE__} by {db_instance}, 'linear', 1, interval='30m', history='1w') > 0.9"
     thresholds: { critical: 0.9 }
@@ -88,6 +90,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: db_instance
+    telemetry: [postgresql_integration]
     selector: ""
     query: "avg(last_10m):avg:postgresql.replication_delay{__SCOPE__} by {db_instance} > 300"
     thresholds: { critical: 300, warning: 120 }

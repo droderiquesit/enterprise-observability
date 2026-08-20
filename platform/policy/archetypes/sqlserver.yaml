@@ -35,6 +35,7 @@ archetypes:
     detection: service_check
     monitor_type: service check
     resource_type: sqlserver_instance
+    telemetry: [sqlserver_integration]
     selector: ""
     query: '"sqlserver.can_connect".over("__SCOPE__").by("host").last(3).count_by_status()'
     thresholds: { critical: 2, warning: 1 }
@@ -59,6 +60,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: sqlserver_instance
+    telemetry: [sqlserver_integration]
     selector: ""
     query: "avg(last_15m):anomalies(avg:sqlserver.stats.procs_blocked{__SCOPE__} by {host}, 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -82,6 +84,7 @@ archetypes:
     detection: rate_of_change
     monitor_type: query alert
     resource_type: sqlserver_instance
+    telemetry: [sqlserver_integration]
     selector: ""
     query: "pct_change(avg(last_15m),last_1h):avg:sqlserver.stats.lock_waits{__SCOPE__} by {host} > 200"
     thresholds: { critical: 200, warning: 100 }
@@ -101,6 +104,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: sqlserver_instance
+    telemetry: [sqlserver_integration]
     selector: ""
     query: "avg(last_30m):anomalies(sum:sqlserver.locks.deadlocks{__SCOPE__} by {host}.as_rate(), 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -125,6 +129,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: sqlserver_instance
+    telemetry: [sqlserver_integration]
     selector: ""
     query: "max(last_15m):max:sqlserver.transactions.longest_transaction_running_time{__SCOPE__} by {host} > 1800"
     thresholds: { critical: 1800, warning: 600 }
@@ -149,6 +154,7 @@ archetypes:
     detection: rate_of_change
     monitor_type: query alert
     resource_type: sqlserver_instance
+    telemetry: [sqlserver_integration]
     selector: ""
     query: "pct_change(avg(last_15m),last_4h):avg:sqlserver.buffer.page_life_expectancy{__SCOPE__} by {host} < -50"
     thresholds: { critical: -50, warning: -30 }
@@ -173,6 +179,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: sqlserver_instance
+    telemetry: [sqlserver_integration]
     selector: ""
     query: "min(next_12h):forecast(avg:sqlserver.tempdb.file_space_usage.free_space{__SCOPE__} by {host}, 'linear', 1, interval='30m', history='1d') < 1"
     thresholds: { critical: 1 }
@@ -196,6 +203,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: sqlserver_instance
+    telemetry: [sqlserver_integration]
     selector: ""
     query: "avg(last_30m):anomalies(avg:sqlserver.tempdb.file_space_usage.version_store_space{__SCOPE__} by {host}, 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -220,6 +228,7 @@ archetypes:
     detection: rate_of_change
     monitor_type: query alert
     resource_type: sqlserver_instance
+    telemetry: [sqlserver_integration]
     selector: ""
     query: "pct_change(avg(last_15m),last_1h):avg:sqlserver.database.log_flush_wait{__SCOPE__} by {host,db} > 150"
     thresholds: { critical: 150, warning: 75 }
@@ -242,6 +251,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: sqlserver_instance
+    telemetry: [sqlserver_integration]
     selector: ""
     query: "max(next_1w):forecast(avg:sqlserver.database.files.space_used{__SCOPE__} by {host,db} / avg:sqlserver.database.files.size{__SCOPE__} by {host,db} * 100, 'linear', 1, interval='1h', history='1w') > 90"
     thresholds: { critical: 90, warning: 80 }
@@ -261,6 +271,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: sqlserver_instance
+    telemetry: [sqlserver_integration]
     selector: ""
     query: "max(next_12h):forecast(avg:sqlserver.stats.connections{__SCOPE__} by {host}, 'linear', 1, interval='15m', history='1d') > 0"
     thresholds: { critical: 0 }
@@ -286,6 +297,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: availability_group
+    telemetry: [sqlserver_integration]
     selector: ""
     query: "min(last_10m):sum:sqlserver.ao.is_primary_replica{__SCOPE__} by {availability_group} < 1"
     thresholds: { critical: 1 }
@@ -308,6 +320,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: availability_group
+    telemetry: [sqlserver_integration]
     selector: ""
     query: "min(last_15m):min:sqlserver.ao.ag_sync_health{__SCOPE__} by {availability_group} < 1"
     thresholds: { critical: 1 }
@@ -331,6 +344,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: availability_group
+    telemetry: [sqlserver_integration]
     selector: ""
     query: "min(last_15m):min:sqlserver.ao.replica_sync_state{__SCOPE__} by {availability_group,replica_server_name} < 2"
     thresholds: { critical: 2 }
@@ -354,6 +368,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: availability_group
+    telemetry: [sqlserver_integration]
     selector: ""
     query: "avg(last_15m):max:sqlserver.ao.secondary_lag_seconds{__SCOPE__} by {availability_group,replica_server_name} > 60"
     thresholds: { critical: 60, warning: 30 }
@@ -378,6 +393,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: azure_sql
+    telemetry: [azure_integration]
     selector: "resource_type:azure_sql"
     query: "min(last_10m):avg:azure.sql_servers_databases.availability{__SCOPE__} by {subscription_name,resource_group,name} < 99"
     thresholds: { critical: 99 }
@@ -402,6 +418,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_sql
+    telemetry: [azure_integration]
     selector: "resource_type:azure_sql"
     query: "avg(last_15m):anomalies(avg:azure.sql_servers_databases.cpu_percent{__SCOPE__} by {subscription_name,name}, 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -422,6 +439,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: azure_sql
+    telemetry: [azure_integration]
     selector: "resource_type:azure_sql"
     query: "avg(last_15m):avg:azure.sql_servers_databases.log_write_percent{__SCOPE__} by {subscription_name,name} > 90"
     thresholds: { critical: 90, warning: 75 }
@@ -446,6 +464,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: azure_sql
+    telemetry: [azure_integration]
     selector: "resource_type:azure_sql"
     query: "max(next_12h):forecast(max:azure.sql_servers_databases.sessions_percent{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='15m', history='1d') > 90"
     thresholds: { critical: 90, warning: 80 }
@@ -466,6 +485,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_sql
+    telemetry: [azure_integration]
     selector: "resource_type:azure_sql"
     query: "avg(last_15m):anomalies(sum:azure.sql_servers_databases.connection_failed{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -486,6 +506,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: azure_sql
+    telemetry: [azure_integration]
     selector: "resource_type:azure_sql"
     query: "sum(last_30m):sum:azure.sql_servers_databases.blocked_by_firewall{__SCOPE__} by {subscription_name,name}.as_count() > 0"
     thresholds: { critical: 0 }
@@ -510,6 +531,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: azure_sql
+    telemetry: [azure_integration]
     selector: "resource_type:azure_sql"
     query: "max(next_1w):forecast(avg:azure.sql_servers_databases.storage_percent{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='1h', history='1w') > 90"
     thresholds: { critical: 90, warning: 80 }
@@ -530,6 +552,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: azure_sql
+    telemetry: [azure_integration]
     selector: "resource_type:azure_sql"
     query: "avg(last_15m):avg:azure.sql_servers_databases.tempdb_percent_log_used{__SCOPE__} by {subscription_name,name} > 80"
     thresholds: { critical: 80, warning: 60 }
@@ -554,6 +577,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_sql
+    telemetry: [azure_integration]
     selector: "resource_type:azure_sql"
     query: "avg(last_30m):anomalies(sum:azure.sql_servers_databases.deadlock{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -588,6 +612,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: sqlserver_instance
+    telemetry: [custom_restore_verification]
     selector: ""
     query: "max(last_1h):max:acme.database.restore_verification_age_hours{__SCOPE__} by {db} > 168"
     thresholds: { critical: 168, warning: 96 }
@@ -612,6 +637,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: sqlserver_instance
+    telemetry: [custom_restore_verification]
     selector: ""
     query: "sum(last_6h):sum:acme.database.restore_verification_failed{__SCOPE__} by {db}.as_count() > 0"
     thresholds: { critical: 0 }

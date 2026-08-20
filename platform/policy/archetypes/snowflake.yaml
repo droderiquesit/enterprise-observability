@@ -27,6 +27,7 @@ archetypes:
     detection: service_check
     monitor_type: service check
     resource_type: snowflake_account
+    telemetry: [snowflake_integration]
     selector: ""
     query: '"snowflake.can_connect".over("__SCOPE__").by("host").last(3).count_by_status()'
     thresholds: { critical: 2, warning: 1 }
@@ -51,6 +52,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: snowflake_warehouse
+    telemetry: [snowflake_integration]
     selector: ""
     query: "avg(last_2h):anomalies(avg:snowflake.query.execution_time{__SCOPE__} by {warehouse}, 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -74,6 +76,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: snowflake_warehouse
+    telemetry: [snowflake_integration]
     selector: ""
     query: "avg(last_2h):anomalies(avg:snowflake.query.queued_overload{__SCOPE__} by {warehouse}, 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -96,6 +99,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: snowflake_warehouse
+    telemetry: [snowflake_integration]
     selector: ""
     query: "avg(last_2h):anomalies(avg:snowflake.query.queued_provision{__SCOPE__} by {warehouse}, 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -119,6 +123,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: snowflake_warehouse
+    telemetry: [snowflake_integration]
     selector: ""
     query: "avg(last_2h):anomalies(avg:snowflake.query.blocked{__SCOPE__} by {warehouse}, 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -141,6 +146,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: snowflake_warehouse
+    telemetry: [snowflake_integration]
     selector: ""
     query: "avg(last_1d):anomalies(sum:snowflake.billing.warehouse.total_credit.sum{__SCOPE__} by {warehouse}.as_rate(), 'basic', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -164,6 +170,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: snowflake_account
+    telemetry: [snowflake_integration]
     selector: ""
     query: "max(next_1w):forecast(avg:snowflake.storage.storage_bytes.total{__SCOPE__} by {host}, 'linear', 1, interval='1h', history='1w') > 0"
     thresholds: { critical: 0 }
@@ -187,6 +194,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: snowflake_account
+    telemetry: [snowflake_integration]
     selector: ""
     query: "avg(last_1d):anomalies(avg:snowflake.storage.failsafe_bytes.total{__SCOPE__} by {host}, 'basic', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -210,6 +218,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: snowflake_account
+    telemetry: [snowflake_integration]
     selector: ""
     query: "avg(last_2h):anomalies(sum:snowflake.logins.fail.count{__SCOPE__} by {host}.as_rate(), 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -229,6 +238,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: snowflake_account
+    telemetry: [snowflake_integration]
     selector: ""
     query: "sum(last_2h):sum:snowflake.pipe.files_inserted.sum{__SCOPE__} by {host}.as_count() < 1"
     thresholds: { critical: 1 }
@@ -258,6 +268,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: snowflake_account
+    telemetry: [custom_snowflake_exporter]
     selector: ""
     query: "sum(last_1h):sum:acme.snowflake.task_failures{__SCOPE__} by {task_name}.as_count() > 0"
     thresholds: { critical: 0 }

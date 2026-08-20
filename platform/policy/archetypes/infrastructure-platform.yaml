@@ -31,6 +31,7 @@ archetypes:
     detection: rate_of_change
     monitor_type: query alert
     resource_type: host
+    telemetry: [agent]
     selector: ""
     query: "pct_change(avg(last_15m),last_4h):avg:system.swap.pct_free{__SCOPE__} by {cluster,host} < -25"
     thresholds: { critical: -25, warning: -15 }
@@ -56,6 +57,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: host
+    telemetry: [agent]
     selector: ""
     query: "min(next_1d):forecast(avg:system.swap.pct_free{__SCOPE__} by {cluster,host}, 'linear', 1, interval='30m', history='1d') < 10"
     thresholds: { critical: 10, warning: 20 }
@@ -88,6 +90,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: hardware_node
+    telemetry: [ipmi_hardware_check]
     selector: ""
     query: "max(last_15m):max:acme.hardware.component_health{__SCOPE__} by {host,component} >= 2"
     thresholds: { critical: 2, warning: 1 }
@@ -113,6 +116,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: hardware_node
+    telemetry: [ipmi_hardware_check]
     selector: ""
     query: "avg(last_2h):anomalies(avg:acme.hardware.temperature_celsius{__SCOPE__} by {host}, 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -144,6 +148,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: host
+    telemetry: [cmdb_compliance_export]
     selector: ""
     query: "max(last_1d):max:acme.compliance.missing_critical_patches{__SCOPE__} by {cluster,host} > 0"
     thresholds: { critical: 0 }
@@ -169,6 +174,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: host
+    telemetry: [cmdb_compliance_export]
     selector: ""
     query: "max(last_1d):max:acme.compliance.days_since_patch{__SCOPE__} by {cluster,host} > 45"
     thresholds: { critical: 45, warning: 35 }
@@ -194,6 +200,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: host
+    telemetry: [cmdb_compliance_export]
     selector: ""
     query: "min(last_1d):min:acme.compliance.os_support_days_remaining{__SCOPE__} by {cluster,host} < 90"
     thresholds: { critical: 90, warning: 180 }
@@ -221,6 +228,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: host
+    telemetry: [cmdb_compliance_export]
     selector: ""
     query: "max(last_1d):max:acme.compliance.agent_versions_behind{__SCOPE__} by {cluster} > 3"
     thresholds: { critical: 3, warning: 2 }

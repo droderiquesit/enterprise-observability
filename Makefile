@@ -4,7 +4,7 @@ STACKS := stacks/coverage stacks/foundation
 MODULES := $(wildcard modules/*)
 
 .PHONY: setup fmt fmt-check validate test tf-validate matrix runbooks fixtures \
-        inventory coverage plan-offline clean
+        applicability inventory coverage plan-offline clean
 
 # --- developer entry points --------------------------------------------------
 setup:
@@ -32,6 +32,8 @@ matrix:            ## regenerate docs/monitor-coverage-matrix.md
 	cd tools && $(PY) generate_matrix.py
 runbooks:          ## regenerate runbook drafts from the archetype catalog
 	cd tools && $(PY) generate_runbooks.py --report
+applicability:     ## which monitors can actually fire, and what telemetry is missing
+	cd tools && $(PY) applicability.py
 fixtures:          ## regenerate tests/fixtures/monitors_planned.json from an offline plan
 	cd stacks/coverage && DD_API_KEY=offline DD_APP_KEY=offline $(TF) plan -input=false \
 		-var datadog_validate=false -out=plan.out && $(TF) show -json plan.out > plan.json

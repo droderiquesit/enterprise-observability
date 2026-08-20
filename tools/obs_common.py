@@ -9,6 +9,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import re
 from pathlib import Path
 
 import yaml
@@ -186,6 +187,81 @@ def expand_instances(policy: dict, environments: list[str] | None = None) -> lis
                     }
                 )
     return out
+
+
+# =============================================================================
+# BEGIN telemetry requirements (§38) — derive what an archetype needs to exist
+#
+# The vocabulary and the namespace→source mapping both live in
+# platform/policy/global.yaml → telemetry_sources, so this module interprets
+# policy rather than carrying a second copy of it. Everything that asks "can
+# this monitor fire?" — the lint, the applicability engine, the profile engine
+# — goes through these two functions.
+# =============================================================================
+
+# A Datadog query names its metrics as dotted tokens. Case matters: SNMP metric
+# names are camelCase (`snmp.ifBandwidthInUsage.rate`), and a lowercase-only
+# pattern splits them into two fragments, neither of which resolves.
+_METRIC_TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+")
+_EVENT_SOURCE = re.compile(r"source:([A-Za-z0-9_.-]+)")
+
+
+def telemetry_sources(policy: dict) -> dict:
+    return policy["global"]["telemetry_sources"]
+
+
+def derive_telemetry(policy: dict, query: str) -> list[str]:
+    """The telemetry sources a query CANNOT work without.
+
+    Longest-prefix match, because the namespaces overlap where the products do:
+    `azure.cost.*` is Cloud Cost Management (separately licensed and separately
+    enabled) while everything else under `azure.` is the Azure integration, and
+    `acme.database.restore_verification*` comes from a different job than
+    `acme.database.hours_since_backup`. Matching the shorter prefix first would
+    quietly attribute a signal to the wrong producer, which is the exact class
+    of mistake this whole field exists to prevent.
+
+    Tokens that match no namespace are tag keys (`peer.service`,
+    `http.status_class`) or Datadog function syntax, not metrics — ignored.
+    """
+    sources = telemetry_sources(policy)
+    prefixes: list[tuple[str, str]] = []
+    events: dict[str, str] = {}
+    for sid, s in sources.items():
+        for ns in s.get("metric_namespaces", []) or []:
+            prefixes.append((ns, sid))
+        for ev in s.get("event_sources", []) or []:
+            events[ev] = sid
+    prefixes.sort(key=lambda p: len(p[0]), reverse=True)
+
+    found: set[str] = set()
+    for token in _METRIC_TOKEN.findall(query):
+        for ns, sid in prefixes:
+            if token.startswith(ns):
+                found.add(sid)
+                break
+    # An event monitor reads no metric at all; its producer is the event source.
+    for src in _EVENT_SOURCE.findall(query):
+        if src in events:
+            found.add(events[src])
+    return sorted(found)
+
+
+def archetype_telemetry(policy: dict, archetype: dict) -> list[str]:
+    """What an archetype declares it needs, falling back to what its query implies.
+
+    The fallback is not a convenience — it keeps every consumer working against
+    a catalog file that a parallel branch added before the lint made the field
+    mandatory, instead of raising KeyError halfway through a report.
+    """
+    declared = archetype.get("telemetry")
+    if declared:
+        return sorted(declared)
+    return derive_telemetry(policy, archetype.get("query", ""))
+
+
+# END telemetry requirements (§38)
+# =============================================================================
 
 
 def tags_to_map(tags: list[str] | None) -> dict:

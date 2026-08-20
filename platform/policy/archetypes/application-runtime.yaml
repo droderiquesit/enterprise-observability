@@ -30,6 +30,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: service
+    telemetry: [rum]
     selector: ""
     query: "avg(last_1h):p75:rum.view.largest_contentful_paint{__SCOPE__} by {service} > 2500"
     thresholds: { critical: 2500, warning: 2000 }
@@ -54,6 +55,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: service
+    telemetry: [rum]
     selector: ""
     query: "avg(last_1h):p75:rum.view.interaction_to_next_paint{__SCOPE__} by {service} > 200"
     thresholds: { critical: 200, warning: 100 }
@@ -78,6 +80,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: service
+    telemetry: [rum]
     selector: ""
     query: "avg(last_1h):p75:rum.view.cumulative_layout_shift{__SCOPE__} by {service} > 0.1"
     thresholds: { critical: 0.1, warning: 0.05 }
@@ -114,6 +117,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: service
+    telemetry: [custom_app_pool_metrics]
     selector: ""
     query: "avg(last_10m):avg:acme.app.db_pool.active{__SCOPE__} by {service,pool} / avg:acme.app.db_pool.max{__SCOPE__} by {service,pool} * 100 > 90"
     thresholds: { critical: 90, warning: 75 }
@@ -137,6 +141,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: service
+    telemetry: [custom_app_pool_metrics]
     selector: ""
     query: "avg(last_15m):anomalies(avg:acme.app.db_pool.acquire_wait_ms{__SCOPE__} by {service,pool}, 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -161,6 +166,7 @@ archetypes:
     detection: rate_of_change
     monitor_type: query alert
     resource_type: service
+    telemetry: [apm_runtime_metrics]
     selector: ""
     query: "pct_change(avg(last_15m),last_4h):sum:jvm.gc.major_collection_time{__SCOPE__} by {service}.as_rate() > 100"
     thresholds: { critical: 100, warning: 50 }
@@ -184,6 +190,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: service
+    telemetry: [apm_runtime_metrics]
     selector: ""
     query: "max(next_12h):forecast(avg:jvm.heap_memory{__SCOPE__} by {service} / avg:jvm.heap_memory_max{__SCOPE__} by {service} * 100, 'linear', 1, interval='15m', history='1d') > 90"
     thresholds: { critical: 90, warning: 80 }
@@ -207,6 +214,7 @@ archetypes:
     detection: rate_of_change
     monitor_type: query alert
     resource_type: service
+    telemetry: [apm_runtime_metrics]
     selector: ""
     query: "pct_change(avg(last_15m),last_4h):avg:runtime.dotnet.gc.pause_time{__SCOPE__} by {service} > 100"
     thresholds: { critical: 100, warning: 50 }
@@ -231,6 +239,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: service
+    telemetry: [apm_runtime_metrics]
     selector: ""
     query: "avg(last_30m):anomalies(sum:runtime.dotnet.gc.count.gen2{__SCOPE__} by {service}.as_rate(), 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -260,6 +269,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: service
+    telemetry: [apm]
     selector: ""
     query: "sum(last_1h):sum:trace.span.hits{__SCOPE__,!version:*} by {service}.as_count() > 0"
     thresholds: { critical: 0 }
