@@ -6,7 +6,7 @@
 |---|---|---|
 | Policy hierarchy, archetype catalog, modules, stacks | observability-platform | PR + CI + approval gate |
 | Self-service manifests (`platform/monitors/`) | requesting team | PR; CI validates; platform reviews only exceptions |
-| Service registrations (`platform/services/`) | owning team | PR; tier changes reviewed by the platform team |
+| Entity registrations (`platform/entities/`) | owning team | PR; kind and criticality changes reviewed by the platform team |
 | Runbook content | the archetype's owning team | PR to `platform/runbooks/`; the publisher deploys |
 | On-call rosters (`oncall_members`) | each team | tfvars from IdP sync — never edited by hand |
 | Exceptions | requesting team + approver | PR; approver recorded; expiry enforced by CI |

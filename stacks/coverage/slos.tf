@@ -53,9 +53,19 @@ locals {
   }
 
   # --- tier0 per-service SLOs ----------------------------------------------
+  # The tier0 template is a metric SLO over `trace.http.request.hits` filtered
+  # by `service:<name>` (platform/policy/slos.yaml). That numerator only exists
+  # for an entity whose telemetry is keyed by the `service` tag — a datastore
+  # is keyed by db_instance and a queue by namespace, so a tier0 datastore
+  # would get an SLO whose good and total events are both permanently zero.
+  # `performance_data` in platform/policy/entity_kinds.yaml is the same flag
+  # that decides whether the catalog entity claims `service:`-tagged telemetry,
+  # which is exactly the question being asked here. A legacy registration has
+  # no kind and is a service by construction, hence the `true` default.
   tier0_services = {
     for name, s in local.service_docs : name => s
-    if s.tier == "tier0" && contains(s.envs, "prod")
+    if s.tier == "tier0" && contains(s.envs, "prod") &&
+    try(local.entity_kinds_policy[s.kind].performance_data, true)
   }
 
   tier0_slos = {

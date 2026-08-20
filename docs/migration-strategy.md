@@ -55,7 +55,7 @@ Everything depends on five tags: `env`, `service`, `team`, `tier`,
    *is* the campaign backlog.
 2. Fix tagging at source — Terraform for cloud resources, Helm values for
    Kubernetes, deployment pipelines for services. Never by hand in Datadog.
-3. Register tier0 and tier1 services in `platform/services/` (a business
+3. Register tier0 and tier1 entities in `platform/entities/` (a business
    decision, made once).
 4. Track weekly: `with_violations` and `unowned` must trend to zero.
 

@@ -1,0 +1,38 @@
+# WORKED EXAMPLE — DATASTORE.
+#
+# This is the entity the audit says cannot exist today (§5: a database becomes
+# a Service). `orders-sql` was already named as a dependency of
+# order-events-consumer; under the old model it either did not exist in the
+# catalog at all or arrived from discovery as a Service. It is an Azure SQL
+# database, so it is a `datastore`, it is owned by data-engineering, and its
+# packs are datastore-core + sqlserver-core (service_archetypes.yaml).
+#
+# NOTE what is absent: `dependencies` is REJECTED for a datastore by the
+# schema, because EntityV3DatastoreSpec carries componentOf/lifecycle/tier/type
+# and nothing else — a dependency declared here would be accepted by the YAML
+# and silently discarded by the API, which is worse than a rejection. Runbook
+# links are absent for the same reason they are absent everywhere else: they
+# are DERIVED from the archetype packs and point at published notebooks
+# (§31), never at files in this repository.
+entity:
+  kind: datastore
+  name: orders-sql
+  display_name: Orders (Azure SQL)
+  team: data-engineering
+  criticality: tier1
+  service_archetype: datastore
+  platform: azure_sql
+  domain: database
+  region: eastus2
+  description: Azure SQL database of record for order capture and fulfilment state.
+  envs: [dev, qa, stage, prod]
+  env: prod
+  lifecycle: production
+  slo:
+    profile: domain            # covered by the database domain SLO, not its own
+  # Carried by the DBA rotation inside data-engineering rather than by the
+  # team's general rota — exactly the ownership split a single `team:` field
+  # on a service registration could not express.
+  oncall:
+    team: data-engineering
+    schedule: data-engineering-primary

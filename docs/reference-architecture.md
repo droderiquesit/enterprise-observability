@@ -895,7 +895,7 @@ time, so a typo fails the plan instead of silently granting nothing.
 │                         notification_profiles · grouping · composites        │
 │                         slos · runbooks · workflows · exceptions             │
 │                         archetypes/  ← 151 monitor definitions, 14 domains   │
-│  platform/services/     service registrations (tier + archetype + owner)     │
+│  platform/entities/     entity registrations (kind + criticality + owner)    │
 │  platform/monitors/     self-service monitors — ONE YAML FILE each           │
 │  platform/runbooks/     152 runbooks (generated skeleton + human sections)   │
 │  platform/events/       correlation rules                                    │
