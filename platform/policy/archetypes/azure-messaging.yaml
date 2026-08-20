@@ -29,6 +29,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: messaging_namespace
+    telemetry: [azure_integration]
     selector: ""
     query: "avg(last_15m):anomalies(sum:azure.servicebus_namespaces.server_errors{__SCOPE__} by {namespace}.as_rate(), 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -37,6 +38,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_impacting
     runbook: servicebus-server-errors
     workflow: diag-messaging
     failure_domain: messaging
@@ -51,6 +53,7 @@ archetypes:
     detection: rate_of_change
     monitor_type: query alert
     resource_type: messaging_namespace
+    telemetry: [azure_integration]
     selector: ""
     query: "pct_change(avg(last_15m),last_4h):sum:azure.servicebus_namespaces.incoming_messages{__SCOPE__} by {namespace}.as_rate() < -70"
     thresholds: { critical: -70, warning: -50 }
@@ -59,6 +62,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_impacting
     runbook: servicebus-publish-volume-collapse
     workflow: diag-messaging
     failure_domain: messaging
@@ -74,6 +78,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: messaging_namespace
+    telemetry: [azure_integration]
     selector: ""
     query: "max(next_12h):forecast(avg:azure.servicebus_namespaces.cpu_per_namespace{__SCOPE__} by {namespace}, 'linear', 1, interval='30m', history='1d') > 80"
     thresholds: { critical: 80, warning: 70 }
@@ -82,6 +87,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_supporting
     runbook: servicebus-namespace-cpu-saturation
     workflow: auto-capacity-ticket
     failure_domain: messaging
@@ -101,6 +107,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: queue
+    telemetry: [custom_messaging_client_metrics]
     selector: ""
     query: "max(last_15m):max:acme.messaging.oldest_message_age_seconds{__SCOPE__} by {namespace,entity} > 900"
     thresholds: { critical: 900, warning: 300 }
@@ -110,6 +117,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_impacting
     runbook: servicebus-message-age
     workflow: diag-messaging
     failure_domain: messaging
@@ -126,6 +134,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: stream
+    telemetry: [azure_integration]
     selector: ""
     query: "sum(last_15m):sum:azure.eventhub_namespaces.quota_exceeded_errors{__SCOPE__} by {namespace}.as_count() > 0"
     thresholds: { critical: 0 }
@@ -134,6 +143,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_supporting
     runbook: eventhub-throughput-exhaustion
     workflow: diag-messaging
     failure_domain: messaging
@@ -149,6 +159,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: stream
+    telemetry: [azure_integration]
     selector: ""
     query: "avg(last_15m):anomalies(sum:azure.eventhub_namespaces.server_busy_errors{__SCOPE__} by {namespace}.as_rate(), 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -157,6 +168,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_supporting
     runbook: eventhub-server-busy-throttling
     workflow: diag-messaging
     failure_domain: messaging
@@ -168,6 +180,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: stream
+    telemetry: [azure_integration]
     selector: ""
     query: "avg(last_15m):anomalies(sum:azure.eventhub_namespaces.internal_server_errors{__SCOPE__} by {namespace}.as_rate(), 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -176,6 +189,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_impacting
     runbook: eventhub-server-errors
     workflow: diag-messaging
     failure_domain: messaging
@@ -187,6 +201,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: stream
+    telemetry: [azure_integration]
     selector: ""
     query: "avg(last_30m):anomalies(sum:azure.eventhub_namespaces.incoming_messages{__SCOPE__} by {namespace}.as_rate(), 'agile', 3) >= 1"
     thresholds: { critical: 1.0 }
@@ -195,6 +210,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_impacting
     runbook: eventhub-ingress-anomaly
     workflow: diag-messaging
     failure_domain: messaging
@@ -210,6 +226,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: stream
+    telemetry: [azure_integration]
     selector: ""
     query: "sum(last_30m):sum:azure.eventhub_namespaces.outgoing_messages{__SCOPE__} by {namespace}.as_count() < 1"
     thresholds: { critical: 1 }
@@ -218,6 +235,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_impacting
     runbook: eventhub-egress-stalled
     workflow: diag-messaging
     failure_domain: messaging
@@ -235,6 +253,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: stream
+    telemetry: [azure_integration]
     selector: ""
     query: "avg(last_30m):avg:azure.eventhub_namespaces.capture_backlog{__SCOPE__} by {namespace} > 0"
     thresholds: { critical: 0 }
@@ -243,6 +262,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-data-freshness
+    slo_relation: slo_supporting
     runbook: eventhub-capture-backlog
     workflow: diag-data-pipeline
     failure_domain: messaging

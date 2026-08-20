@@ -7,11 +7,12 @@ Create service
       ↓
 Apply 5 standard tags        env · service · team · tier · service_archetype
       ↓
-Register it (one small YAML) platform/services/<service>.yaml
+Register it (one small YAML) platform/entities/<name>.yaml
+      ↓                            declare `kind:` — and `platform:` if it is a datastore
       ↓
 ─────────────────────────────────────────────────────────────
 Baseline monitors            automatic   (packs for your archetype)
-SLO                          automatic   (domain SLO, or your own if tier0)
+SLO                          automatic   (domain SLO, or your own objectives if tier0)
 Burn-rate paging             automatic
 Alert routing                automatic   (team tag → your channel + rotation)
 Environment behaviour        automatic   (dev silent, qa baseline, stage/prod full)
@@ -21,11 +22,45 @@ On-call routing              automatic
 Ownership + service catalog  automatic
 Event correlation            automatic
 Predictive baselines         start learning immediately
-Dashboard visibility         automatic   (domain board + Datadog-native views)
+Dashboard visibility         automatic   (Service Catalog + Datadog-native views)
 ```
 
 **No monitor configuration is required.** If your telemetry carries the five
 tags, the monitors that cover you already exist — you join them as a group.
+
+**The two fields worth thinking about for ten seconds.**
+
+`kind:` is what the thing IS — `service`, `datastore`, `queue`, `system` or
+`api`. It is not cosmetic: it decides what your entry becomes in the Datadog
+catalog, and therefore whether ownership, the dependency map and the scorecard
+are right about you. It also decides what your registration may say. Only the
+service-shaped kinds carry `dependencies:`; a `system` declares `components:`
+instead, and a `queue` carries neither — the schema rejects the fields your
+kind cannot express rather than accepting them and dropping them silently.
+
+`platform:` is what it RUNS ON — `azure_sql`, `cosmosdb`, `snowflake`,
+`sqlserver`, `aks`, `vmware`. For a datastore this is the field that selects
+your technology monitors. Omit it and you get the engine-agnostic pack only:
+availability, backup age, telemetry loss. That is deliberate — a datastore
+whose engine nobody recorded must not be reported as covered for three engines
+it is not — but it does mean an Azure SQL database with no `platform:` is
+missing fourteen monitors it could have.
+
+The one thing a machine cannot derive is the handful of facts only you know:
+what actually breaks for a customer, what you depend on that is not
+instrumented, and what looks alarming but is fine. Those are the sixteen
+questions in [the observability survey](observability-survey.md) — most teams
+answer four of them and skip the rest.
+**No SLO configuration is required either.** Your tier and your entity type
+already resolve an objective and the SLI that measures it. Add an `slo:` block
+only when you owe MORE than availability, or when your promise differs from
+other services that look exactly like yours. Two keys, two questions:
+`scope:` is whether you get your own SLO at all (`per_service` opts a
+below-tier0 service in; `domain` says the domain SLO already covers you), and
+`profile:` is which objectives you then carry — see
+[platform/entities/README.md](../platform/entities/README.md) for the
+resolution chain, and `python tools/slo_resolver.py --service <name>` to see
+what you resolve to and which layer decided each field.
 
 ### What registration adds over just tagging
 
@@ -37,6 +72,8 @@ Discovery covers everything; registration adds *intent*.
 | Ownership in Datadog's catalog | inferred | declared |
 | Tier | inferred from environment | **your business decision** |
 | Per-service SLO (tier0) | — | ✓ |
+| Named objectives (availability / latency / freshness) | — | ✓ via `slo: {profile}` |
+| A target that differs from your tier's | — | ✓ via `slo.objectives` + a rationale |
 | Appears in coverage as *owned* | ✗ (violation) | ✓ |
 
 ---

@@ -1,0 +1,88 @@
+# =============================================================================
+# DEPLOYMENT RINGS AND AGENT VERSION MANAGEMENT (§13, §14)
+#
+# "latest" is not a version policy. An Agent release can change a check's
+# metric names, its default interval, or its memory profile, and discovering
+# that on ten thousand production nodes at once is the failure this exists to
+# prevent.
+#
+# THE PROMOTION RULE, stated once: a version moves to the next ring only when
+# the current ring has been at that version for `soak_hours` AND its validation
+# failure rate is at or below `max_failure_pct`. NinjaOne enforces this; the
+# numbers live here so the enforcement is reviewable rather than buried in a
+# script.
+# =============================================================================
+version: 2
+
+versions:
+  # The version every node should be running unless a ring pins it lower.
+  target_version: "7.66.1"
+  # Below this an Agent is non-compliant regardless of ring. Matches
+  # platform/policy/agent_profiles.yaml -> fleet.minimum_agent_version, and the
+  # lint fails if the two disagree.
+  minimum_version: "7.55.0"
+  # Where a failed upgrade returns to. Kept one minor behind target so a
+  # rollback lands on something that was itself soaked, not on whatever was
+  # there before.
+  rollback_version: "7.65.2"
+
+rings:
+  - id: ring0-lab
+    display: "Ring 0 — Lab and engineering"
+    match: { env: [dev], tags: { fleet_ring: ring0 } }
+    soak_hours: 24
+    max_failure_pct: 25          # a lab exists to absorb failure
+    auto_promote: true
+
+  - id: ring1-dev
+    display: "Ring 1 — Development"
+    match: { env: [dev] }
+    soak_hours: 48
+    max_failure_pct: 10
+    auto_promote: true
+
+  - id: ring2-qa
+    display: "Ring 2 — QA"
+    match: { env: [qa] }
+    soak_hours: 48
+    max_failure_pct: 5
+    auto_promote: true
+
+  - id: ring3-stage
+    display: "Ring 3 — Staging"
+    match: { env: [stage] }
+    soak_hours: 72
+    max_failure_pct: 2
+    auto_promote: true
+
+  - id: ring4-canary
+    display: "Ring 4 — Production canary"
+    # A percentage rather than a list: naming canary hosts means the canary set
+    # decays as the estate changes, and the hosts that were representative in
+    # January are retired by June.
+    match: { env: [prod], percentage: 5 }
+    soak_hours: 96
+    max_failure_pct: 1
+    auto_promote: false          # the one gate a human opens
+    exclude_criticality: [tier0] # a canary is not the place to learn about tier0
+
+  - id: ring5-prod
+    display: "Ring 5 — Production"
+    match: { env: [prod] }
+    soak_hours: 0
+    max_failure_pct: 1
+    auto_promote: false
+
+# What an upgrade must prove before the ring is considered soaked. Each maps to
+# a check DD-Agent-Validate performs; a name here that the script does not
+# implement fails the lint, so this list cannot drift into aspiration.
+upgrade_validation:
+  - agent_service_running
+  - agent_version_matches
+  - config_valid
+  - datadog_connectivity
+  - expected_checks_healthy
+  - host_metrics_arriving
+  - logs_arriving_when_enabled
+  - apm_arriving_when_enabled
+  - dbm_arriving_when_enabled

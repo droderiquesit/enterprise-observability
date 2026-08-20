@@ -29,3 +29,11 @@ generated/
 *.key
 .env
 .tfstate-worktree/
+
+# Agent worktrees. Parallel subagents each get an isolated checkout under
+# .claude/worktrees/; they are transient scratch (64MB+ at a time) and their
+# real output arrives as a branch, never as files in this tree.
+.claude/
+# MCP principal registry — operational configuration, not documentation.
+# The committed template is mcp/principals.example.yaml.
+mcp/principals.yaml

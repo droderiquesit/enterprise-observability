@@ -25,6 +25,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_redis
+    telemetry: [azure_integration]
     selector: "resource_type:azure_redis"
     query: "avg(last_15m):anomalies(avg:azure.cache_redis.server_load{__SCOPE__} by {subscription_name,name}, 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -34,6 +35,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_supporting
     runbook: redis-server-load-saturation
     workflow: diag-azure-resource
     failure_domain: caching
@@ -49,6 +51,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: azure_redis
+    telemetry: [azure_integration]
     selector: "resource_type:azure_redis"
     query: "max(next_12h):forecast(avg:azure.cache_redis.percent_processor_time{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='30m', history='1d') > 80"
     thresholds: { critical: 80, warning: 70 }
@@ -58,6 +61,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_supporting
     runbook: redis-cpu-saturation-forecast
     workflow: auto-capacity-ticket
     failure_domain: caching
@@ -69,6 +73,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: azure_redis
+    telemetry: [azure_integration]
     selector: "resource_type:azure_redis"
     query: "max(next_12h):forecast(avg:azure.cache_redis.usedmemorypercentage{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='30m', history='1d') > 85"
     thresholds: { critical: 85, warning: 75 }
@@ -78,6 +83,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_supporting
     runbook: redis-memory-pressure-forecast
     workflow: auto-capacity-ticket
     failure_domain: caching
@@ -93,6 +99,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_redis
+    telemetry: [azure_integration]
     selector: "resource_type:azure_redis"
     query: "avg(last_15m):anomalies(sum:azure.cache_redis.evictedkeys{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -102,6 +109,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_supporting
     runbook: redis-eviction-anomaly
     workflow: diag-azure-resource
     failure_domain: caching
@@ -117,6 +125,7 @@ archetypes:
     detection: rate_of_change
     monitor_type: query alert
     resource_type: azure_redis
+    telemetry: [azure_integration]
     selector: "resource_type:azure_redis"
     query: "pct_change(avg(last_30m),last_4h):(sum:azure.cache_redis.cachehits{__SCOPE__} by {subscription_name,name} / (sum:azure.cache_redis.cachehits{__SCOPE__} by {subscription_name,name} + sum:azure.cache_redis.cachemisses{__SCOPE__} by {subscription_name,name})) < -20"
     thresholds: { critical: -20, warning: -10 }
@@ -126,6 +135,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_supporting
     runbook: redis-cache-hit-ratio-degradation
     workflow: diag-azure-resource
     failure_domain: caching
@@ -141,6 +151,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: azure_redis
+    telemetry: [azure_integration]
     selector: "resource_type:azure_redis"
     query: "max(next_12h):forecast(avg:azure.cache_redis.connectedclients{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='15m', history='1d') > 0"
     thresholds: { critical: 0 }
@@ -150,6 +161,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_supporting
     runbook: redis-connection-saturation-forecast
     workflow: auto-capacity-ticket
     failure_domain: caching
@@ -165,6 +177,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_redis
+    telemetry: [azure_integration]
     selector: "resource_type:azure_redis"
     query: "avg(last_15m):anomalies(avg:azure.cache_redis.cache_latency{__SCOPE__} by {subscription_name,name}, 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -174,6 +187,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_impacting
     runbook: redis-latency-anomaly
     workflow: diag-azure-resource
     failure_domain: caching
@@ -185,6 +199,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_redis
+    telemetry: [azure_integration]
     selector: "resource_type:azure_redis"
     query: "avg(last_15m):anomalies(sum:azure.cache_redis.errors{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -194,6 +209,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_impacting
     runbook: redis-error-anomaly
     workflow: diag-azure-resource
     failure_domain: caching
@@ -208,6 +224,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: azure_redis
+    telemetry: [azure_integration]
     selector: "resource_type:azure_redis"
     query: "min(last_15m):min:azure.cache_redis.geo_replication_healthy{__SCOPE__} by {subscription_name,name} < 1"
     thresholds: { critical: 1 }
@@ -217,6 +234,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_supporting
     runbook: redis-geo-replication-unhealthy
     workflow: diag-azure-resource
     failure_domain: caching
@@ -233,6 +251,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_container_registry
+    telemetry: [azure_integration]
     selector: "resource_type:azure_container_registry"
     query: "avg(last_30m):anomalies(sum:azure.containerregistry_registries.total_pull_count{__SCOPE__} by {subscription_name,name}.as_rate() - sum:azure.containerregistry_registries.successful_pull_count{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -242,6 +261,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_impacting
     runbook: acr-pull-failure-anomaly
     workflow: diag-azure-resource
     failure_domain: registry
@@ -258,6 +278,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_container_registry
+    telemetry: [azure_integration]
     selector: "resource_type:azure_container_registry"
     query: "avg(last_30m):anomalies(sum:azure.containerregistry_registries.total_push_count{__SCOPE__} by {subscription_name,name}.as_rate() - sum:azure.containerregistry_registries.successful_push_count{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -267,6 +288,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: diagnostic
     runbook: acr-push-failure-anomaly
     workflow: diag-azure-resource
     failure_domain: registry
@@ -282,6 +304,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: azure_container_registry
+    telemetry: [azure_integration]
     selector: "resource_type:azure_container_registry"
     query: "max(next_1w):forecast(avg:azure.containerregistry_registries.storage_used{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='1h', history='1w') > 0"
     thresholds: { critical: 0 }
@@ -291,6 +314,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_supporting
     runbook: acr-storage-growth-forecast
     workflow: auto-capacity-ticket
     failure_domain: registry

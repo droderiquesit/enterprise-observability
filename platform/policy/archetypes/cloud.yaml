@@ -20,6 +20,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: azure_app_service
+    telemetry: [azure_integration]
     selector: "resource_type:azure_app_service"
     query: 'min(last_10m):avg:azure.app_services.health_check_status{__SCOPE__} by {subscription_name,resource_group,name} < 1'
     thresholds: { critical: 1 }
@@ -28,6 +29,7 @@ archetypes:
     envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-cloud-platform-availability
+    slo_relation: sli_producing
     runbook: azure-appservice-unavailable
     workflow: diag-azure-resource
     failure_domain: azure-paas
@@ -42,6 +44,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_app_service
+    telemetry: [azure_integration]
     selector: "resource_type:azure_app_service"
     query: "avg(last_15m):anomalies(sum:azure.app_services.http5xx{__SCOPE__} by {subscription_name,resource_group,name}.as_rate(), 'agile', 3) >= 1"
     thresholds: { critical: 1.0 }
@@ -50,6 +53,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_impacting
     runbook: azure-appservice-http5xx-anomaly
     workflow: remediate-recycle-app-pool
     failure_domain: azure-paas
@@ -63,6 +67,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: azure_app_service_plan
+    telemetry: [azure_integration]
     selector: "resource_type:azure_app_service_plan"
     query: "max(next_1d):forecast(avg:azure.app_services_plan.cpu_percentage{__SCOPE__} by {subscription_name,resource_group,name}, 'linear', 1, interval='30m', history='1w') > 90"
     thresholds: { critical: 90, warning: 75 }
@@ -71,6 +76,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_supporting
     runbook: azure-appservice-plan-saturation
     workflow: remediate-scale-workload
     failure_domain: azure-paas
@@ -84,6 +90,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_function
+    telemetry: [azure_integration]
     selector: "resource_type:azure_function"
     query: "avg(last_15m):anomalies(sum:azure.functions.function_execution_failures{__SCOPE__} by {subscription_name,resource_group,name}.as_rate(), 'agile', 3) >= 1"
     thresholds: { critical: 1.0 }
@@ -92,6 +99,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_impacting
     runbook: azure-function-failure-anomaly
     workflow: diag-azure-resource
     failure_domain: azure-paas
@@ -105,6 +113,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: azure_function
+    telemetry: [azure_integration]
     selector: "resource_type:azure_function"
     query: 'sum(last_1h):sum:azure.functions.function_execution_count{__SCOPE__} by {subscription_name,resource_group,name}.as_count() < 1'
     thresholds: { critical: 1 }
@@ -114,6 +123,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_impacting
     runbook: azure-function-execution-stalled
     workflow: diag-azure-resource
     failure_domain: azure-paas
@@ -129,6 +139,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: azure_storage
+    telemetry: [azure_integration]
     selector: "resource_type:azure_storage"
     query: 'min(last_10m):avg:azure.storage_storageaccounts.availability{__SCOPE__} by {subscription_name,resource_group,name} < 99'
     thresholds: { critical: 99, warning: 99.9 }
@@ -137,6 +148,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_impacting
     runbook: azure-storage-availability
     workflow: diag-azure-resource
     failure_domain: azure-paas
@@ -152,6 +164,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_storage
+    telemetry: [azure_integration]
     selector: "resource_type:azure_storage"
     query: "avg(last_15m):anomalies(sum:azure.storage_storageaccounts.transactions{__SCOPE__,response_type:throttlingerror} by {subscription_name,name}.as_rate(), 'agile', 3) >= 1"
     thresholds: { critical: 1.0 }
@@ -160,6 +173,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_supporting
     runbook: azure-storage-throttling
     workflow: diag-azure-resource
     failure_domain: azure-paas
@@ -173,6 +187,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: azure_load_balancer
+    telemetry: [azure_integration]
     selector: "resource_type:azure_load_balancer"
     query: 'min(last_10m):avg:azure.network_loadbalancers.dip_availability{__SCOPE__} by {subscription_name,resource_group,name} < 50'
     thresholds: { critical: 50, warning: 80 }
@@ -181,6 +196,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-cloud-platform-availability
+    slo_relation: sli_producing
     runbook: azure-loadbalancer-probe-failure
     workflow: diag-azure-resource
     failure_domain: azure-landing-zone
@@ -196,6 +212,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: azure_application_gateway
+    telemetry: [azure_integration]
     selector: "resource_type:azure_application_gateway"
     query: 'min(last_10m):avg:azure.network_applicationgateways.healthy_host_count{__SCOPE__} by {subscription_name,name,backend_pool} < 1'
     thresholds: { critical: 1, warning: 2 }
@@ -204,6 +221,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-cloud-platform-availability
+    slo_relation: sli_producing
     runbook: azure-appgateway-backend-unhealthy
     workflow: diag-azure-resource
     failure_domain: azure-landing-zone
@@ -218,6 +236,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_application_gateway
+    telemetry: [azure_integration]
     selector: "resource_type:azure_application_gateway"
     query: "avg(last_15m):anomalies(sum:azure.network_applicationgateways.failed_requests{__SCOPE__} by {subscription_name,name}.as_rate(), 'agile', 3) >= 1"
     thresholds: { critical: 1.0 }
@@ -226,6 +245,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_impacting
     runbook: azure-appgateway-5xx-anomaly
     workflow: diag-azure-resource
     failure_domain: azure-landing-zone
@@ -239,6 +259,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: azure_key_vault
+    telemetry: [azure_integration]
     selector: "resource_type:azure_key_vault"
     query: 'min(last_10m):avg:azure.keyvault_vaults.availability{__SCOPE__} by {subscription_name,name} < 99'
     thresholds: { critical: 99 }
@@ -247,6 +268,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: sli_producing
     runbook: azure-keyvault-availability
     workflow: diag-azure-resource
     failure_domain: azure-paas
@@ -263,6 +285,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: azure_key_vault
+    telemetry: [azure_integration]
     selector: "resource_type:azure_key_vault"
     query: 'sum(last_15m):sum:azure.keyvault_vaults.service_api_result_count{__SCOPE__,status_code:429} by {subscription_name,name}.as_count() > 0'
     thresholds: { critical: 0 }
@@ -271,6 +294,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_supporting
     runbook: azure-keyvault-throttling
     workflow: diag-azure-resource
     failure_domain: azure-paas
@@ -285,6 +309,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: azure_vm
+    telemetry: [azure_integration]
     selector: "resource_type:azure_vm"
     query: 'min(last_10m):avg:azure.vm.status{__SCOPE__} by {subscription_name,resource_group,name} < 1'
     thresholds: { critical: 1 }
@@ -293,6 +318,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_impacting
     runbook: azure-vm-unavailable
     workflow: diag-azure-resource
     failure_domain: azure-landing-zone
@@ -307,6 +333,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: azure_subscription
+    telemetry: [azure_integration]
     selector: "resource_type:azure_subscription"
     query: "max(next_1w):forecast(avg:azure.usage.current_value{__SCOPE__} by {subscription_name,quota_name} / avg:azure.usage.limit{__SCOPE__} by {subscription_name,quota_name}, 'linear', 1, interval='60m', history='2w') > 0.9"
     thresholds: { critical: 0.9, warning: 0.8 }
@@ -316,6 +343,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_supporting
     runbook: azure-quota-exhaustion-forecast
     workflow: auto-capacity-ticket
     failure_domain: cloud-quota
@@ -332,6 +360,7 @@ archetypes:
     detection: event
     monitor_type: event-v2 alert
     resource_type: azure_subscription
+    telemetry: [azure_integration]
     selector: "resource_type:azure_subscription"
     query: 'events("source:azure __ESCOPE__ tags:\"event_category:ServiceHealth\"").rollup("count").by("subscription_name,region").last("15m") >= 1'
     thresholds: { critical: 1 }
@@ -341,6 +370,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: dependency
     runbook: azure-service-health-event
     workflow: auto-enrich-change
     failure_domain: azure-landing-zone
@@ -356,6 +386,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: azure_subscription
+    telemetry: [azure_integration]
     selector: "resource_type:azure_subscription"
     query: 'sum(last_1h):sum:azure.usage.current_value{__SCOPE__} by {subscription_name}.as_count() < 1'
     thresholds: { critical: 1 }
@@ -364,6 +395,7 @@ archetypes:
     envs: [prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-platform-services
+    slo_relation: slo_supporting
     runbook: azure-integration-telemetry-gap
     workflow: diag-azure-resource
     failure_domain: azure-landing-zone
@@ -381,6 +413,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: azure_subscription
+    telemetry: [azure_cost_management]
     selector: "resource_type:azure_subscription"
     query: "avg(last_1d):anomalies(sum:azure.cost.actual{__SCOPE__} by {subscriptionname}.as_rate(), 'basic', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -393,6 +426,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-platform-services
+    slo_relation: informational
     runbook: azure-cost-anomaly
     workflow: auto-finops-review
     failure_domain: cloud-finops

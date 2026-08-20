@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Enterprise Observability — Executive View</title>
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<!--
+  One page, no build step, no framework, no external origin.
+
+  The markup below is the SHELL only: a header, a live region, and an empty
+  <main>. Everything else is rendered by /static/app.js from /api/*, because
+  the page must be able to say "this number is missing and here is why" for
+  every field, and hand-written placeholder markup is exactly how a missing
+  value turns into a confident zero.
+-->
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <div>
+      <h1>Enterprise Observability</h1>
+      <p class="brand-sub">Executive view · read-only</p>
+    </div>
+  </div>
+
+  <div class="topbar-right">
+    <!-- Data freshness is a first-class control, not a footnote: it sits
+         beside the title because every number on the page is only as good as
+         the timestamp next to it. -->
+    <div id="freshness" class="freshness" role="status" aria-live="polite">
+      <span class="pill pill-neutral"><span class="glyph" aria-hidden="true">…</span>Loading</span>
+    </div>
+    <button id="refresh" type="button" class="btn" aria-label="Refresh all data">
+      <span aria-hidden="true">⟳</span> Refresh
+    </button>
+    <button id="theme" type="button" class="btn" aria-label="Switch colour theme">
+      <span aria-hidden="true">◐</span> Theme
+    </button>
+  </div>
+</header>
+
+<nav id="crumbs" class="crumbs" aria-label="Breadcrumb"></nav>
+
+<main id="main" tabindex="-1">
+  <p class="loading">Loading the enterprise view…</p>
+</main>
+
+<footer class="foot">
+  <p>
+    Read-only. This portal writes nothing: no Datadog mutation, no ticket, no
+    database. Figures come from the Datadog API and from this platform's own
+    governance reports — every tile names its source.
+  </p>
+  <p id="session" class="foot-session"></p>
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

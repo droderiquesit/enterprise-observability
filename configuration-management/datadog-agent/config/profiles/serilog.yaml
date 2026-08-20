@@ -1,0 +1,63 @@
+# =============================================================================
+# PROFILE — serilog  (§6, application logging)
+#
+# The contract between an application and this platform. The application writes
+# structured JSON through Serilog's compact formatter; the Agent ships it
+# unparsed and Datadog indexes the fields directly.
+#
+# WHY JSON AND NOT A GROK PATTERN. A grok pattern is a second copy of the log
+# format, maintained by a different team, that breaks silently when the
+# application changes a message. JSON moves the contract into the application
+# where it belongs and makes the Agent's job a file read.
+#
+# THE REQUIRED FIELD SET is documented in docs/logging.md and enforced there,
+# not here — the Agent cannot validate fields it is only forwarding.
+# =============================================================================
+version: 2
+
+# WHAT THIS PROFILE CAN USE. Policy (environment, criticality) decides whether a
+# feature is ALLOWED; this decides whether it is USABLE. Both must agree, so a
+# tier1 poller does not get APM enabled — and an APM host licence consumed —
+# for an application it does not run.
+supports: [logs]
+catalog_profile: application
+
+datadog_yaml:
+  logs_enabled: true
+
+logs:
+  - type: file
+    path: "{{ serilog_path }}"
+    source: csharp                # applies the .NET pipeline and exception parsing
+    service: "{{ service }}"
+    # `sourcecategory` separates application logs from IIS request logs on the
+    # same host. Without it both land in one stream and the request-rate facets
+    # count exception lines.
+    sourcecategory: application
+    log_processing_rules:
+      # DEBUG AND VERBOSE ARE DROPPED AT THE AGENT, not at the indexing filter.
+      # Dropping them later means paying to transmit and ingest them first;
+      # this is the difference between a logging bill and a logging incident.
+      - type: exclude_at_match
+        name: exclude_debug_verbose
+        pattern: '"@l":"(Debug|Verbose)"'
+      # Health-check requests are the highest-volume, lowest-value lines in any
+      # web application's log.
+      - type: exclude_at_match
+        name: exclude_health_probes
+        pattern: '"RequestPath":"/(health|ready|live)"'
+
+# GUARDRAILS the renderer enforces (tests/test_agent_config.py asserts each):
+#
+#   * A path may not be a bare directory wildcard like C:\**\*.log. Recursive
+#     collection from a drive root will find IIS logs, Windows logs, another
+#     application's logs and eventually the Agent's own log, which is a
+#     feedback loop that ends in a full disk.
+#   * No two log entries on one node may share a path. Duplicate collection
+#     bills twice and double-counts every log-derived metric.
+guardrails:
+  forbid_path_patterns:
+    - '^[A-Za-z]:\\\*\*'
+    - '^/\*\*'
+    - '\*\*/\*\.log$'
+  max_log_sources_per_node: 8

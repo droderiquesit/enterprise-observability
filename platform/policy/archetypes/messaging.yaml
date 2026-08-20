@@ -15,6 +15,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: queue
+    telemetry: [custom_messaging_client_metrics]
     selector: ""
     query: "max(next_1d):forecast(avg:acme.messaging.consumer_lag{__SCOPE__} by {namespace,entity,consumer_group}, 'linear', 1, interval='15m', history='1d') > 100000"
     thresholds: { critical: 100000, warning: 25000 }
@@ -23,6 +24,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_supporting
     runbook: consumer-lag-forecast
     workflow: remediate-scale-workload
     failure_domain: messaging-platform
@@ -40,6 +42,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: queue
+    telemetry: [custom_messaging_client_metrics]
     selector: ""
     query: 'min(last_15m):avg:acme.messaging.active_consumers{__SCOPE__} by {namespace,entity} < 1'
     thresholds: { critical: 1 }
@@ -48,6 +51,7 @@ archetypes:
     envs: [prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-messaging-delivery
+    slo_relation: sli_producing
     runbook: consumer-absent
     workflow: diag-messaging
     failure_domain: messaging-platform
@@ -64,6 +68,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: queue
+    telemetry: [azure_integration]
     selector: ""
     query: 'avg(last_30m):avg:azure.servicebus_namespaces.count_of_dead_lettered_messages_in_a_queue_topic{__SCOPE__} by {namespace,entity} > 100'
     thresholds: { critical: 100, warning: 10 }
@@ -72,6 +77,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_supporting
     runbook: consumer-dlq-growth
     workflow: remediate-clear-dlq
     failure_domain: messaging-platform
@@ -88,6 +94,7 @@ archetypes:
     detection: rate_of_change
     monitor_type: query alert
     resource_type: queue
+    telemetry: [custom_messaging_client_metrics]
     selector: ""
     query: 'pct_change(avg(last_15m),last_1h):sum:acme.messaging.delivery_attempts{__SCOPE__} by {namespace,entity}.as_rate() > 200'
     thresholds: { critical: 200, warning: 100 }
@@ -96,6 +103,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_impacting
     runbook: consumer-retry-storm
     workflow: diag-messaging
     failure_domain: messaging-platform
@@ -109,6 +117,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: queue
+    telemetry: [azure_integration]
     selector: ""
     query: "avg(last_30m):anomalies(avg:azure.servicebus_namespaces.count_of_active_messages_in_a_queue_topic{__SCOPE__} by {namespace,entity}, 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -117,6 +126,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_supporting
     runbook: queue-depth-anomaly
     workflow: diag-messaging
     failure_domain: messaging-platform
@@ -130,6 +140,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: service
+    telemetry: [custom_messaging_client_metrics]
     selector: ""
     query: "avg(last_15m):anomalies(sum:acme.messaging.publish_errors{__SCOPE__} by {service,namespace}.as_rate(), 'agile', 3) >= 1"
     thresholds: { critical: 1.0 }
@@ -139,6 +150,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-messaging-delivery
+    slo_relation: sli_producing
     runbook: messaging-publish-failure
     workflow: diag-messaging
     failure_domain: messaging-platform
@@ -151,6 +163,7 @@ archetypes:
     detection: rate_of_change
     monitor_type: query alert
     resource_type: service
+    telemetry: [custom_messaging_client_metrics]
     selector: ""
     query: 'pct_change(avg(last_10m),last_1h):sum:acme.messaging.client_disconnects{__SCOPE__} by {service,namespace}.as_rate() > 200'
     thresholds: { critical: 200 }
@@ -160,6 +173,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_impacting
     runbook: messaging-client-disconnect
     workflow: diag-messaging
     failure_domain: messaging-platform
@@ -172,6 +186,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: messaging_namespace
+    telemetry: [azure_integration]
     selector: ""
     query: 'sum(last_15m):sum:azure.servicebus_namespaces.throttled_requests{__SCOPE__} by {namespace}.as_count() > 0'
     thresholds: { critical: 0 }
@@ -180,6 +195,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-messaging-delivery
+    slo_relation: sli_producing
     runbook: broker-namespace-throttling
     workflow: remediate-scale-workload
     failure_domain: messaging-platform
@@ -193,6 +209,7 @@ archetypes:
     detection: outlier
     monitor_type: query alert
     resource_type: stream
+    telemetry: [custom_messaging_client_metrics]
     selector: ""
     query: "avg(last_1h):outliers(avg:acme.streaming.partition_lag{__SCOPE__} by {stream,partition}, 'DBSCAN', 3) > 0"
     thresholds: { critical: 0 }
@@ -202,6 +219,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_supporting
     runbook: stream-partition-skew
     workflow: diag-messaging
     failure_domain: event-streaming

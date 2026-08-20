@@ -36,6 +36,22 @@ env:
   TF_VERSION: "1.9.8"
   PYTHON_VERSION: "3.11"
 
+  # DEPLOYMENT METADATA (§8, docs/tagging-standard.md § Deployment metadata).
+  #
+  # `version` is grouped on by two deployment archetypes and, until this block
+  # existed, was emitted by nothing at all — so both grouped by a tag nobody
+  # sent and evaluated against an empty set. This fixes it for the one service
+  # this repository actually deploys: the monitoring configuration itself.
+  # It does NOT and cannot set DD_VERSION for the estate's applications; those
+  # live in their own pipelines, and the standard is the contract they follow.
+  #
+  # run_number + sha rather than a tag: it is monotonic, unique per apply, and
+  # carries the commit, so a version string is enough to find the diff.
+  DD_SERVICE: observability-platform
+  DD_VERSION: "${{ github.run_number }}-${{ github.sha }}"
+  DD_GIT_COMMIT_SHA: "${{ github.sha }}"
+  DD_GIT_REPOSITORY_URL: "${{ github.server_url }}/${{ github.repository }}"
+
 jobs:
   # ---------------------------------------------------------------------------
   nonprod:
@@ -70,6 +86,44 @@ jobs:
           DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
         run: cd tools && python publish_runbooks.py --write-registry
 
+      # COMMIT THE REGISTRY BACK, or the ids just written are discarded with the
+      # checkout. That is not cosmetic: the nightly drift job runs
+      # `publish_runbooks.py --check`, which fails on any registry entry with no
+      # id — so a registry nobody commits makes governance permanently red, and
+      # a permanently red gate is one people stop reading. It also leaves every
+      # local consumer (the coverage matrix, the catalog reconciler) working
+      # from a registry that trails production.
+      #
+      # Recorded HERE rather than in the production job because this job runs on
+      # every push and every dispatch, and publishing is idempotent — by the
+      # time production republishes there is nothing new to record.
+      #
+      # `[skip ci]` is load-bearing: a push to the default branch re-triggers
+      # this workflow, so without it every release that adds a runbook would
+      # deploy twice.
+      - name: "Record the published notebook ids in the repository"
+        run: |
+          git config user.name  "observability-deploy[bot]"
+          git config user.email "observability-deploy@users.noreply.github.com"
+          if git diff --quiet -- platform/policy/runbooks.yaml; then
+            echo "registry unchanged — every runbook already had an id"
+            exit 0
+          fi
+          git add platform/policy/runbooks.yaml
+          git commit -F - <<'MSG'
+          Record published runbook notebook ids [skip ci]
+
+          Written by publish_runbooks.py --write-registry during a deploy, so
+          that publish_runbooks.py --check stays green and monitor `assets`
+          attachment resolves from the repository rather than only from the org.
+          MSG
+          # A rejected push is not a deploy failure. The notebooks exist in
+          # Datadog either way and the next run re-adopts them by name, so
+          # failing an otherwise good apply over a git race would be the wrong
+          # trade. Warn loudly instead.
+          git push origin "HEAD:${{ github.ref_name }}" ||
+            echo "::warning::could not push the runbook registry; notebook ids remain unrecorded in git"
+
       - name: Plan & apply, one environment at a time — dev, then qa, then stage
         env:
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
@@ -90,6 +144,20 @@ jobs:
             if [ "$rc" -ne 0 ]; then exit "$rc"; fi
           done
           exit 0
+
+      # Emitted only after a green apply — a marker for a deployment that did
+      # not complete is worse than none, because the correlation view would
+      # then blame a change that never landed. dev is deliberately skipped: it
+      # instantiates zero monitors by policy, so there is no behaviour for a
+      # version to correlate with.
+      - name: "Deployment marker — record the configuration version (§8)"
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        run: |
+          for env in qa stage; do
+            DD_ENV="$env" python tools/emit_deployment_event.py
+          done
 
   # ---------------------------------------------------------------------------
   production:
@@ -194,6 +262,34 @@ jobs:
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
           DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
         run: cd tools && python reconciliation_report.py --live
+
+      # Fleet compliance against the live estate: how much of the fleet is
+      # actually instrumented, which is the denominator every monitor in this
+      # deploy depends on. REPORT-ONLY by decision — see
+      # platform/policy/agent_profiles.yaml → compliance.ratio.report_targets.
+      # Gating before the first rollout wave would produce a permanently red
+      # deploy, and a gate everyone learns to ignore protects nothing.
+      - name: "8 · Fleet compliance — agent, integration and tag coverage (§39)"
+        # `always()` so the report still runs when an earlier step failed, and
+        # `continue-on-error` because the comment above says this does not gate.
+        # Without the second flag the "non-gating" report failed the job anyway,
+        # which is the kind of contradiction that teaches people to ignore a
+        # red deploy.
+        if: always()
+        continue-on-error: true
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        run: cd tools && python fleet_compliance.py --live
+
+      # Last, and only on a green run: the marker says "this configuration
+      # version is live", which is only true if everything above succeeded.
+      - name: "9 · Deployment marker — record the configuration version (§8)"
+        env:
+          DD_ENV: prod
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        run: cd tools && python emit_deployment_event.py
 
       - uses: actions/upload-artifact@v4
         if: always()

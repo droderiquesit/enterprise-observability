@@ -1,0 +1,554 @@
+{
+ "_recorded_at": "2026-08-20T02:00:00Z",
+ "_source": "GET /api/v2/on-call/schedules?include=teams,layers",
+ "data": [
+  {
+   "id": "sched-0-primary",
+   "type": "schedules",
+   "attributes": {
+    "name": "application-development \u2014 primary",
+    "time_zone": "America/New_York",
+    "current_oncall": ""
+   },
+   "relationships": {
+    "teams": {
+     "data": [
+      {
+       "type": "teams",
+       "id": "team-application-development"
+      }
+     ]
+    },
+    "layers": {
+     "data": [
+      {
+       "type": "layers",
+       "id": "layer-0-primary"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "sched-0-secondary",
+   "type": "schedules",
+   "attributes": {
+    "name": "application-development \u2014 secondary",
+    "time_zone": "America/New_York",
+    "current_oncall": ""
+   },
+   "relationships": {
+    "teams": {
+     "data": [
+      {
+       "type": "teams",
+       "id": "team-application-development"
+      }
+     ]
+    },
+    "layers": {
+     "data": [
+      {
+       "type": "layers",
+       "id": "layer-0-secondary"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "sched-1-primary",
+   "type": "schedules",
+   "attributes": {
+    "name": "cloud-engineering \u2014 primary",
+    "time_zone": "America/New_York",
+    "current_oncall": ""
+   },
+   "relationships": {
+    "teams": {
+     "data": [
+      {
+       "type": "teams",
+       "id": "team-cloud-engineering"
+      }
+     ]
+    },
+    "layers": {
+     "data": [
+      {
+       "type": "layers",
+       "id": "layer-1-primary"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "sched-1-secondary",
+   "type": "schedules",
+   "attributes": {
+    "name": "cloud-engineering \u2014 secondary",
+    "time_zone": "America/New_York",
+    "current_oncall": ""
+   },
+   "relationships": {
+    "teams": {
+     "data": [
+      {
+       "type": "teams",
+       "id": "team-cloud-engineering"
+      }
+     ]
+    },
+    "layers": {
+     "data": [
+      {
+       "type": "layers",
+       "id": "layer-1-secondary"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "sched-2-primary",
+   "type": "schedules",
+   "attributes": {
+    "name": "data-engineering \u2014 primary",
+    "time_zone": "America/New_York",
+    "current_oncall": ""
+   },
+   "relationships": {
+    "teams": {
+     "data": [
+      {
+       "type": "teams",
+       "id": "team-data-engineering"
+      }
+     ]
+    },
+    "layers": {
+     "data": [
+      {
+       "type": "layers",
+       "id": "layer-2-primary"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "sched-2-secondary",
+   "type": "schedules",
+   "attributes": {
+    "name": "data-engineering \u2014 secondary",
+    "time_zone": "America/New_York",
+    "current_oncall": ""
+   },
+   "relationships": {
+    "teams": {
+     "data": [
+      {
+       "type": "teams",
+       "id": "team-data-engineering"
+      }
+     ]
+    },
+    "layers": {
+     "data": [
+      {
+       "type": "layers",
+       "id": "layer-2-secondary"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "sched-3-primary",
+   "type": "schedules",
+   "attributes": {
+    "name": "infrastructure-engineering \u2014 primary",
+    "time_zone": "America/New_York",
+    "current_oncall": ""
+   },
+   "relationships": {
+    "teams": {
+     "data": [
+      {
+       "type": "teams",
+       "id": "team-infrastructure-engineering"
+      }
+     ]
+    },
+    "layers": {
+     "data": [
+      {
+       "type": "layers",
+       "id": "layer-3-primary"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "sched-3-secondary",
+   "type": "schedules",
+   "attributes": {
+    "name": "infrastructure-engineering \u2014 secondary",
+    "time_zone": "America/New_York",
+    "current_oncall": ""
+   },
+   "relationships": {
+    "teams": {
+     "data": [
+      {
+       "type": "teams",
+       "id": "team-infrastructure-engineering"
+      }
+     ]
+    },
+    "layers": {
+     "data": [
+      {
+       "type": "layers",
+       "id": "layer-3-secondary"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "sched-4-primary",
+   "type": "schedules",
+   "attributes": {
+    "name": "observability-platform \u2014 primary",
+    "time_zone": "America/New_York",
+    "current_oncall": ""
+   },
+   "relationships": {
+    "teams": {
+     "data": [
+      {
+       "type": "teams",
+       "id": "team-observability-platform"
+      }
+     ]
+    },
+    "layers": {
+     "data": [
+      {
+       "type": "layers",
+       "id": "layer-4-primary"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "sched-4-secondary",
+   "type": "schedules",
+   "attributes": {
+    "name": "observability-platform \u2014 secondary",
+    "time_zone": "America/New_York",
+    "current_oncall": ""
+   },
+   "relationships": {
+    "teams": {
+     "data": [
+      {
+       "type": "teams",
+       "id": "team-observability-platform"
+      }
+     ]
+    },
+    "layers": {
+     "data": [
+      {
+       "type": "layers",
+       "id": "layer-4-secondary"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "sched-5-primary",
+   "type": "schedules",
+   "attributes": {
+    "name": "security \u2014 primary",
+    "time_zone": "America/New_York",
+    "current_oncall": ""
+   },
+   "relationships": {
+    "teams": {
+     "data": [
+      {
+       "type": "teams",
+       "id": "team-security"
+      }
+     ]
+    },
+    "layers": {
+     "data": [
+      {
+       "type": "layers",
+       "id": "layer-5-primary"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "sched-5-secondary",
+   "type": "schedules",
+   "attributes": {
+    "name": "security \u2014 secondary",
+    "time_zone": "America/New_York",
+    "current_oncall": ""
+   },
+   "relationships": {
+    "teams": {
+     "data": [
+      {
+       "type": "teams",
+       "id": "team-security"
+      }
+     ]
+    },
+    "layers": {
+     "data": [
+      {
+       "type": "layers",
+       "id": "layer-5-secondary"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "sched-6-primary",
+   "type": "schedules",
+   "attributes": {
+    "name": "sre \u2014 primary",
+    "time_zone": "America/New_York",
+    "current_oncall": ""
+   },
+   "relationships": {
+    "teams": {
+     "data": [
+      {
+       "type": "teams",
+       "id": "team-sre"
+      }
+     ]
+    },
+    "layers": {
+     "data": [
+      {
+       "type": "layers",
+       "id": "layer-6-primary"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "sched-6-secondary",
+   "type": "schedules",
+   "attributes": {
+    "name": "sre \u2014 secondary",
+    "time_zone": "America/New_York",
+    "current_oncall": ""
+   },
+   "relationships": {
+    "teams": {
+     "data": [
+      {
+       "type": "teams",
+       "id": "team-sre"
+      }
+     ]
+    },
+    "layers": {
+     "data": [
+      {
+       "type": "layers",
+       "id": "layer-6-secondary"
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "included": [
+  {
+   "type": "layers",
+   "id": "layer-0-primary",
+   "attributes": {
+    "name": "primary rotation",
+    "members": []
+   }
+  },
+  {
+   "type": "layers",
+   "id": "layer-0-secondary",
+   "attributes": {
+    "name": "secondary rotation",
+    "members": []
+   }
+  },
+  {
+   "type": "teams",
+   "id": "team-application-development",
+   "attributes": {
+    "handle": "application-development",
+    "name": "Application Development"
+   }
+  },
+  {
+   "type": "layers",
+   "id": "layer-1-primary",
+   "attributes": {
+    "name": "primary rotation",
+    "members": []
+   }
+  },
+  {
+   "type": "layers",
+   "id": "layer-1-secondary",
+   "attributes": {
+    "name": "secondary rotation",
+    "members": []
+   }
+  },
+  {
+   "type": "teams",
+   "id": "team-cloud-engineering",
+   "attributes": {
+    "handle": "cloud-engineering",
+    "name": "Cloud Engineering"
+   }
+  },
+  {
+   "type": "layers",
+   "id": "layer-2-primary",
+   "attributes": {
+    "name": "primary rotation",
+    "members": []
+   }
+  },
+  {
+   "type": "layers",
+   "id": "layer-2-secondary",
+   "attributes": {
+    "name": "secondary rotation",
+    "members": []
+   }
+  },
+  {
+   "type": "teams",
+   "id": "team-data-engineering",
+   "attributes": {
+    "handle": "data-engineering",
+    "name": "Data Engineering"
+   }
+  },
+  {
+   "type": "layers",
+   "id": "layer-3-primary",
+   "attributes": {
+    "name": "primary rotation",
+    "members": []
+   }
+  },
+  {
+   "type": "layers",
+   "id": "layer-3-secondary",
+   "attributes": {
+    "name": "secondary rotation",
+    "members": []
+   }
+  },
+  {
+   "type": "teams",
+   "id": "team-infrastructure-engineering",
+   "attributes": {
+    "handle": "infrastructure-engineering",
+    "name": "Infrastructure Engineering"
+   }
+  },
+  {
+   "type": "layers",
+   "id": "layer-4-primary",
+   "attributes": {
+    "name": "primary rotation",
+    "members": []
+   }
+  },
+  {
+   "type": "layers",
+   "id": "layer-4-secondary",
+   "attributes": {
+    "name": "secondary rotation",
+    "members": []
+   }
+  },
+  {
+   "type": "teams",
+   "id": "team-observability-platform",
+   "attributes": {
+    "handle": "observability-platform",
+    "name": "Observability Platform (owns this repository)"
+   }
+  },
+  {
+   "type": "layers",
+   "id": "layer-5-primary",
+   "attributes": {
+    "name": "primary rotation",
+    "members": []
+   }
+  },
+  {
+   "type": "layers",
+   "id": "layer-5-secondary",
+   "attributes": {
+    "name": "secondary rotation",
+    "members": []
+   }
+  },
+  {
+   "type": "teams",
+   "id": "team-security",
+   "attributes": {
+    "handle": "security",
+    "name": "Security Engineering"
+   }
+  },
+  {
+   "type": "layers",
+   "id": "layer-6-primary",
+   "attributes": {
+    "name": "primary rotation",
+    "members": []
+   }
+  },
+  {
+   "type": "layers",
+   "id": "layer-6-secondary",
+   "attributes": {
+    "name": "secondary rotation",
+    "members": []
+   }
+  },
+  {
+   "type": "teams",
+   "id": "team-sre",
+   "attributes": {
+    "handle": "sre",
+    "name": "Site Reliability Engineering"
+   }
+  }
+ ]
+}

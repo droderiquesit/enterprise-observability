@@ -131,8 +131,18 @@ def correlate(events: list[dict], pack_service_counts: dict | None = None) -> li
     topo = _rule(rules, "platform-cause-suppresses-app-symptom")
     vendor = _rule(rules, "vendor-outage-suppresses-integration-symptoms")
 
-    def _absorb(parents_pred, child_pred, join_region: bool):
+    def _absorb(parents_pred, child_pred, join_region: bool,
+                window: int | None = None, inherit_priority: bool = False):
+        """Merge symptom groups into the group that caused them.
+
+        `window` overrides the global correlation window for rules whose causal
+        chain is genuinely slower than five minutes. `inherit_priority` keeps
+        the group at the most severe priority among its members — used where the
+        cause is a lower-priority signal than the symptom it suppressed, so that
+        adopting a child cannot silently downgrade the incident.
+        """
         nonlocal result
+        window = window or rules["window_seconds"]
         causes = [g for g in result if parents_pred(g)]
         merged = []
         for g in result:
@@ -141,15 +151,32 @@ def correlate(events: list[dict], pack_service_counts: dict | None = None) -> li
                     (c for c in causes
                      if c["parent"]["env"] == g["parent"]["env"]
                      and (not join_region or c["parent"].get("region") == g["parent"].get("region"))
-                     and abs(c["parent"]["ts"] - g["parent"]["ts"]) <= rules["window_seconds"]),
+                     and abs(c["parent"]["ts"] - g["parent"]["ts"]) <= window),
                     None)
                 if cause:
                     cause["children"].extend([g["parent"], *g["children"]])
                     cause["context"].extend(g["context"])
                     cause["suppressed"] += 1 + len(g["children"])
+                    if inherit_priority:
+                        cause["priority"] = RANK_PRIORITY[min(
+                            PRIORITY_RANK.get(cause["priority"], 9),
+                            PRIORITY_RANK.get(g["priority"], 9))]
                     continue
             merged.append(g)
         result = merged
+
+    # Scheduler topology runs FIRST. A Control-M job holds its whole downstream
+    # chain open, and the symptoms it causes (a pipeline that never started,
+    # a data product gone stale) outrank it in root_cause_ranking — so without
+    # this pass the freshness alert would become the parent and the incident
+    # would point at the wrong system. See platform/events/correlation-rules.yaml
+    # → scheduler-job-suppresses-downstream-data-symptoms.
+    sched = _rule(rules, "scheduler-job-suppresses-downstream-data-symptoms")
+    _absorb(lambda g: g["parent"].get("archetype") in sched["parent_archetypes"],
+            lambda g: g["parent"].get("domain") in sched["child_domains"],
+            join_region=False,
+            window=sched.get("lookback_seconds"),
+            inherit_priority=sched.get("inherit_child_priority", False))
 
     _absorb(lambda g: g["parent"].get("domain") in vendor["parent_domains"]
             if "parent_domains" in vendor

@@ -1,0 +1,67 @@
+# =============================================================================
+# PROFILE — vmware-poller  (§7)
+#
+# A controlled infrastructure component, not a server that happens to run an
+# Agent. Two of these exist so vCenter monitoring survives losing one, and the
+# pair is configured to avoid the failure mode that redundancy usually
+# introduces: both polling the same objects and doubling every metric.
+#
+# HOW DOUBLE-COUNTING IS AVOIDED. Poller A and poller B both connect to
+# vCenter, but only one is ACTIVE at a time. `use_guest_hostname` and the
+# collection level are identical, so a failover changes which host submits the
+# data and not what the data says. The standby polls its own Agent health only.
+# Activation is a node fact (`vmware_poller_role: active|standby`), flipped by
+# NinjaOne when the active poller fails validation twice in a row.
+#
+# The alternative — both active, filtered to different clusters — halves the
+# blast radius but means a single poller loss silently drops half the estate
+# rather than none of it. Active/standby was chosen because a total, obvious
+# outage is easier to detect than a partial, quiet one.
+# =============================================================================
+version: 2
+
+# WHAT THIS PROFILE CAN USE. Policy (environment, criticality) decides whether a
+# feature is ALLOWED; this decides whether it is USABLE. Both must agree, so a
+# tier1 poller does not get APM enabled — and an APM host licence consumed —
+# for an application it does not run.
+supports: []
+catalog_profile: base-infrastructure
+
+datadog_yaml:
+  # A poller's own health is the thing that makes its data trustworthy, so it
+  # keeps full self-telemetry even though it carries no application workload.
+  telemetry: { enabled: true }
+
+conf_d:
+  vsphere.d/conf.yaml:
+    init_config: {}
+    instances:
+      - host: "{{ vcenter_host }}"
+        username: "{{ vmware_username }}"
+        password: "ENC[vmware_readonly_password]"
+        # `ssl_verify: true` is not the default in every example Datadog
+        # publishes. A monitoring connection that ignores certificates is a
+        # monitoring connection that can be intercepted.
+        ssl_verify: true
+        collection_level: "{{ vsphere_collection_level }}"
+        collect_events: true          # vCenter alarms: HA failover, host isolation
+        use_guest_hostname: true      # so a VM's metrics join its Agent's metrics
+        collect_tags: true
+        # Realtime for hosts and VMs, historical for datastores and clusters:
+        # historical intervals are 5-minute rollups and using them for a host
+        # means a 5-minute blind spot on the signal that pages.
+        collect_per_instance_filters:
+          vm: ["cpu.usage.avg", "mem.usage.avg", "disk.totalLatency.avg"]
+          host: ["cpu.usage.avg", "mem.usage.avg", "net.droppedRx.sum"]
+        # The standby renders this as `false` and collects nothing from vCenter.
+        empty_default_hostname: false
+
+# WHAT THE PAIR MUST SATISFY, asserted by tests:
+#   * exactly one active poller per vCenter
+#   * both pollers run the same collection_level
+#   * both carry `resource_class: poller` so fleet compliance treats their
+#     absence as an outage rather than a missing server
+redundancy:
+  model: active_standby
+  members_required: 2
+  failover_after_failed_validations: 2

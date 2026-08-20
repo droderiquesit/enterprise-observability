@@ -27,9 +27,22 @@ locals {
     k => v.domain
   }
 
-  service_docs = {
+  tiers_doc = yamldecode(file("${local.policy_dir}/policy/tiers.yaml"))
+
+  # The SUPERSEDED registration format. Still read so that a branch written
+  # against platform/services/ keeps working (platform/services/README.md); it
+  # ships empty, so this is normally {}. Anything found here is emitted as a
+  # v2.2 service definition exactly as before — the entity model does not
+  # rewrite objects nobody migrated.
+  legacy_service_docs = {
     for f in fileset("${local.policy_dir}/services", "*.yaml") :
     trimsuffix(f, ".yaml") => yamldecode(file("${local.policy_dir}/services/${f}")).service
+  }
+
+  # The entity registry — every kind, not just services (§5).
+  entity_docs = {
+    for f in fileset("${local.policy_dir}/entities", "*.yaml") :
+    trimsuffix(f, ".yaml") => yamldecode(file("${local.policy_dir}/entities/${f}")).entity
   }
 }
 
@@ -404,7 +417,17 @@ locals {
   service_archetypes_doc = yamldecode(file("${local.policy_dir}/policy/service_archetypes.yaml"))
   runbook_registry       = yamldecode(file("${local.policy_dir}/policy/runbooks.yaml"))
 
-  # service_archetype → the runbook ids reachable through its packs.
+  # (service_archetype, platform) → the runbook ids reachable through its packs.
+  #
+  # Keyed on BOTH because `packs` is only half of what an entity gets: the
+  # datastore archetype selects its technology pack from the entity's
+  # `platform`. Keying on the archetype alone gave every datastore the union —
+  # so an Azure SQL database carried Snowflake and Cosmos DB runbook links in
+  # the catalog, and the on-call engineer opening it found three runbooks for
+  # engines the database is not.
+  #
+  # "" is the no-platform key: the unconditional packs alone, which is what an
+  # entity that has not recorded its technology honestly gets.
   runbooks_for_archetype = {
     for sa, v in local.service_archetypes_doc.service_archetypes : sa => distinct(flatten([
       for pack in v.packs : [
@@ -413,9 +436,25 @@ locals {
     ]))
   }
 
-  service_runbook_links = {
-    for name, s in local.service_docs : name => [
-      for rid in try(local.runbooks_for_archetype[s.service_archetype], []) : {
+  runbooks_for_archetype_platform = merge([
+    for sa, v in local.service_archetypes_doc.service_archetypes : {
+      for plat, packs in try(v.packs_by_platform, {}) :
+      "${sa}/${plat}" => distinct(concat(
+        local.runbooks_for_archetype[sa],
+        flatten([for pack in packs :
+        [for arch in try(local.service_archetypes_doc.packs[pack].archetypes, []) : arch]]),
+      ))
+    }
+  ]...)
+
+  # Keyed by ARCHETYPE rather than by service name, because both registries
+  # (platform/services/ and platform/entities/) need the same lookup and the
+  # entity registry contains kinds — a queue, a system — that have no archetype
+  # at all. This map is the no-platform one: it is what the legacy service
+  # registry uses, since a v2.2 registration cannot express a platform.
+  archetype_runbook_links = {
+    for sa, rids in local.runbooks_for_archetype : sa => [
+      for rid in rids : {
         name = "Runbook: ${local.runbook_registry.runbooks[rid].title}"
         type = "runbook"
         url  = "${local.runbook_registry.notebook_base_url}/${local.runbook_registry.runbooks[rid].id}"
@@ -425,24 +464,185 @@ locals {
       if try(local.runbook_registry.runbooks[rid].id, null) != null
     ]
   }
+
+  archetype_platform_runbook_links = {
+    for key, rids in local.runbooks_for_archetype_platform : key => [
+      for rid in rids : {
+        name = "Runbook: ${local.runbook_registry.runbooks[rid].title}"
+        type = "runbook"
+        url  = "${local.runbook_registry.notebook_base_url}/${local.runbook_registry.runbooks[rid].id}"
+      }
+      if try(local.runbook_registry.runbooks[rid].id, null) != null
+    ]
+  }
 }
 
 module "service_catalog" {
   source = "../../modules/service_catalog"
-  services = merge(
-    {
-      for name, s in local.service_docs : name => {
-        team               = s.team
-        owner_email        = local.teams[s.team].email
-        description        = s.description
-        tier               = s.tier
-        domain             = local.domains[try(local.service_archetype_domain[s.service_archetype], "application")].platform_tag
-        monitoring_profile = local.tiers[s.tier].monitoring_profile
-        env                = "prod"
-        links              = concat(try(s.links, []), local.service_runbook_links[name])
-      }
-    },
-    var.services,
-  )
+  # v2.2 service definitions, for the DISCOVERED population and for anything
+  # still registered the superseded way.
+  #
+  # A v2.2 service definition and a v3 entity with the same name are the SAME
+  # Datadog catalog object, so a name managed by modules/catalog_entity is
+  # excluded here — otherwise two Terraform resources would fight over one
+  # entity on every apply. Discovery is deliberately the loser of that
+  # exclusion: a declared entity carries reviewed intent and a typed kind, a
+  # discovered one carries neither.
+  services = {
+    for name, s in merge(
+      {
+        for name, s in local.legacy_service_docs : name => {
+          team               = s.team
+          owner_email        = local.teams[s.team].email
+          description        = s.description
+          tier               = s.tier
+          domain             = local.domains[try(local.service_archetype_domain[s.service_archetype], "application")].platform_tag
+          monitoring_profile = local.tiers[s.tier].monitoring_profile
+          env                = "prod"
+          links              = concat(try(s.links, []), try(local.archetype_runbook_links[s.service_archetype], []))
+        }
+      },
+      var.services,
+    ) : name => s
+    if !contains(keys(local.entity_docs), name)
+  }
+}
+
+# =============================================================================
+# SOFTWARE CATALOG — TYPED ENTITIES (§5, §10)
+#
+# Kind resolution, tag derivation and the entity graph happen HERE, from
+# platform/policy/entity_kinds.yaml. modules/catalog_entity renders and
+# enforces; it decides nothing. tools/entity_resolver.py performs the same
+# resolution in Python for the tests, the census and anything that needs to
+# answer "what would this entity look like?" without an apply — both read the
+# one policy file, neither reads the other.
+# =============================================================================
+locals {
+  entity_kinds_doc  = yamldecode(file("${local.policy_dir}/policy/entity_kinds.yaml"))
+  entity_kind_spec  = local.entity_kinds_doc.entity_kinds
+  kind_by_archetype = local.entity_kinds_doc.kind_by_service_archetype
+
+  # `kind:` when declared, else the archetype's kind. The map is total over the
+  # archetype vocabulary, so this never guesses; an archetype that maps to null
+  # (infrastructure_resource — a VM is a host, not a catalog entity) is
+  # rejected by tools/validate_policy.py before it reaches Terraform.
+  entity_kind = {
+    for name, e in local.entity_docs : name =>
+    try(e.kind, local.kind_by_archetype[e.service_archetype])
+  }
+
+  # name → "kind:name". A name that is not registered resolves to `service:` —
+  # the honest default for something outside our catalog (entra-id, warehouse).
+  entity_ref = {
+    for name, k in local.entity_kind : name =>
+    "${coalesce(try(local.entity_kind_spec[k].datadog_kind, null), "service")}:${name}"
+  }
+
+  # Membership is declared once, on the system. `componentOf` on each member is
+  # DERIVED from it here, so the reverse edge is never maintained by hand.
+  system_members = {
+    for name, e in local.entity_docs : name => [
+      for c in try(e.components, []) : element(split(":", c), length(split(":", c)) - 1)
+    ] if try(local.entity_kind_spec[local.entity_kind[name]].spec_components, false)
+  }
+
+  entity_resolved = {
+    for name, e in local.entity_docs : name => {
+      kind    = local.entity_kind[name]
+      spec    = local.entity_kind_spec[local.entity_kind[name]]
+      domain  = try(e.domain, local.service_archetype_domain[e.service_archetype], "platform")
+      profile = try(e.monitoring_profile, local.tiers[e.criticality].monitoring_profile)
+      slo     = try(e.slo.profile, local.tiers[e.criticality].slo.scope)
+      oncall  = try(e.oncall.team, e.team)
+    }
+  }
+
+  entity_tags = {
+    for name, e in local.entity_docs : name => sort(concat(
+      [
+        "entity_kind:${local.entity_resolved[name].kind}",
+        "env:${try(e.env, "prod")}",
+        "team:${e.team}",
+        "tier:${e.criticality}",
+        "criticality:${e.criticality}",
+        "domain:${local.entity_resolved[name].domain}",
+        "monitoring_profile:${local.entity_resolved[name].profile}",
+        "alert_band:${local.tiers_doc.profile_to_band[local.entity_resolved[name].profile]}",
+        "slo_profile:${local.entity_resolved[name].slo}",
+        "managed_by:terraform",
+      ],
+      # Emitted only where the telemetry is genuinely keyed by `service`.
+      try(local.entity_resolved[name].spec.performance_data, false) ? ["service:${name}"] : [],
+      try(e.service_archetype, null) == null ? [] : ["service_archetype:${e.service_archetype}"],
+      try(e.platform, null) == null ? [] : ["platform:${e.platform}"],
+      try(e.region, null) == null ? [] : ["region:${e.region}"],
+      try(e.compliance_scope, null) == null ? [] : ["compliance_scope:${e.compliance_scope}"],
+      local.entity_resolved[name].oncall == e.team ? [] : ["oncall_team:${local.entity_resolved[name].oncall}"],
+    ))
+  }
+}
+
+module "catalog_entity" {
+  source               = "../../modules/catalog_entity"
+  datadog_entity_kinds = local.entity_kinds_doc.datadog_entity_kinds
+
+  entities = {
+    for name, e in local.entity_docs : name => {
+      emits        = local.entity_resolved[name].spec.emits
+      datadog_kind = try(local.entity_resolved[name].spec.datadog_kind, null)
+
+      display_name = try(e.display_name, null)
+      description  = e.description
+      lifecycle    = try(e.lifecycle, "production")
+      tier         = e.criticality
+      # `spec.type` is the technology, except where the kind forces it —
+      # frontend_app must present as a `service` of type `web` because the v3
+      # union has no UI kind (platform/policy/entity_kinds.yaml).
+      spec_type = try(local.entity_resolved[name].spec.spec_type_override, try(e.platform, null))
+      tags      = local.entity_tags[name]
+
+      team        = e.team
+      oncall_team = local.entity_resolved[name].oncall
+      contacts = [{
+        name    = "${e.team} email"
+        type    = "email"
+        contact = local.teams[e.team].email
+      }]
+
+      # Edges are emitted only for the kinds whose v3 spec can carry them; the
+      # schema rejects the others, and this is the second line of defence.
+      depends_on = try(local.entity_resolved[name].spec.spec_depends_on, false) ? sort([
+        for d in try(e.dependencies, []) :
+        length(split(":", d)) > 1 ? d : try(local.entity_ref[d], "service:${d}")
+      ]) : []
+      components = try(local.entity_resolved[name].spec.spec_components, false) ? sort([
+        for c in try(e.components, []) :
+        length(split(":", c)) > 1 ? c : try(local.entity_ref[c], "service:${c}")
+      ]) : []
+      component_of = try(local.entity_resolved[name].spec.spec_component_of, false) ? sort([
+        for sysname, members in local.system_members : "system:${sysname}" if contains(members, name)
+      ]) : []
+
+      performance_data_tags = try(local.entity_resolved[name].spec.performance_data, false) ? ["service:${name}"] : []
+
+      # Declared links plus the runbooks its packs can actually fire. A kind
+      # with no archetype (a queue, a system) gets its declared links only —
+      # there are no packs to derive from.
+      #
+      # The platform-specific map first, falling back to the archetype-only one
+      # when the entity declares no platform or its archetype has no
+      # technology packs. The fallback is the engine-agnostic set, never the
+      # union of every technology.
+      links = concat(
+        try(e.links, []),
+        try(
+          local.archetype_platform_runbook_links["${e.service_archetype}/${e.platform}"],
+          local.archetype_runbook_links[e.service_archetype],
+          [],
+        ),
+      )
+    }
+  }
 }
 

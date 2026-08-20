@@ -1,0 +1,51 @@
+# =============================================================================
+# LAYER 4 — ENVIRONMENT. What changes because it is dev rather than prod.
+#
+# Deliberately SMALL. Every knob here is a way for dev and prod to behave
+# differently, and each difference is a reason a problem reproduces in one and
+# not the other. Add one only when the alternative is worse.
+#
+# The `env` vocabulary is NOT redefined here — it comes from
+# platform/policy/global.yaml -> tag_vocabulary.env, and the lint fails if this
+# file names an environment that vocabulary does not have.
+# =============================================================================
+version: 2
+
+environments:
+  dev:
+    datadog_yaml:
+      log_level: info
+      # Dev hosts are rebuilt constantly. A shorter interval would multiply
+      # metric volume for an estate nobody is on call for.
+      min_collection_interval: 60
+    logs_enabled: false
+    apm_enabled: false
+    dbm_enabled: false
+    # Dev is deliberately quiet, matching platform/policy/environments.yaml
+    # where dev instantiates the baseline band only and cannot page.
+
+  qa:
+    datadog_yaml:
+      log_level: info
+      min_collection_interval: 30
+    logs_enabled: true
+    apm_enabled: false
+    dbm_enabled: false
+
+  stage:
+    datadog_yaml:
+      log_level: info
+      min_collection_interval: 15
+    logs_enabled: true
+    apm_enabled: true
+    # DBM ON in stage specifically so a query-plan regression is caught before
+    # production, which is the only environment where it is cheap to fix.
+    dbm_enabled: true
+
+  prod:
+    datadog_yaml:
+      log_level: warn          # info on a large fleet is itself a cost line
+      min_collection_interval: 15
+    logs_enabled: true
+    apm_enabled: true
+    dbm_enabled: true

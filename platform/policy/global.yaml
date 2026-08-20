@@ -237,3 +237,325 @@ detection_policy:
   min_anomaly_deviations: 2
   default_anomaly_algorithm: agile      # agile | basic | robust | seasonal
   seasonal_algorithm: robust
+
+# =============================================================================
+# TELEMETRY SOURCES — the controlled vocabulary for `telemetry:` on archetypes
+# (requirement §38; the applicability engine in tools/applicability.py reads it)
+#
+# WHY THIS EXISTS. A monitor deployed where its telemetry source is absent does
+# not fail — it goes green and stays green. That is the worst failure mode this
+# platform can have, because the estate LOOKS covered. Declaring the source each
+# archetype reads from turns "can this monitor ever fire here?" from an
+# unanswerable question into a set difference.
+#
+# THE ID IS A THING SOMEONE MUST TURN ON. Every id below names one independently
+# enablable producer — an Agent integration, a Datadog product, a cloud
+# integration on a subscription, or a named custom emitter. Two signals share an
+# id only when the SAME act of configuration produces both; that is why
+# `kubernetes_integration` and `kube_state_metrics` are separate (a cluster can
+# run the Agent without kube-state-metrics) and why each `acme.*` emitter from
+# docs/telemetry-gaps.md gets its own id.
+#
+# `metric_namespaces` is a DERIVATION RULE, not documentation: the lint in
+# tools/validate_policy.py derives the required set from each archetype's query
+# by longest-prefix match and rejects a declaration that disagrees. A
+# declaration therefore cannot drift from the query it describes, and a
+# plausible-but-wrong value cannot be hand-written past review.
+#
+#   kind: agent | datadog_product | cloud_integration | agent_integration
+#         | custom_emitter | log_derived | inventory_export
+# =============================================================================
+# `datadog_app` is the name this source appears under in a host's `apps` list,
+# or in the integration list for an account-level integration. Only sources that
+# HAVE one can be checked against what is actually installed; a Datadog product
+# (APM, RUM, Synthetics) is enabled at the account, reports no app, and its
+# absence from that list is not evidence of anything. Sources with no
+# `datadog_app` are reported as unverifiable rather than as missing.
+telemetry_sources:
+
+  # --- Datadog Agent and Datadog products ----------------------------------
+  agent:
+    display: Datadog Agent (core checks)
+    kind: agent
+    metric_namespaces: ["system.", "process.", "ntp.", "datadog.agent."]
+    # Deliberately NO `datadog_app`. The Agent is not an app in a host's app
+    # list — a host appearing in that list AT ALL is the evidence that it runs
+    # one. Agent presence is measured against the INVENTORY, by
+    # tools/fleet_compliance.py, because a denominator built from hosts that
+    # already report is 100% compliant by construction.
+    provided_by: Agent installed and reporting on the host.
+
+  apm:
+    display: APM tracing
+    kind: datadog_product
+    metric_namespaces: ["trace."]
+    provided_by: Application instrumented with a tracing library; traces reaching Datadog.
+
+  apm_runtime_metrics:
+    display: APM runtime metrics
+    kind: datadog_product
+    metric_namespaces: ["jvm.", "runtime."]
+    # Separate from `apm` on purpose: a traced service emits NO runtime metrics
+    # unless this flag is set, so the JVM/.NET archetypes are silent against a
+    # service that is otherwise fully instrumented. See docs/telemetry-gaps.md.
+    provided_by: DD_RUNTIME_METRICS_ENABLED=true on the traced process.
+
+  rum:
+    display: Real User Monitoring
+    kind: datadog_product
+    metric_namespaces: ["rum."]
+    provided_by: RUM SDK deployed in the browser app with view metrics generated.
+
+  synthetics:
+    display: Synthetic Monitoring
+    kind: datadog_product
+    metric_namespaces: ["synthetics."]
+    provided_by: A Synthetic test exists for the endpoint (public or private location).
+
+  database_monitoring:
+    display: Database Monitoring (DBM)
+    kind: datadog_product
+    metric_namespaces: ["datadog.dbm."]
+    provided_by: DBM enabled on the instance, not just the base integration.
+
+  ci_visibility:
+    display: CI Visibility
+    kind: datadog_product
+    metric_namespaces: ["datadog.ci."]
+    provided_by: Pipeline instrumented to report CI events to Datadog.
+
+  datadog_usage_metrics:
+    display: Datadog usage / ingestion metrics
+    kind: datadog_product
+    metric_namespaces: ["datadog.estimated_usage."]
+    provided_by: Always present in a Datadog org; the SUBJECT of the metric may not be.
+
+  network_path_monitoring:
+    display: Network Path Monitoring
+    kind: datadog_product
+    metric_namespaces: ["network.path."]
+    provided_by: Agent network path checks configured between the endpoints of interest.
+
+  network_device_monitoring:
+    display: Network Device Monitoring (SNMP)
+    kind: agent_integration
+    metric_namespaces: ["snmp."]
+    datadog_app: snmp
+    provided_by: NDM configured with device profiles and SNMP credentials.
+
+  # --- Cloud and technology integrations ------------------------------------
+  azure_integration:
+    display: Datadog Azure integration
+    kind: cloud_integration
+    metric_namespaces: ["azure."]
+    event_sources: [azure]
+    # Enabled PER SUBSCRIPTION. "Azure is integrated" org-wide is not the unit
+    # that matters — one unregistered subscription silences every `azure.*`
+    # monitor for everything inside it.
+    datadog_app: azure
+    provided_by: App registration + Datadog integration enabled on the subscription.
+
+  azure_cost_management:
+    display: Cloud Cost Management (Azure)
+    kind: cloud_integration
+    metric_namespaces: ["azure.cost."]
+    # Deliberately NO `datadog_app`. CCM is separately licensed and separately
+    # enabled; the `azure` app proves the Azure integration is on and proves
+    # nothing about cost ingestion. Naming it here would report cost coverage
+    # as verified on the strength of an unrelated integration.
+    provided_by: CCM enabled with billing export access; separate from the Azure integration.
+
+  sqlserver_integration:
+    display: SQL Server integration
+    kind: agent_integration
+    metric_namespaces: ["sqlserver."]
+    datadog_app: sqlserver
+    provided_by: Agent sqlserver check with a monitoring login on the instance.
+
+  snowflake_integration:
+    display: Snowflake integration
+    kind: agent_integration
+    metric_namespaces: ["snowflake."]
+    datadog_app: snowflake
+    provided_by: Agent snowflake check with a role able to read SNOWFLAKE.ACCOUNT_USAGE.
+
+  vmware_integration:
+    display: vSphere integration
+    kind: agent_integration
+    metric_namespaces: ["vsphere."]
+    event_sources: [vsphere]
+    datadog_app: vsphere
+    provided_by: Agent vsphere check pointed at vCenter with a read-only account.
+
+  kubernetes_integration:
+    display: Kubernetes integration (kubelet / cluster agent)
+    kind: agent_integration
+    metric_namespaces: ["kubernetes."]
+    datadog_app: kubernetes
+    provided_by: Datadog Agent DaemonSet with the kubelet check enabled.
+
+  kube_state_metrics:
+    display: Kubernetes State Metrics Core
+    kind: agent_integration
+    metric_namespaces: ["kubernetes_state."]
+    datadog_app: kubernetes_state
+    provided_by: kube-state-metrics core check enabled on the cluster agent.
+
+  # --- Custom emitters — the contracts in docs/telemetry-gaps.md ------------
+  # Each of these is something that must be BUILT and KEPT RUNNING. They are
+  # listed apart from the integrations because their failure mode differs: an
+  # integration that is switched off is usually noticed, an exporter that
+  # stopped is not, which is why several of them are themselves monitored.
+  custom_api_gateway_metrics:
+    display: API gateway request/limit metrics
+    kind: custom_emitter
+    metric_namespaces: ["api.gateway."]
+    # NO EMISSION CONTRACT IS WRITTEN DOWN YET — recorded as an open gap in
+    # docs/telemetry-gaps.md rather than left to look native because it is
+    # namespaced like a product metric.
+    provided_by: Gateway exporter (contract not yet specified).
+
+  custom_app_pool_metrics:
+    display: Application connection-pool metrics
+    kind: custom_emitter
+    metric_namespaces: ["acme.app."]
+    provided_by: Pool instrumentation inside the application (telemetry-gaps §6).
+
+  custom_backup_reporting:
+    display: Backup completion reporting
+    kind: custom_emitter
+    metric_namespaces: ["acme.backup.", "acme.database.hours_since_backup"]
+    provided_by: Backup system reports last-success age per protected object.
+
+  custom_batch_job_metrics:
+    display: Batch job execution metrics
+    kind: custom_emitter
+    metric_namespaces: ["acme.batch."]
+    provided_by: Batch platform emits run outcome, duration, backlog and output age.
+
+  controlm_exporter:
+    display: Control-M Automation API exporter
+    kind: custom_emitter
+    metric_namespaces: ["controlm."]
+    # Deliberately separate from custom_scheduler_metrics. Control-M has no
+    # native Datadog integration for IN-FLIGHT job state, so this source is a
+    # poller against the Automation API rather than a push from a control
+    # plane — and it fails differently: an expired API token silently greens
+    # every job at once, which is why controlm-exporter-telemetry-loss watches
+    # the poller itself. See docs/telemetry-gaps.md §9.
+    provided_by: Exporter polling the Control-M Automation API every 60s.
+
+  custom_scheduler_metrics:
+    display: Scheduler execution metrics
+    kind: custom_emitter
+    metric_namespaces: ["acme.scheduler."]
+    # Separate from the batch emitter: a scheduler's primary failure is NOT
+    # RUNNING, and only its own control plane can report a run that never
+    # started. A batch exporter driven by job output cannot see that at all.
+    provided_by: Scheduler control plane emits started/completed runs per job.
+
+  cmdb_compliance_export:
+    display: Configuration-management compliance export
+    kind: inventory_export
+    metric_namespaces: ["acme.compliance."]
+    provided_by: Daily CMDB / config-management export (telemetry-gaps §8).
+
+  custom_data_pipeline_metrics:
+    display: Data pipeline run metrics and schema events
+    kind: custom_emitter
+    metric_namespaces: ["acme.data.", "acme.warehouse."]
+    event_sources: [acme-data]
+    provided_by: Pipeline framework emits run outcome, duration, volume and freshness.
+
+  custom_restore_verification:
+    display: Database restore-verification job
+    kind: custom_emitter
+    metric_namespaces: ["acme.database.restore_verification"]
+    provided_by: Restore-and-CHECKDB job emitting age and failures (telemetry-gaps §1).
+
+  custom_finops_exporter:
+    display: Azure budget / burn-rate exporter
+    kind: custom_emitter
+    metric_namespaces: ["acme.finops."]
+    provided_by: Scheduled Azure Consumption API exporter (telemetry-gaps §5).
+
+  ipmi_hardware_check:
+    display: Normalised IPMI hardware health
+    kind: custom_emitter
+    metric_namespaces: ["acme.hardware."]
+    provided_by: Agent IPMI check plus the sensor-name normalisation map (telemetry-gaps §7).
+
+  custom_security_control_export:
+    display: Identity and security control export
+    kind: custom_emitter
+    metric_namespaces: ["acme.identity.", "acme.security."]
+    provided_by: Identity provider and security control plane export their own outcomes.
+
+  custom_integration_flow_metrics:
+    display: Integration flow metrics
+    kind: custom_emitter
+    metric_namespaces: ["acme.integration."]
+    provided_by: Integration platform emits per-flow delivery, errors and latency.
+
+  custom_loadbalancer_export:
+    display: Load-balancer pool membership export
+    kind: custom_emitter
+    metric_namespaces: ["acme.lb."]
+    provided_by: On-premises load balancer exports healthy/total pool members.
+
+  custom_messaging_client_metrics:
+    display: Messaging client metrics
+    kind: custom_emitter
+    metric_namespaces: ["acme.messaging.", "acme.streaming."]
+    # One id because ONE thing produces all of it: the consumer process. When
+    # the consumer is gone every one of these metrics stops together, which is
+    # precisely why `consumer-absent` exists alongside them (telemetry-gaps §3).
+    provided_by: Consumer/producer instrumentation emitting lag, age and liveness.
+
+  log_derived_nsg_flows:
+    display: NSG denied-flow log metric
+    kind: log_derived
+    metric_namespaces: ["acme.network.nsg_denied_flows"]
+    provided_by: NSG flow logs in Datadog Logs + the log-based metric (telemetry-gaps §4).
+
+  custom_network_state_export:
+    display: Network tunnel state export
+    kind: custom_emitter
+    metric_namespaces: ["acme.network.tunnel_up"]
+    provided_by: Network automation polls tunnel state and emits it as a gauge.
+
+  network_automation_events:
+    display: Network automation change events
+    kind: custom_emitter
+    event_sources: [network-automation]
+    provided_by: Network automation posts config-change events to the Datadog event stream.
+
+  platform_self_telemetry:
+    display: Observability platform self-telemetry
+    kind: custom_emitter
+    metric_namespaces: ["acme.observability."]
+    provided_by: This platform's own tooling reports estate size, drift and unowned backlog.
+
+  custom_certificate_inventory:
+    display: Certificate inventory export
+    kind: inventory_export
+    metric_namespaces: ["acme.pki."]
+    provided_by: PKI / certificate inventory emits days-until-expiry per certificate.
+
+  custom_saas_quota_exporter:
+    display: SaaS API quota exporter
+    kind: custom_emitter
+    metric_namespaces: ["acme.saas."]
+    provided_by: Per-vendor exporter reading the vendor's own quota API.
+
+  custom_snowflake_exporter:
+    display: Snowflake task-history exporter
+    kind: custom_emitter
+    metric_namespaces: ["acme.snowflake."]
+    provided_by: Scheduled TASK_HISTORY exporter (telemetry-gaps §2).
+
+  custom_vmware_inventory_export:
+    display: vSphere snapshot inventory export
+    kind: inventory_export
+    metric_namespaces: ["acme.vmware."]
+    provided_by: vCenter inventory export emitting snapshot age per VM.

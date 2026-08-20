@@ -27,6 +27,8 @@ incident for the observability-platform team, not a warning.
   C15  monitors with no actionable response (no impact statement / no runbook)
   C16  monitors with no NATIVE runbook attachment (Datadog notebook asset)
   C17  monitors with no auto-resolve window (Datadog `timeout_h`)
+  C18  SLO ↔ catalog association: every objective belongs to a real entity,
+       is owned, is scoped to production, and is actually measurable (§13)
 
 Modes: --live (Datadog API) or --fixtures DIR.
 
@@ -54,6 +56,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import obs_common as oc
+import slo_resolver
 
 CHECK_TITLES = {
     "C1": "Unmonitored resources",
@@ -73,6 +76,7 @@ CHECK_TITLES = {
     "C15": "Monitors with no actionable response",
     "C16": "Monitors without a native runbook attachment",
     "C17": "Monitors without an auto-resolve condition",
+    "C18": "SLO / catalog association integrity",
 }
 
 # Checks whose findings describe the ESTATE rather than the platform: content
@@ -105,6 +109,14 @@ def _finding_class(cid: str, item) -> str:
     if cid == "C13":
         return "declared_telemetry_dependency" if isinstance(item, dict) and "slo_id" in item \
             else "live_slo_error"
+    # ---------------------------- C18 (§13) — begin ----------------------------
+    # C18 splits the same way C3 and C13 do, and for the same reason: half of
+    # what it finds is a defect in what this pipeline declares, and half is an
+    # observation about SLOs that exist in the org without it. Each finding
+    # carries its own class so the split is data, not a guess made here.
+    if cid == "C18":
+        return item.get("class", "declared_slo") if isinstance(item, dict) else "declared_slo"
+    # ----------------------------- C18 (§13) — end -----------------------------
     return "all"
 
 
@@ -120,6 +132,14 @@ def _blocks_deploy(cid: str, item) -> bool:
         return _finding_class(cid, item) == "managed_monitors"
     if cid == "C13":
         return _finding_class(cid, item) == "live_slo_error"
+    # ---------------------------- C18 (§13) — begin ----------------------------
+    # `declared_slo` is an objective this platform resolves and applies: if it
+    # cannot be measured, is unowned, or never reached Datadog, the deploy that
+    # produced it is broken and must stop. `estate_slo` is an SLO somebody else
+    # created — reported nightly, never a reason to block a deploy.
+    if cid == "C18":
+        return _finding_class(cid, item) == "declared_slo"
+    # ----------------------------- C18 (§13) — end -----------------------------
     return True
 
 
@@ -184,7 +204,8 @@ def fetch_live():
     return monitors, slos
 
 
-def _covering_archetypes(policy: dict, service_archetype: str) -> set[str]:
+def _covering_archetypes(policy: dict, service_archetype: str,
+                         platform: str | None = None) -> set[str]:
     """The archetypes that MUST be deployed for this service archetype.
 
     Only `mandatory` archetypes count towards coverage. A resource is not
@@ -192,19 +213,146 @@ def _covering_archetypes(policy: dict, service_archetype: str) -> set[str]:
     — that reading would let an entire golden-signal pack be deleted while the
     report still claimed 100%.
     """
-    sa = policy["service_archetypes"].get(service_archetype)
-    if not sa:
-        return set()
-    out: set[str] = set()
-    for pack in sa["packs"]:
-        out.update(a for a in policy["packs"][pack]["archetypes"]
-                   if policy["archetypes"].get(a, {}).get("mandatory"))
-    return out
+    return set(oc.archetypes_for(policy, service_archetype, platform, mandatory_only=True))
+
+
+# ------------------------------ C18 (§13) — begin ------------------------------
+def slo_catalog_findings(policy: dict, slos: list, services: dict | None = None) -> list[dict]:
+    """C18 — does every SLO actually belong to something real? (§13)
+
+    An SLO is the only object in this platform that states a promise, and it is
+    the easiest one to leave behind. A service is renamed, a team is dissolved,
+    a monitor is deleted — and the objective keeps reporting, still green,
+    still on the executive dashboard, measuring nothing. Nothing else in the
+    report catches that, because every other check starts from a monitor or a
+    resource, and an orphaned SLO has neither.
+
+    So this check joins the two directions and grades both:
+
+      DECLARED → LIVE   every objective the platform resolves (domain SLOs plus
+                        the per-service objectives from the §12 chain) must
+                        exist in Datadog, be owned by a registered team, be
+                        scoped to production, and have an SLI that resolves.
+      LIVE → DECLARED   every SLO in the org must map back to something this
+                        catalog declares and to a catalog entity that exists —
+                        no orphans, no duplicates, no unattributable objectives.
+
+    And, in both directions, the failure this exists to make impossible: an
+    objective that looks healthy only because no data is arriving. A 0/0 SLI
+    cannot be violated, so silence reads as perfection.
+    """
+    services = oc.load_services() if services is None else services
+    findings: list[dict] = []
+
+    def declared_finding(**kw):
+        findings.append({"class": "declared_slo", **kw})
+
+    def estate_finding(**kw):
+        findings.append({"class": "estate_slo", **kw})
+
+    # --- what the platform declares -------------------------------------------
+    declared: dict[str, dict] = {
+        sid: {"service": s["service"], "team": s["team"], "scope": "domain",
+              "type": s["type"], "telemetry_dependency": s.get("telemetry_dependency")}
+        for sid, s in policy["slos"].items()
+    }
+    for sid, s in slo_resolver.resolved_slos(policy, services).items():
+        declared[sid] = {"service": s["service"], "team": s["team"], "scope": "service",
+                         "type": s["type"], "telemetry_dependency": s["telemetry_dependency"],
+                         "query": s["query"], "objective": s["objective"]}
+        # An SLI with an unsubstituted placeholder is the silent-green failure
+        # in its purest form: a syntactically valid query that can never match
+        # a series.
+        for side, q in (s["query"] or {}).items():
+            if "__" in (q or ""):
+                declared_finding(slo_id=sid, problem=f"SLI {side} has an unresolved "
+                                                     f"placeholder: {q}")
+        if s["telemetry_dependency"]:
+            findings.append({"class": "telemetry_dependency", "slo_id": sid,
+                             "problem": f"SLI depends on telemetry that is not emitted yet: "
+                                        f"{s['telemetry_dependency'].strip()}"})
+        if s["team"] not in policy["teams"]:
+            declared_finding(slo_id=sid, problem=f"owner {s['team']!r} is not a registered team")
+
+    # Entities an SLO is allowed to be associated with: registered services, and
+    # the platform-level service names the domain SLOs are written against.
+    catalog_entities = set(services) | {s["service"] for s in policy["slos"].values()}
+
+    # --- live → declared -------------------------------------------------------
+    seen_ids: dict[str, str] = {}
+    live_ids = set()
+    for s in slos:
+        tags = oc.tags_to_map(s.get("tags", [])) if isinstance(s.get("tags"), list) else {}
+        name = s.get("name", str(s.get("id", "?")))
+        sid = tags.get("slo_id")
+        if not sid:
+            estate_finding(slo=name, problem="no `slo_id` tag — the SLO cannot be joined to any "
+                                             "catalog entry, so nothing owns or reviews it")
+            continue
+        live_ids.add(sid)
+        if sid in seen_ids:
+            estate_finding(slo=name, problem=f"duplicate slo_id {sid!r}, already used by "
+                                             f"{seen_ids[sid]!r} — two objectives, one promise, "
+                                             "and no way to tell which one is being reported")
+            continue
+        seen_ids[sid] = name
+
+        decl = declared.get(sid)
+        if decl is None:
+            estate_finding(slo=name, slo_id=sid,
+                           problem="orphan: no entry in the SLO catalog and no service resolves "
+                                   "it. It is still reporting, still green, and measuring "
+                                   "nothing anybody asked for")
+            continue
+
+        svc = tags.get("service")
+        if svc not in catalog_entities:
+            estate_finding(slo=name, slo_id=sid,
+                           problem=f"service tag {svc!r} matches no catalog entity")
+        elif svc != decl["service"]:
+            declared_finding(slo_id=sid, problem=f"associated with {svc!r} but the catalog "
+                                                 f"declares {decl['service']!r}")
+        if tags.get("team") != decl["team"] or tags.get("owner") != decl["team"]:
+            declared_finding(slo_id=sid, problem=f"ownership tags say team={tags.get('team')!r} "
+                                                 f"owner={tags.get('owner')!r}; the catalog says "
+                                                 f"{decl['team']!r}")
+        if tags.get("env") != "prod":
+            declared_finding(slo_id=sid, problem=f"env tag is {tags.get('env')!r}. An error budget "
+                                                 "is a promise to customers, and environments.yaml "
+                                                 "gives only prod `slo_impact`")
+
+        # --- healthy only because nothing is arriving --------------------------
+        # `present and null` is the honest test, not `missing`: a live payload
+        # always carries sli_value, so null means Datadog computed nothing. An
+        # ABSENT key means the snapshot did not include status detail, which is
+        # a property of how it was collected, not of the objective.
+        status_list = s.get("overall_status")
+        if isinstance(status_list, list):
+            for st in status_list:
+                if "sli_value" in st and st["sli_value"] is None and not st.get("error"):
+                    declared_finding(slo_id=sid,
+                                     problem="reports no SLI value at all. An objective with no "
+                                             "data cannot be violated, so it shows as healthy — "
+                                             "which is indistinguishable from working, and is not")
+        if decl["type"] == "monitor" and "monitor_ids" in s and not s["monitor_ids"]:
+            declared_finding(slo_id=sid,
+                             problem="monitor-based SLO with no members. It can never burn budget, "
+                                     "so it is permanently and meaninglessly green")
+
+    # --- declared → live -------------------------------------------------------
+    for sid, decl in sorted(declared.items()):
+        if sid not in live_ids:
+            declared_finding(slo_id=sid,
+                             problem=f"declared for {decl['service']!r} but no SLO with this "
+                                     "slo_id exists — the promise is in the catalog and not in "
+                                     "the platform")
+    return findings
+# ------------------------------- C18 (§13) — end -------------------------------
 
 
 def run_checks(inventory, assignments, monitors, slos, policy) -> dict:
     g = policy["global"]
-    checks: dict[str, list] = {f"C{i}": [] for i in range(1, 18)}
+    checks: dict[str, list] = {f"C{i}": [] for i in range(1, 19)}
 
     monitor_tags = {m["id"]: oc.tags_to_map(m.get("tags")) for m in monitors}
     managed = {mid for mid, t in monitor_tags.items() if t.get("managed_by") == "terraform"}
@@ -246,7 +394,7 @@ def run_checks(inventory, assignments, monitors, slos, policy) -> dict:
                 checks["C10"].append({"id": a["id"], "problem": "observe_only with no recorded reason"})
             continue
 
-        expected = _covering_archetypes(policy, a["service_archetype"])
+        expected = _covering_archetypes(policy, a["service_archetype"], a.get("platform"))
         missing = [
             arch for arch in expected
             # An archetype only covers this resource where it is instantiated
@@ -420,6 +568,10 @@ def run_checks(inventory, assignments, monitors, slos, policy) -> dict:
         if status.get("error"):
             checks["C13"].append({"slo": s.get("name"), "problem": status["error"]})
 
+    # ---------------------------- C18 (§13) — begin ----------------------------
+    checks["C18"] = slo_catalog_findings(policy, slos)
+    # ----------------------------- C18 (§13) — end -----------------------------
+
     counts = {k: len(v) for k, v in checks.items()}
     blocking = {k: _deploy_blocking(k, v) for k, v in checks.items()}
 
@@ -518,7 +670,7 @@ def to_markdown(report: dict) -> str:
         b = blocking.get(cid, n)
         if cid in ESTATE_CHECKS:
             gate = "estate hygiene — advisory"
-        elif cid in ("C3", "C13"):
+        elif cid in ("C3", "C13", "C18"):
             gate = f"split — {b} blocking"
         else:
             gate = "blocks"

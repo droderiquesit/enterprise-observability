@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://acme.example/schemas/entity.schema.json",
+  "title": "Catalog entity registration",
+  "description": "One YAML file onboards ONE entity of ANY kind (requirement §10). Supersedes service.schema.json, which could only describe a service: `kind`, `platform`, `env`, `region`, `criticality`, `monitoring_profile`, `slo.profile`, `oncall` and typed `dependencies` are the fields §10 asks for and the service schema rejected. Every field the service schema accepted is still accepted here, under the same name except `tier` → `criticality` (the §10 name; the resolver maps it straight back onto the `tier` tag, so no telemetry contract changes).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["entity"],
+  "properties": {
+    "entity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "name", "team", "criticality", "description", "envs"],
+      "properties": {
+        "kind": {
+          "description": "What this thing IS. Governs which Datadog entity kind is emitted — see platform/policy/entity_kinds.yaml, which also records why `frontend_app` and `repository` do not map 1:1 onto a Datadog kind.",
+          "enum": ["service", "system", "datastore", "queue", "api", "frontend_app", "repository"]
+        },
+        "name": {
+          "description": "Catalog identity. For a service-shaped entity this MUST equal the `service` tag on its telemetry, or every archetype that groups by {service} reports it as a different thing.",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,80}$"
+        },
+        "display_name": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "description": { "type": "string", "minLength": 10, "maxLength": 300 },
+
+        "team": {
+          "description": "Owning team handle; must exist in platform/policy/teams.yaml. This is the ROUTING owner.",
+          "type": "string"
+        },
+        "owner": {
+          "description": "Accountable owner — a person or distribution list. Optional: defaults to the owning team's email. Kept separate from `team` because the team is who gets paged and the owner is who answers for the thing existing.",
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 200
+        },
+        "oncall": {
+          "description": "Who carries the pager for this entity when that is NOT simply the owning team (a shared datastore owned by data-engineering but carried by the DBA rotation, for example).",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "team": { "type": "string" },
+            "schedule": { "type": "string" },
+            "escalation_policy": { "type": "string" }
+          }
+        },
+
+        "criticality": {
+          "description": "The §10 name for what the tag standard calls `tier`. Same vocabulary, same consequences: profile, band, paging, SLO scope, support model.",
+          "enum": ["tier0", "tier1", "tier2", "tier3"]
+        },
+        "platform": {
+          "description": "The technology this runs ON — azure_sql, azure_service_bus, aks, vmware, snowflake, dotnet. Emitted as the entity's `spec.type` and as a `platform:` tag; it is the §9 `platform` inheritance layer made explicit.",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{1,40}$"
+        },
+        "domain": {
+          "description": "Technology domain (platform/policy/domains.yaml). Optional: derived from `service_archetype` when one is declared, which is why a queue or a system — neither of which has an archetype — usually sets it explicitly.",
+          "enum": ["application", "api", "kubernetes", "infrastructure", "vmware", "cloud",
+                   "database", "data", "messaging", "network", "security", "saas",
+                   "integration", "platform"]
+        },
+        "service_archetype": {
+          "description": "Selects the monitor packs (platform/policy/service_archetypes.yaml). Required for the kinds whose monitoring comes from packs; meaningless for a system.",
+          "enum": ["api", "web", "worker", "event_consumer", "batch_job", "scheduled_job",
+                   "integration_flow", "saas_dependency", "external_endpoint",
+                   "platform_service", "datastore", "infrastructure_resource"]
+        },
+
+        "envs": {
+          "description": "Every environment this entity exists in.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["dev", "qa", "stage", "prod"] }
+        },
+        "env": {
+          "description": "The environment the CATALOG ENTRY represents. Datadog holds one catalog entity per name, not one per environment, so the catalog describes production unless told otherwise. Must be one of `envs`.",
+          "enum": ["dev", "qa", "stage", "prod"]
+        },
+        "region": {
+          "description": "Primary region — an Azure region name, or `global`.",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{1,40}$"
+        },
+        "lifecycle": {
+          "description": "Datadog `spec.lifecycle`. `deprecated` is how an entity stops being scored without being deleted.",
+          "enum": ["production", "experimental", "deprecated"]
+        },
+
+        "monitoring_profile": {
+          "description": "OVERRIDE only. Normally derived from criticality via platform/policy/tiers.yaml; an entity that needs a different profile in steady state needs an approved exception (platform/policy/exceptions.yaml), not this field.",
+          "enum": ["observe_only", "baseline", "standard", "critical", "regulated"]
+        },
+        "slo": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "scope": {
+              "description": "WHETHER this entity gets its own SLO. Vocabulary is tiers.yaml's `slo.scope`; defaults to the tier's own scope, and an entity may only narrow or restate it. `domain` and `none` mean no per-service SLO is built.",
+              "enum": ["per_service", "domain", "none"]
+            },
+            "profile": {
+              "description": "WHICH OBJECTIVES, when scope is per_service: a named bundle from platform/policy/slo_profiles.yaml -> profiles (api-critical, api-standard, datastore-critical, ...). Omit to resolve from the entity type, platform and criticality layers alone. Meaningless — and rejected — when scope is not per_service.",
+              "type": "string"
+            },
+            "objectives": {
+              "description": "Per-objective override, the last layer of the §12 resolution chain. Keys must be objectives the entity type already declares; a layer below the entity type cannot INTRODUCE an objective, because the entity type is what owns the SLI.",
+              "type": "object",
+              "additionalProperties": { "type": "object" }
+            }
+          },
+          "required": ["scope"]
+        },
+
+        "dependencies": {
+          "description": "What this entity needs to work. Each item is either a bare entity name (`orders-sql`) or an explicit `kind:name` reference (`datastore:orders-sql`); the resolver turns bare names into references by looking the name up in platform/entities/ and falling back to `service:` — deterministically, never by guessing from the string.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^([a-z_]+:)?[a-z0-9][a-z0-9._-]{2,80}$" }
+        },
+        "components": {
+          "description": "For `kind: system` only — the entities the system is made of. Membership is declared HERE and nowhere else, so `componentOf` on each member is derived, not maintained twice.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^([a-z_]+:)?[a-z0-9][a-z0-9._-]{2,80}$" }
+        },
+
+        "repository_url": {
+          "description": "For `kind: repository` only.",
+          "type": "string",
+          "format": "uri"
+        },
+        "owns": {
+          "description": "For `kind: repository` only — the entities whose code lives here. A repository emits no Datadog entity of its own (entity_kinds.yaml records why); it contributes a `repo` link to each entity it owns.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^([a-z_]+:)?[a-z0-9][a-z0-9._-]{2,80}$" }
+        },
+
+        "compliance_scope": { "enum": ["sox", "pci", "hipaa", "gdpr"] },
+        "idempotent": {
+          "description": "Whether re-running/retrying this entity's work is safe — read by the automation safety contract (platform/policy/workflows.yaml).",
+          "type": "boolean"
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "type", "url"],
+            "properties": {
+              "name": { "type": "string" },
+              "type": { "enum": ["repo", "doc", "dashboard", "runbook", "other"] },
+              "url": { "type": "string", "format": "uri" }
+            }
+          }
+        }
+      },
+
+      "allOf": [
+        {
+          "$comment": "Pack-driven kinds must say which packs apply. A system has no telemetry of its own and a queue/api is monitored by the messaging and synthetic packs through its platform, not through an archetype.",
+          "if": { "properties": { "kind": { "enum": ["service", "frontend_app", "datastore"] } }, "required": ["kind"] },
+          "then": { "required": ["service_archetype"] }
+        },
+        {
+          "$comment": "A system is defined by what it contains; an empty one is a label, not an entity.",
+          "if": { "properties": { "kind": { "const": "system" } }, "required": ["kind"] },
+          "then": {
+            "required": ["components"],
+            "properties": { "dependencies": false, "service_archetype": false }
+          }
+        },
+        {
+          "$comment": "Only service-shaped kinds carry dependsOn in the v3 spec (EntityV3ServiceSpec). Accepting `dependencies` on a datastore or queue would mean writing YAML the API silently discards.",
+          "if": { "properties": { "kind": { "enum": ["datastore", "queue", "api", "repository"] } }, "required": ["kind"] },
+          "then": { "properties": { "dependencies": false } }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "repository" } }, "required": ["kind"] },
+          "then": { "required": ["repository_url", "owns"] }
+        },
+        {
+          "$comment": "`components`, `owns` and `repository_url` belong to exactly one kind each.",
+          "if": { "properties": { "kind": { "not": { "const": "system" } } }, "required": ["kind"] },
+          "then": { "properties": { "components": false } }
+        },
+        {
+          "if": { "properties": { "kind": { "not": { "const": "repository" } } }, "required": ["kind"] },
+          "then": { "properties": { "owns": false, "repository_url": false } }
+        }
+      ]
+    }
+  }
+}

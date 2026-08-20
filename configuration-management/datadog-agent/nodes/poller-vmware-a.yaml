@@ -1,0 +1,18 @@
+# VMware poller A — ACTIVE. Its standby is poller-vmware-b.
+node:
+  name: poller-vmware-a
+  os: linux
+  env: prod
+  team: infrastructure-engineering
+  criticality: tier1
+  service: virtualization-platform
+  platform: vmware
+  resource_type: poller
+  resource_class: poller
+  support_model: 24x7
+  profiles: [linux-standard, vmware-poller]
+  facts:
+    vcenter_host: vcenter.acme.internal
+    vmware_username: svc-datadog-ro
+    vsphere_collection_level: 1
+    vmware_poller_role: active

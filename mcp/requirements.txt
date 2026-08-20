@@ -1,0 +1,16 @@
+# MCP server runtime dependencies.
+#
+# ONE addition over tools/requirements.txt, and it is a promotion rather than a
+# new dependency: `jsonschema` is already in tools/requirements-dev.txt and is
+# already run by the CI schema stage. The server needs it at RUNTIME because
+# every tool's published `inputSchema` is enforced before its handler runs, and
+# a published contract that is not enforced is a lie with documentation.
+#
+# There is deliberately NO `mcp` SDK dependency. The wire protocol is JSON-RPC
+# 2.0 in newline-delimited JSON; mcp/server.py implements it completely in
+# ~80 lines of stdlib. Adding an SDK to a repository whose entire Python
+# surface is PyYAML + requests would be a larger change than the code it
+# replaces. If we ever need sampling, resources or prompts, that is the moment
+# to reconsider — not before.
+-r ../tools/requirements.txt
+jsonschema>=4.0

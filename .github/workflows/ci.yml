@@ -3,8 +3,8 @@ name: ci
 # VALIDATION PIPELINE — every stage is a guardrail that can fail the build.
 #
 #   YAML → schema → tests (policy lint, manifests, runbooks, generated docs,
-#   scorecard, governance & scale) → fmt → validate → offline plan →
-#   determinism → security → credentialed plan + live monitor validation
+#   scorecard, governance & scale) → offline report families → fmt → validate →
+#   offline plan → determinism → security → credentialed plan + live validation
 #
 # The per-tool checks (validate_policy, validate_monitors, runbook registry
 # sync, matrix/runbook staleness, scorecard thresholds) all run INSIDE the
@@ -54,12 +54,16 @@ jobs:
           sys.exit(1 if bad else 0)
           PY
 
-      - name: "JSON schema — service registrations & monitor manifests"
+      - name: "JSON schema — entity/service registrations & monitor manifests"
         run: |
           python - <<'PY'
           import json, sys, pathlib, yaml, jsonschema
           fails = 0
+          # `service` is the SUPERSEDED format and normally matches nothing;
+          # it stays in the loop so a branch that still registers a service the
+          # old way is validated rather than ignored.
           for schema_name, glob in (("monitor", "platform/monitors/*.yaml"),
+                                    ("entity", "platform/entities/*.yaml"),
                                     ("service", "platform/services/*.yaml")):
               schema = json.loads(pathlib.Path(f"platform/schemas/{schema_name}.schema.json").read_text())
               for p in sorted(pathlib.Path().glob(glob)):
@@ -73,6 +77,40 @@ jobs:
 
       - name: "Policy, manifests, runbooks, generated docs, scorecard, scale — pytest"
         run: python -m pytest tests/ -q
+
+      # The five report families, offline against the committed fixtures. Not a
+      # gate — pytest already asserts the catalog and the implementation agree —
+      # but running it here puts the review queue in the PR artifact, which is
+      # the difference between a report family that exists and one anybody reads.
+      - name: "Report families — offline against tests/fixtures"
+        run: cd tools && python reports.py --fixtures ../tests/fixtures
+
+      # A separate step rather than a wider pytest path, for two reasons: the
+      # MCP server needs jsonschema at RUNTIME (it enforces every tool's
+      # published inputSchema), and a distinct step name means a failure here
+      # reads as "the MCP server broke" in the CI log rather than as a policy
+      # regression. The two roots do run together fine — `make validate` runs
+      # both — this is about the install and the signal, not a collision.
+      - name: "MCP server — contracts, governance refusals, Ask grounding, GitOps"
+        run: |
+          pip install -r mcp/requirements.txt
+          python -m pytest mcp/tests -q
+
+      # Agent configuration renders offline and is validated as a unit: the
+      # representative nodes (§25) are the cases that would catch a change to a
+      # shared layer breaking one workload while leaving the others fine. The
+      # secret scan runs over the RENDERED output, not just the sources, since
+      # a handle that fails to resolve is what would inline a value.
+      - name: "Agent configuration — render representative nodes, scan for secrets"
+        run: cd tools && python agent_config.py --check
+
+      # The executive portal (§47-§49) is gated OFFLINE, with no credentials:
+      # it must render from portal/fixtures/ alone, report data freshness, and
+      # show an explicit error state — never a confident zero — when an
+      # upstream fails. A reporting surface that only works against production
+      # is a reporting surface nobody reviews.
+      - name: "Executive portal — offline render, freshness, failure states"
+        run: python -m pytest portal/tests -q
 
       - uses: actions/upload-artifact@v4
         if: always()

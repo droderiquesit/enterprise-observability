@@ -8,6 +8,7 @@ not belong in the standard.
 Checks, in the order the CI pipeline reports them:
 
   SCHEMA        archetype required fields, vocabularies
+  TELEMETRY     every archetype declares the sources it cannot fire without
   REFERENCE     slo_id / runbook / workflow / domain resolve to registries
   SCOPE         every query is scoped (no org-wide wildcards)
   CARDINALITY   ≤3 group keys, no identity keys, notify_by on wide fanouts
@@ -15,17 +16,24 @@ Checks, in the order the CI pipeline reports them:
   PRIORITY      impact_class is legal and paging stays inside policy
   COMPOSITE     identical groupings, explicit ownership, budget
   PACKS         service archetypes reference archetypes that exist
+  ENTITY        entity kinds are real, resolvable and consistent with archetype
   SLO           every archetype maps to a real SLO; members exist
+  SLO_PROFILE   profiles, the resolution chain, and every service's own
+                objectives resolve to a measurable SLI (§12)
   EXCEPTION     required fields, expiry, maximum lifetime, approver
   AUTOMATION    workflow classes carry their required safeguards
   BUDGET        the estate stays inside the monitor and paging budgets
+  SCORECARD     entity kinds classify every resource_type; weights total 100
+  REPORT        every catalogued report names an audience, a question and an action
 """
 from __future__ import annotations
 
 import datetime as dt
 import sys
 
+import entity_resolver as er
 import obs_common as oc
+import slo_resolver
 
 REQUIRED_ARCHETYPE_FIELDS = [
     "title", "signal", "impact_class", "detection", "monitor_type",
@@ -152,6 +160,57 @@ def lint() -> list[str]:
                 if oc.pages(policy, p, band, env) and env != "prod":
                     err("PRIORITY", where, f"resolves to a paging monitor in {env}")
 
+    # =========================================================================
+    # BEGIN TELEMETRY REQUIREMENTS (§38) — self-contained block, own loop.
+    #
+    # Deliberately NOT folded into REQUIRED_ARCHETYPE_FIELDS or the main
+    # archetype loop above: this rule arrives on its own branch alongside other
+    # work on the same catalog, and a block that owns its whole check merges
+    # without touching a shared list.
+    #
+    # WHY IT IS A HARD FAILURE. A monitor whose telemetry source is absent does
+    # not error — it reports OK forever. Without a declared source there is no
+    # way to tell "nothing is wrong" from "nothing is arriving", so the estate
+    # can be fully green and cover nothing. `telemetry:` is what makes that
+    # difference computable (tools/applicability.py).
+    #
+    # The declaration is checked against the archetype's own query rather than
+    # merely against the vocabulary, because a value that is spelled correctly
+    # and describes the wrong producer is worse than a missing one: it looks
+    # answered. The mapping lives in global.yaml → telemetry_sources.
+    # =========================================================================
+    telemetry_vocab = oc.telemetry_sources(policy)
+    for aid, a in policy["archetypes"].items():
+        where = f"archetype {aid}"
+        declared = a.get("telemetry")
+        if declared is None:
+            err("TELEMETRY", where,
+                "missing required field `telemetry`. Declare every source this "
+                "archetype cannot fire without, from global.yaml → "
+                "telemetry_sources; an undeclared monitor is indistinguishable "
+                "from a healthy one when its integration is absent")
+            continue
+        if not isinstance(declared, list) or not declared:
+            err("TELEMETRY", where,
+                f"telemetry must be a non-empty list of source ids, got {declared!r}")
+            continue
+        unknown = [t for t in declared if t not in telemetry_vocab]
+        if unknown:
+            err("TELEMETRY", where,
+                f"telemetry {unknown} not in the vocabulary. Add the source to "
+                "global.yaml → telemetry_sources with the contract that produces "
+                "it (and its emission contract in docs/telemetry-gaps.md if "
+                "something has to be built), or use an existing id")
+            continue
+        derived = oc.derive_telemetry(policy, a["query"])
+        if sorted(declared) != derived:
+            err("TELEMETRY", where,
+                f"declares {sorted(declared)} but its query reads {derived}. The "
+                "declaration has to match the metrics the monitor actually "
+                "queries, or the applicability report is confidently wrong")
+    # END TELEMETRY REQUIREMENTS (§38)
+    # =========================================================================
+
     # ---------------------------------------------------------------- composites
     budget = policy["composites_doc"]["budget"]
     if len(policy["composites"]) > budget["max_composites"]:
@@ -198,10 +257,108 @@ def lint() -> list[str]:
         for pack in sa["packs"]:
             if pack not in policy["packs"]:
                 err("PACKS", f"service_archetype {said}", f"unknown pack {pack!r}")
+        # Platform-selected packs are checked the same way, and additionally
+        # must not restate a base pack: a pack in both lists would be claimed
+        # unconditionally while looking conditional.
+        for plat, packs in (sa.get("packs_by_platform") or {}).items():
+            for pack in packs:
+                if pack not in policy["packs"]:
+                    err("PACKS", f"service_archetype {said} platform {plat}",
+                        f"unknown pack {pack!r}")
+                if pack in sa["packs"]:
+                    err("PACKS", f"service_archetype {said} platform {plat}",
+                        f"pack {pack!r} is already unconditional in `packs`")
     for pid, pack in policy["packs"].items():
         for aid in pack["archetypes"]:
             if aid not in policy["archetypes"]:
                 err("PACKS", f"pack {pid}", f"references unknown archetype {aid!r}")
+
+    # ------------------------------------------------------- agent configuration
+    # The boundary between the profile CATALOG (this policy tree) and the
+    # rendered agent CONFIGURATION (configuration-management/datadog-agent).
+    # Each owns one question; the lint exists so they cannot start answering
+    # both and disagreeing.
+    try:
+        import agent_config as ac
+        ag_layers = ac.load_layers()
+    except Exception as exc:                              # noqa: BLE001
+        err("AGENT", "configuration-management/datadog-agent",
+            f"agent configuration failed to load: {exc}")
+    else:
+        agent_catalog_doc = oc.load_agent_profiles()
+        catalog = set(agent_catalog_doc["agent_profiles"])
+        for name, frag in ag_layers["profiles"].items():
+            cp = frag.get("catalog_profile")
+            if cp is not None and cp not in catalog:
+                err("AGENT", f"config profile {name}",
+                    f"claims catalog profile {cp!r}, which agent_profiles.yaml "
+                    f"does not define")
+        rings_min = ag_layers["rings"]["versions"]["minimum_version"]
+        fleet_min = agent_catalog_doc["fleet"]["minimum_agent_version"]
+        if rings_min != fleet_min:
+            err("AGENT", "minimum agent version",
+                f"rollout-rings.yaml says {rings_min}, agent_profiles.yaml "
+                f"says {fleet_min} — one estate, one minimum")
+        for env_name in ag_layers["environments"]:
+            if env_name not in policy["environments"]:
+                err("AGENT", f"agent environment {env_name}",
+                    "is not an environment this platform defines")
+        for tier in ag_layers["criticality"]:
+            if tier not in policy["tiers"]:
+                err("AGENT", f"agent criticality {tier}",
+                    "is not a tier this platform defines")
+        # Every representative node must render and validate. These are the
+        # examples CI renders (§25); one that no longer composes means a shared
+        # layer changed under a workload nobody re-checked.
+        for node in ac.load_nodes():
+            try:
+                problems = ac.validate(ac.render(node, ag_layers), ag_layers)
+            except Exception as exc:                      # noqa: BLE001
+                err("AGENT", f"node {node['name']}", f"failed to render: {exc}")
+                continue
+            for problem in problems:
+                err("AGENT", f"node {node['name']}", problem)
+
+    # -------------------------------------------------------------------- entity
+    # The catalog is only as good as its kinds. Every rule here is one the
+    # entity model exists to enforce: a database is a datastore, a VM is not a
+    # catalog entity at all, and a system contains things that exist.
+    entities = oc.load_entities()
+
+    # An entity whose `platform` no archetype recognizes silently receives the
+    # engine-agnostic packs only. That is the right DEFAULT for a platform
+    # nobody has declared, but a typo — `azuresql` for `azure_sql` — would take
+    # the same path and quietly drop the technology monitors, so a platform
+    # that resembles a known one closely enough to be a typo is an error.
+    for _name, _ent in entities.items():
+        _sa = policy["service_archetypes"].get(_ent.get("service_archetype") or "")
+        _plat = _ent.get("platform")
+        _known = (_sa or {}).get("packs_by_platform") or {}
+        if _sa and _plat and _known and _plat not in _known:
+            _near = [k for k in _known
+                     if k.replace("_", "") == _plat.replace("_", "").replace("-", "")]
+            if _near:
+                err("PACKS", f"entity {_name}",
+                    f"platform {_plat!r} selects no packs; did you mean {_near[0]!r}?")
+
+    legacy = {}
+    for f in sorted((oc.PLATFORM_DIR / "services").glob("*.yaml")):
+        legacy[oc._yaml(f)["service"]["name"]] = f.name
+    for name, ent in sorted(entities.items()):
+        where = f"entity {name}"
+        for msg in er.validate(ent, policy, entities):
+            err("ENTITY", where, msg)
+        stem = ent.get("source_file", "").removesuffix(".yaml")
+        if stem and stem != name:
+            err("ENTITY", where,
+                f"lives in {ent['source_file']} — one entity per file, named after it, "
+                f"so a reviewer can find an entity without grepping")
+        if name in legacy:
+            err("ENTITY", where,
+                f"is ALSO registered the superseded way in platform/services/"
+                f"{legacy[name]}. Two registrations for one catalog object means two "
+                f"Terraform resources writing the same Datadog entity — delete the "
+                f"platform/services/ file")
 
     # ----------------------------------------------------------------------- SLO
     for sid, s in policy["slos"].items():
@@ -220,6 +377,54 @@ def lint() -> list[str]:
             err("SCHEMA", where, "metric SLOs require a query")
         if s["type"] == "monitor" and not s.get("member_archetypes"):
             err("SCHEMA", where, "monitor SLOs require member_archetypes")
+
+    # ------------------------------------------------- SLO profiles (§12, §15)
+    # The profile catalog, the resolution chain and every service's own `slo:`
+    # block. Implemented in tools/slo_resolver.py, which is the same resolver
+    # the coverage report and the tests use — a rule that only the linter knows
+    # is a rule the platform does not actually follow.
+    errors.extend(slo_resolver.validate(policy))
+
+    relations = policy["slo_profiles_doc"]["slo_relations"]
+    slo_members = {
+        m for s in policy["slos"].values() if s["type"] == "monitor"
+        for m in s.get("member_archetypes", [])
+    }
+    for aid, a in policy["archetypes"].items():
+        where = f"archetype {aid}"
+        rel = a.get("slo_relation")
+        if not rel:
+            err("SCHEMA", where, "missing `slo_relation` — every monitor must state HOW it "
+                                 "relates to an objective, not just which one (§15)")
+            continue
+        if rel not in relations:
+            err("SCHEMA", where, f"slo_relation {rel!r} is not in the vocabulary "
+                                 f"({', '.join(sorted(relations))})")
+            continue
+        # `sli_producing` is the only relation with a mechanical definition:
+        # the monitor IS a member of a monitor-based SLO, so its state consumes
+        # that budget directly. Both directions are checked, because the
+        # dangerous drift is the quiet one — an archetype dropped from an SLO's
+        # membership while still claiming to produce its SLI.
+        if rel == "sli_producing" and aid not in slo_members:
+            err("REFERENCE", where, "declares slo_relation `sli_producing` but is not a member "
+                                    "of any monitor-based SLO, so it produces no SLI")
+        if rel != "sli_producing" and aid in slo_members:
+            err("REFERENCE", where, f"is a member of a monitor-based SLO (its state consumes an "
+                                    f"error budget) but declares slo_relation {rel!r}")
+        # A security detection is one either by domain or by signal: a WAF block
+        # surge on the cloud platform and a failed-login anomaly on a database
+        # are security findings that happen to live in another team's catalog
+        # file, and classifying them as diagnostics would hide them from the
+        # security operating model.
+        if rel == "security" and a["domain"] != "security" and a["signal"] != "auth_anomaly":
+            err("SCHEMA", where, "slo_relation `security` is for the security domain or an "
+                                 "auth_anomaly signal; a security-adjacent monitor elsewhere is "
+                                 "still supporting or diagnostic")
+        if rel == "compliance" and not a.get("compliance"):
+            err("SCHEMA", where, "slo_relation `compliance` without `compliance: true` — the "
+                                 "classification claims audit evidence the monitor is not tagged "
+                                 "as producing")
 
     # ---------------------------------------------------------------- exceptions
     today = dt.date.today()
@@ -327,6 +532,69 @@ def lint() -> list[str]:
                 f"notify_by {nb} is not a subset of group_by {gb}. A collapse key that is not "
                 "a group key does nothing at all, which looks like storm control while "
                 "providing none")
+
+    # ------------------------------------------------- entity kinds (§41) & reports
+    #
+    # Both new policy files are load-bearing for a tool that GRADES the estate,
+    # so a defect in them silently changes what "good" means rather than
+    # failing loudly. That is exactly what the linter is for.
+    sc = policy["scorecards"]
+    kind_names = set(sc["entity_kinds"])
+    rt_kind = sc["resource_type_kind"]
+
+    for rt in sorted({a["resource_type"] for a in policy["archetypes"].values()}):
+        if rt not in rt_kind:
+            err("SCORECARD", f"resource_type {rt}",
+                "is not classified in scorecards.yaml -> resource_type_kind. An "
+                "unclassified type would be graded by whichever rule set happened "
+                "to be the default, which is how a datastore stops being asked for "
+                "a backup check")
+    for rt, k in sorted(rt_kind.items()):
+        if k not in kind_names:
+            err("SCORECARD", f"resource_type_kind[{rt}]", f"unknown entity kind {k!r}")
+    for sa, k in sorted(sc["service_archetype_kind"].items()):
+        if sa not in policy["service_archetypes"]:
+            err("SCORECARD", f"service_archetype_kind[{sa}]",
+                "is not a registered service archetype")
+        if k not in kind_names:
+            err("SCORECARD", f"service_archetype_kind[{sa}]", f"unknown entity kind {k!r}")
+    for sa in sorted(policy["service_archetypes"]):
+        if sa not in sc["service_archetype_kind"]:
+            err("SCORECARD", f"service_archetype {sa}",
+                "has no entity kind, so a resource assigned to it cannot be graded")
+
+    for kind, spec in sorted(sc["entity_kinds"].items()):
+        total = sum(spec["weights"].values())
+        if total != 100:
+            # A block totalling 97 produces grades that quietly cannot reach an
+            # A, and the estate looks like it is degrading when only the
+            # arithmetic changed.
+            err("SCORECARD", f"entity kind {kind}",
+                f"weights total {total}, not 100")
+        if not spec.get("judged_on"):
+            err("SCORECARD", f"entity kind {kind}",
+                "has no `judged_on` — a kind that cannot say what it grades "
+                "differently does not need to be its own kind")
+    for rid, r in sorted(sc["rules"].items()):
+        if r["kind"] not in kind_names:
+            err("SCORECARD", f"rule {rid}", f"unknown entity kind {r['kind']!r}")
+
+    families = set(policy["reports_doc"]["families"])
+    for rid, r in sorted(policy["reports"].items()):
+        where = f"report {rid}"
+        for f in ("family", "audience", "question", "data_source", "cadence",
+                  "requires_live", "action"):
+            if f not in r:
+                err("REPORT", where, f"missing required field `{f}`")
+        if r.get("family") not in families:
+            err("REPORT", where, f"family {r.get('family')!r} is not declared")
+        for ds in r.get("data_source") or []:
+            if ds not in policy["reports_doc"]["data_sources"]:
+                err("REPORT", where, f"data source {ds!r} is not declared")
+        # A report that names no action is a dashboard with extra steps; the
+        # catalog's whole point is that somebody is expected to DO something.
+        if not str(r.get("action", "")).strip():
+            err("REPORT", where, "states no action for the reader")
 
     return errors
 

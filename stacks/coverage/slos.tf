@@ -8,7 +8,14 @@
 #
 # TWO SLO SCOPES keep the object count bounded:
 #   domain SLOs   ~20 for the entire enterprise, covering tier1/tier2
-#   tier0 SLOs    one per mission-critical service (tens, not thousands)
+#   service SLOs  the objectives a mission-critical service resolves through
+#                 the §12 chain (tens of services, not thousands)
+#
+# A service does not write its SLOs. It states its intent — a tier, an entity
+# type, optionally a profile name, optionally one overridden number — and the
+# chain below resolves the objectives from platform/policy/slo_profiles.yaml.
+# That is what lets two technically identical services carry different targets
+# without carrying different monitoring.
 # =============================================================================
 
 locals {
@@ -52,30 +59,206 @@ locals {
     }
   }
 
-  # --- tier0 per-service SLOs ----------------------------------------------
-  tier0_services = {
+  # NOTE ON A SUPERSEDED GUARD. The entity-model work added a `performance_data`
+  # gate here, because the old tier0 template was a metric SLO over
+  # `trace.http.request.hits{service:<name>}` and a tier0 DATASTORE would have
+  # received an SLO whose numerator and denominator were both permanently zero —
+  # healthy-looking forever. Both workstreams found that bug independently.
+  # The gate is deliberately NOT carried forward: the template it protected
+  # against no longer exists. Every objective now takes its SLI from
+  # slo_profiles.yaml -> by_entity_type, where `datastore` availability is a
+  # SERVICE CHECK rather than a request ratio. Keeping the gate as well would
+  # block a datastore from the correctly-shaped objective it can now have.
+  # --- per-service SLOs: the resolved objectives (§11, §12, §14) ------------
+  # WHICH services get their own objectives (§14 — not every entity needs one).
+  # EFFECTIVE SCOPE — the entity's declared `slo.scope`, else its tier's —
+  # compared once against the scope that materializes. This is a transcription
+  # of tools/slo_resolver.py's materializes_per_service_slos(); the two must
+  # agree, because one decides what Terraform creates and the other decides
+  # what the coverage report says exists.
+  #
+  # They did not agree. This condition used to read `tier is per_service OR the
+  # service declares any slo: block`, and every entity declares one — including
+  # the four that say `scope: domain`, meaning "the domain SLO covers me". So
+  # Terraform built four per-service SLOs while the coverage report counted one,
+  # and the extra three were objectives nobody had promised.
+  svc_slo_services = {
     for name, s in local.service_docs : name => s
-    if s.tier == "tier0" && contains(s.envs, "prod")
+    if contains(s.envs, "prod") && (
+      try(s.slo.scope, local.tiers[s.tier].slo.scope)
+      == local.slo_profiles.criticality.materialize_when_scope
+    )
   }
 
-  tier0_slos = {
-    for name, s in local.tier0_services : "slo-svc-${name}" => {
-      name        = "${name} availability (tier0)"
-      type        = "metric"
-      description = "Tier0 per-service SLO. Mission-critical services carry their own error budget."
-      domain      = local.service_archetype_domain[s.service_archetype]
-      service     = name
-      team        = s.team
-      target      = local.tiers.tier0.slo.objectives.availability
-      timeframe   = local.slo_doc.tier0_slo_template.timeframe
-      warning     = null
-      query = {
-        numerator   = replace(local.slo_doc.tier0_slo_template.query.numerator, "__SERVICE__", name)
-        denominator = replace(local.slo_doc.tier0_slo_template.query.denominator, "__SERVICE__", name)
-      }
-      monitor_ids = []
-      tags        = ["scope:service", "tier:tier0", "service:${name}"]
+  # (service × objective) — the entity type is the ONLY layer that can introduce
+  # an objective, because it is the layer that owns the SLI. A profile that
+  # enables an objective its entity type never declared would produce an SLO
+  # with no query, which tools/slo_resolver.py rejects in CI.
+  svc_objective_keys = merge([
+    for name, s in local.svc_slo_services : {
+      for obj_name, _ in try(local.slo_profiles.by_entity_type[s.service_archetype].objectives, {}) :
+      "${name}.${obj_name}" => { service = name, objective = obj_name, svc = s }
     }
+  ]...)
+
+  # ---------------------------------------------------------------------------
+  # THE RESOLUTION CHAIN (§12)
+  #
+  #   enterprise defaults → entity type → platform → criticality → environment
+  #   → slo_profile → service override
+  #
+  # Later layers win, FIELD BY FIELD — that is what lets a service change one
+  # number without restating the SLI, the timeframe or the burn windows. Each
+  # field below is a `try()` chain written in REVERSE layer order, because
+  # `try` returns the first expression that succeeds and a missing key is an
+  # error: first success = last layer that set it.
+  #
+  # Two layers are absent from the chains and deliberately so:
+  #   platform     may not set `target` or `burn_alerts` — criticality resolves
+  #                after it and would overwrite both, so a platform-wide target
+  #                is a value that silently never applies (lint enforces it).
+  #   environment  is applied as `manages_prod` below. environments.yaml says
+  #                only prod carries `slo_impact`, so only a prod apply
+  #                materializes objectives at all.
+  #
+  # The same chain, over the same YAML, is implemented in tools/slo_resolver.py
+  # for the tooling. Neither reads the other.
+  # ---------------------------------------------------------------------------
+  svc_resolved = {
+    for k, v in local.svc_objective_keys : k => {
+      service   = v.service
+      objective = v.objective
+      svc       = v.svc
+      domain    = local.service_archetype_domain[v.svc.service_archetype]
+
+      enabled = try(v.svc.slo.objectives[v.objective].enabled,
+        local.slo_profiles.profiles[v.svc.slo.profile].objectives[v.objective].enabled,
+        local.slo_profiles.by_entity_type[v.svc.service_archetype].objectives[v.objective].enabled,
+      local.slo_profiles.defaults.enabled)
+
+      type = try(v.svc.slo.objectives[v.objective].type,
+        local.slo_profiles.profiles[v.svc.slo.profile].objectives[v.objective].type,
+        local.slo_profiles.by_platform[local.service_archetype_domain[v.svc.service_archetype]].objectives[v.objective].type,
+        local.slo_profiles.by_entity_type[v.svc.service_archetype].objectives[v.objective].type,
+      local.slo_profiles.defaults.type)
+
+      target = try(v.svc.slo.objectives[v.objective].target,
+        local.slo_profiles.profiles[v.svc.slo.profile].objectives[v.objective].target,
+        local.tiers[v.svc.tier].slo.objectives[v.objective],
+        local.slo_profiles.by_entity_type[v.svc.service_archetype].objectives[v.objective].target,
+      local.slo_profiles.defaults.target)
+
+      timeframe = try(v.svc.slo.objectives[v.objective].timeframe,
+        local.slo_profiles.profiles[v.svc.slo.profile].objectives[v.objective].timeframe,
+        local.slo_profiles.by_platform[local.service_archetype_domain[v.svc.service_archetype]].objectives[v.objective].timeframe,
+        local.slo_profiles.by_entity_type[v.svc.service_archetype].objectives[v.objective].timeframe,
+      local.slo_profiles.defaults.timeframe)
+
+      burn_alerts = try(v.svc.slo.objectives[v.objective].burn_alerts,
+        local.slo_profiles.profiles[v.svc.slo.profile].objectives[v.objective].burn_alerts,
+        local.tiers[v.svc.tier].slo.burn_windows,
+        local.slo_profiles.by_entity_type[v.svc.service_archetype].objectives[v.objective].burn_alerts,
+      local.slo_profiles.defaults.burn_alerts)
+
+      member_archetypes = try(local.slo_profiles.profiles[v.svc.slo.profile].objectives[v.objective].member_archetypes,
+      local.slo_profiles.by_entity_type[v.svc.service_archetype].objectives[v.objective].member_archetypes, [])
+
+      numerator = try(local.slo_profiles.profiles[v.svc.slo.profile].objectives[v.objective].sli.numerator,
+        local.slo_profiles.by_platform[local.service_archetype_domain[v.svc.service_archetype]].objectives[v.objective].sli.numerator,
+      local.slo_profiles.by_entity_type[v.svc.service_archetype].objectives[v.objective].sli.numerator, "")
+
+      denominator = try(local.slo_profiles.profiles[v.svc.slo.profile].objectives[v.objective].sli.denominator,
+        local.slo_profiles.by_platform[local.service_archetype_domain[v.svc.service_archetype]].objectives[v.objective].sli.denominator,
+      local.slo_profiles.by_entity_type[v.svc.service_archetype].objectives[v.objective].sli.denominator, "")
+
+      # The threshold merges per SUB-FIELD for the same reason: a service that
+      # promises 200ms writes `threshold: {value: 200}` and keeps the statistic
+      # and the unit its entity type defined. Replacing the whole map would drop
+      # them and produce an SLI reading a tag nobody emits.
+      threshold_value = try(v.svc.slo.objectives[v.objective].threshold.value,
+        local.slo_profiles.profiles[v.svc.slo.profile].objectives[v.objective].threshold.value,
+        local.slo_profiles.by_platform[local.service_archetype_domain[v.svc.service_archetype]].objectives[v.objective].threshold.value,
+      local.slo_profiles.by_entity_type[v.svc.service_archetype].objectives[v.objective].threshold.value, "")
+
+      threshold_unit = try(v.svc.slo.objectives[v.objective].threshold.unit,
+        local.slo_profiles.profiles[v.svc.slo.profile].objectives[v.objective].threshold.unit,
+        local.slo_profiles.by_platform[local.service_archetype_domain[v.svc.service_archetype]].objectives[v.objective].threshold.unit,
+      local.slo_profiles.by_entity_type[v.svc.service_archetype].objectives[v.objective].threshold.unit, "")
+    }
+  }
+
+  # The objectives that are actually created. `enabled` is what separates "this
+  # entity type COULD carry a latency objective" from "this service promised
+  # one" — see slo_profiles.yaml. A service that names no profile therefore
+  # resolves exactly what it resolved before profiles existed.
+  svc_slos = {
+    for k, r in local.svc_resolved : (
+      r.objective == "availability" ? "slo-svc-${r.service}" : "slo-svc-${r.service}-${r.objective}"
+      ) => {
+      name = "${r.service} ${r.objective} (${r.svc.tier})"
+      type = r.type
+      description = join(" ", [
+        "Per-service ${r.objective} objective for ${r.service}.",
+        "Resolved from ${try(r.svc.slo.profile, "the ${r.svc.tier} default for a ${r.svc.service_archetype}")}.",
+      ])
+      domain    = r.domain
+      service   = r.service
+      team      = r.svc.team
+      target    = r.target
+      timeframe = r.timeframe
+      warning   = null
+
+      # __LATENCY_BUCKET__ carries the objective's threshold into the SLI: a
+      # Datadog metric SLI is a ratio of two counts, so "faster than 300ms" has
+      # to already exist as a tag on the count (see slo_profiles.yaml). The tag
+      # spelling here and in tools/slo_resolver.py must stay identical.
+      query = r.type != "metric" ? null : {
+        numerator = replace(replace(replace(r.numerator,
+          "__SERVICE__", r.service),
+          "__ENV__", "prod"),
+        "__LATENCY_BUCKET__", "under_${r.threshold_value}${r.threshold_unit}")
+        denominator = replace(replace(replace(r.denominator,
+          "__SERVICE__", r.service),
+          "__ENV__", "prod"),
+        "__LATENCY_BUCKET__", "under_${r.threshold_value}${r.threshold_unit}")
+      }
+
+      # A monitor-type per-service objective takes its membership the same way
+      # a domain SLO does. Note what that means: the platform's monitors are
+      # grouped across every service carrying an archetype's tag, so such an
+      # objective measures the ARCHETYPE's availability as this service sees
+      # it, not this service alone. That is honest for a datastore ("is the
+      # database up"), and it is why the metric form is the default everywhere
+      # a per-request SLI exists.
+      monitor_ids = r.type != "monitor" ? [] : [
+        for ik, inst in local.archetype_instances :
+        tonumber(module.coverage_monitors.monitor_ids[ik])
+        if inst.env == "prod" && inst.band == "critical" && contains(r.member_archetypes, inst.archetype)
+      ]
+
+      tags = [
+        "scope:service", "tier:${r.svc.tier}", "service:${r.service}",
+        "objective:${r.objective}", "entity_type:${r.svc.service_archetype}",
+        "slo_profile:${try(r.svc.slo.profile, "none")}",
+      ]
+    }
+    if r.enabled
+  }
+
+  # INVARIANT, applied after the whole chain because no tier may override it:
+  # Datadog rejects burn_rate() on a monitor-based SLO with any non-metric
+  # member ("Alerting on monitor based SLOs currently supports metric monitors"
+  # — found by live plan validation). A tier that asks for three burn windows
+  # on a service-check-backed objective gets none, rather than a failed apply.
+  svc_burn_windows = {
+    for k, r in local.svc_resolved :
+    (r.objective == "availability" ? "slo-svc-${r.service}" : "slo-svc-${r.service}-${r.objective}") => (
+      r.type == "monitor" && length([
+        for m in r.member_archetypes : m
+        if try(local.archetypes[m].monitor_type, "") != "query alert"
+      ]) > 0 ? [] : r.burn_alerts
+    )
+    if r.enabled
   }
 
   # SLOs and their burn monitors are prod-scoped objects (`burn.prod.*` — an
@@ -85,7 +268,7 @@ locals {
   # the prod apply. (Filtered comprehension, not a ternary: `cond ? map : {}`
   # trips inconsistent-conditional-type unification on object maps.)
   manages_prod = contains(var.environments, "prod")
-  all_slos     = { for k, v in merge(local.domain_slos, local.tier0_slos) : k => v if local.manages_prod }
+  all_slos     = { for k, v in merge(local.domain_slos, local.svc_slos) : k => v if local.manages_prod }
 
   # --- burn-rate monitor instances -----------------------------------------
   # One monitor per (SLO × window). Windows come from global.yaml and are
@@ -102,9 +285,12 @@ locals {
       name      = s.name, service = s.service, team = s.team, domain = s.domain,
       timeframe = s.timeframe, windows = try(s.burn_alerts, [])
     } },
-    { for id, s in local.tier0_slos : id => {
+    # Per-service objectives carry their OWN windows: the burn windows are a
+    # resolved field like any other, so a service that promised only a slow
+    # burn does not inherit its tier's fast-burn pages.
+    { for id, s in local.svc_slos : id => {
       name      = s.name, service = s.service, team = s.team, domain = s.domain,
-      timeframe = s.timeframe, windows = local.slo_doc.tier0_slo_template.burn_alerts
+      timeframe = s.timeframe, windows = local.svc_burn_windows[id]
     } },
   ) : k => v if local.manages_prod }
 

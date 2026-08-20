@@ -1,0 +1,32 @@
+# WORKED EXAMPLE — SYSTEM.
+#
+# A logical system: the business capability "order management", assembled from
+# the three entities that actually implement it. Systems are the top of the
+# progressive drilldown the requirement set asks for (§48: enterprise → system
+# → service → SLO → incident), and they are the only kind with `components`.
+#
+# MEMBERSHIP IS DECLARED HERE AND NOWHERE ELSE. The reverse edge — Datadog's
+# `spec.componentOf` on each member — is DERIVED by tools/entity_resolver.py
+# and by modules/catalog_entity from this list. Declaring it on both sides
+# would be two sources of truth for one fact, which is the thing this
+# repository does not do.
+#
+# The system carries no telemetry of its own, so it has no service_archetype,
+# no packs and no monitors: its health is its components' health. That is also
+# why `dependencies` is rejected for a system by the schema — EntityV3SystemSpec
+# has components, lifecycle and tier, and nothing else.
+entity:
+  kind: system
+  name: order-management
+  display_name: Order Management
+  team: application-development
+  criticality: tier1
+  domain: application
+  description: Order capture through fulfilment — event ingestion, state of record, downstream updates.
+  envs: [dev, qa, stage, prod]
+  env: prod
+  lifecycle: production
+  components:
+    - service:order-events-consumer
+    - queue:orders-topic
+    - datastore:orders-sql

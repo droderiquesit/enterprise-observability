@@ -21,8 +21,11 @@ locals {
   prio        = yamldecode(file("${local.policy_dir}/policy/priorities.yaml"))
   slo_doc     = yamldecode(file("${local.policy_dir}/policy/slos.yaml"))
   slo_catalog = local.slo_doc.slos
-  exceptions  = yamldecode(file("${local.policy_dir}/policy/exceptions.yaml")).exceptions
-  runbooks    = yamldecode(file("${local.policy_dir}/policy/runbooks.yaml"))
+  # The per-service objective model and the layers it resolves through (§12).
+  # Read here, resolved in slos.tf.
+  slo_profiles = yamldecode(file("${local.policy_dir}/policy/slo_profiles.yaml"))
+  exceptions   = yamldecode(file("${local.policy_dir}/policy/exceptions.yaml")).exceptions
+  runbooks     = yamldecode(file("${local.policy_dir}/policy/runbooks.yaml"))
 
   # ---------------------------------------------------------------------------
   # NATIVE RUNBOOK ATTACHMENT LOOKUP
@@ -68,11 +71,35 @@ locals {
     }
   ]...)
 
-  # --- service registry (tier0 SLOs + catalog ownership) --------------------
-  service_docs = {
-    for f in fileset("${local.policy_dir}/services", "*.yaml") :
-    trimsuffix(f, ".yaml") => yamldecode(file("${local.policy_dir}/services/${f}")).service
+  # --- entity registry (tier0 SLOs + custom-monitor band resolution) --------
+  #
+  # Read from BOTH registries. platform/entities/ is the source of truth (§5:
+  # it is the only one that can say a thing is a datastore rather than a
+  # service); platform/services/ is the superseded format, still read so that a
+  # branch written against it keeps working, and normally empty.
+  #
+  # Entities are projected onto the legacy service shape — `criticality` is the
+  # §10 name for `tier`, everything else kept its name — because this stack
+  # only ever asks two questions of a registration: what tier is it, and which
+  # archetype does it use. Kinds that answer neither (a system has no
+  # archetype, a queue has no packs) are not in this map; nothing here would
+  # know what to do with them.
+  entity_docs = {
+    for f in fileset("${local.policy_dir}/entities", "*.yaml") :
+    trimsuffix(f, ".yaml") => yamldecode(file("${local.policy_dir}/entities/${f}")).entity
   }
+  entity_kinds_policy = yamldecode(file("${local.policy_dir}/policy/entity_kinds.yaml")).entity_kinds
+
+  service_docs = merge(
+    {
+      for name, e in local.entity_docs : name => merge(e, { tier = e.criticality })
+      if try(e.service_archetype, null) != null
+    },
+    {
+      for f in fileset("${local.policy_dir}/services", "*.yaml") :
+      trimsuffix(f, ".yaml") => yamldecode(file("${local.policy_dir}/services/${f}")).service
+    },
+  )
 
   # ---------------------------------------------------------------------------
   # ENVIRONMENT-AWARE EVALUATION WINDOWS

@@ -31,6 +31,7 @@ archetypes:
     detection: rate_of_change
     monitor_type: query alert
     resource_type: host
+    telemetry: [agent]
     selector: ""
     query: "pct_change(avg(last_15m),last_4h):avg:system.swap.pct_free{__SCOPE__} by {cluster,host} < -25"
     thresholds: { critical: -25, warning: -15 }
@@ -40,6 +41,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-infra-compute-availability
+    slo_relation: slo_supporting
     runbook: host-swap-pressure
     workflow: diag-host
     failure_domain: compute
@@ -56,6 +58,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: host
+    telemetry: [agent]
     selector: ""
     query: "min(next_1d):forecast(avg:system.swap.pct_free{__SCOPE__} by {cluster,host}, 'linear', 1, interval='30m', history='1d') < 10"
     thresholds: { critical: 10, warning: 20 }
@@ -65,6 +68,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-infra-compute-availability
+    slo_relation: slo_supporting
     runbook: host-swap-exhaustion-forecast
     workflow: auto-capacity-ticket
     failure_domain: compute
@@ -88,6 +92,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: hardware_node
+    telemetry: [ipmi_hardware_check]
     selector: ""
     query: "max(last_15m):max:acme.hardware.component_health{__SCOPE__} by {host,component} >= 2"
     thresholds: { critical: 2, warning: 1 }
@@ -97,6 +102,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-infra-compute-availability
+    slo_relation: slo_supporting
     runbook: hardware-component-fault
     workflow: auto-capacity-ticket
     failure_domain: compute
@@ -113,6 +119,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: hardware_node
+    telemetry: [ipmi_hardware_check]
     selector: ""
     query: "avg(last_2h):anomalies(avg:acme.hardware.temperature_celsius{__SCOPE__} by {host}, 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -121,6 +128,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-infra-compute-availability
+    slo_relation: slo_supporting
     runbook: hardware-thermal-trend
     workflow: auto-capacity-ticket
     failure_domain: compute
@@ -144,6 +152,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: host
+    telemetry: [cmdb_compliance_export]
     selector: ""
     query: "max(last_1d):max:acme.compliance.missing_critical_patches{__SCOPE__} by {cluster,host} > 0"
     thresholds: { critical: 0 }
@@ -153,6 +162,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-security-telemetry
+    slo_relation: compliance
     runbook: os-critical-patch-missing
     workflow: auto-compliance-ticket
     failure_domain: compute
@@ -169,6 +179,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: host
+    telemetry: [cmdb_compliance_export]
     selector: ""
     query: "max(last_1d):max:acme.compliance.days_since_patch{__SCOPE__} by {cluster,host} > 45"
     thresholds: { critical: 45, warning: 35 }
@@ -178,6 +189,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-security-telemetry
+    slo_relation: compliance
     runbook: os-patch-age-excessive
     workflow: auto-compliance-ticket
     failure_domain: compute
@@ -194,6 +206,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: host
+    telemetry: [cmdb_compliance_export]
     selector: ""
     query: "min(last_1d):min:acme.compliance.os_support_days_remaining{__SCOPE__} by {cluster,host} < 90"
     thresholds: { critical: 90, warning: 180 }
@@ -203,6 +216,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-security-telemetry
+    slo_relation: compliance
     runbook: os-end-of-life
     workflow: auto-compliance-ticket
     failure_domain: compute
@@ -221,6 +235,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: host
+    telemetry: [cmdb_compliance_export]
     selector: ""
     query: "max(last_1d):max:acme.compliance.agent_versions_behind{__SCOPE__} by {cluster} > 3"
     thresholds: { critical: 3, warning: 2 }
@@ -229,6 +244,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-platform-services
+    slo_relation: informational
     runbook: agent-version-drift
     workflow: auto-drift-ticket
     failure_domain: observability

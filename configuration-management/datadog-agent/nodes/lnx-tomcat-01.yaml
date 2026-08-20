@@ -1,0 +1,16 @@
+# Linux + Tomcat.
+node:
+  name: lnx-tomcat-01
+  os: linux
+  env: stage
+  team: application-development
+  criticality: tier2
+  service: warehouse
+  platform: tomcat
+  resource_type: application
+  profiles: [linux-standard, application, tomcat]
+  facts:
+    process_name: java
+    process_min_count: 1
+    tomcat_jmx_port: 9012
+    tomcat_log_dir: /var/log/tomcat

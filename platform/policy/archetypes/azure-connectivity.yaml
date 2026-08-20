@@ -28,6 +28,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: network_circuit
+    telemetry: [azure_integration]
     selector: "resource_type:azure_expressroute"
     query: "min(last_10m):min:azure.network_expressroutecircuits.bgp_availability{__SCOPE__} by {name,peering_type} < 100"
     thresholds: { critical: 100 }
@@ -37,6 +38,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_impacting
     runbook: expressroute-bgp-down
     workflow: diag-network
     failure_domain: connectivity
@@ -53,6 +55,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: network_circuit
+    telemetry: [azure_integration]
     selector: "resource_type:azure_expressroute"
     query: "min(last_15m):min:azure.network_expressroutecircuits.arp_availability{__SCOPE__} by {name,peering_type} < 100"
     thresholds: { critical: 100 }
@@ -62,6 +65,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_impacting
     runbook: expressroute-arp-degraded
     workflow: diag-network
     failure_domain: connectivity
@@ -77,6 +81,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: network_circuit
+    telemetry: [azure_integration]
     selector: "resource_type:azure_expressroute"
     query: "max(next_1w):forecast(avg:azure.network_expressroutecircuits.egress_bandwidth_utilization{__SCOPE__} by {name}, 'linear', 1, interval='1h', history='1w') > 80"
     thresholds: { critical: 80, warning: 70 }
@@ -85,6 +90,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_supporting
     runbook: expressroute-bandwidth-saturation
     workflow: auto-capacity-ticket
     failure_domain: connectivity
@@ -100,6 +106,7 @@ archetypes:
     detection: rate_of_change
     monitor_type: query alert
     resource_type: network_circuit
+    telemetry: [azure_integration]
     selector: "resource_type:azure_expressroute"
     query: "pct_change(avg(last_15m),last_4h):avg:azure.network_expressroutecircuits.qos_drop_bits_in_per_second{__SCOPE__} by {name} > 100"
     thresholds: { critical: 100, warning: 50 }
@@ -108,6 +115,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_impacting
     runbook: expressroute-qos-drops
     workflow: diag-network
     failure_domain: connectivity
@@ -124,6 +132,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: network_tunnel
+    telemetry: [azure_integration]
     selector: "resource_type:azure_vpn_gateway"
     query: "min(last_10m):min:azure.network_virtualnetworkgateways.bgp_peer_status{__SCOPE__} by {name,bgp_peer_address} < 1"
     thresholds: { critical: 1 }
@@ -133,6 +142,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_impacting
     runbook: vpn-bgp-peer-down
     workflow: diag-network
     failure_domain: connectivity
@@ -148,6 +158,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: network_tunnel
+    telemetry: [azure_integration]
     selector: "resource_type:azure_vpn_gateway"
     query: "avg(last_15m):anomalies(sum:azure.network_virtualnetworkgateways.tunnel_ingress_packet_drop_count{__SCOPE__} by {name,connection_name}.as_rate(), 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -157,6 +168,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_impacting
     runbook: vpn-tunnel-packet-drops
     workflow: diag-network
     failure_domain: connectivity
@@ -168,6 +180,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: network_tunnel
+    telemetry: [azure_integration]
     selector: "resource_type:azure_vpn_gateway"
     query: "avg(last_30m):anomalies(avg:azure.network_virtualnetworkgateways.tunnel_average_bandwidth{__SCOPE__} by {name,connection_name}, 'agile', 3) >= 1"
     thresholds: { critical: 1.0 }
@@ -177,6 +190,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: diagnostic
     runbook: vpn-tunnel-bandwidth-anomaly
     workflow: diag-network
     failure_domain: connectivity
@@ -193,6 +207,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: network_firewall
+    telemetry: [azure_integration]
     selector: "resource_type:azure_firewall"
     query: "min(last_10m):min:azure.network_azurefirewalls.firewall_health{__SCOPE__} by {name} < 100"
     thresholds: { critical: 100 }
@@ -201,6 +216,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_impacting
     runbook: firewall-unhealthy
     workflow: diag-network
     failure_domain: connectivity
@@ -217,6 +233,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: network_firewall
+    telemetry: [azure_integration]
     selector: "resource_type:azure_firewall"
     query: "max(next_12h):forecast(avg:azure.network_azurefirewalls.snat_port_utilization{__SCOPE__} by {name}, 'linear', 1, interval='15m', history='1d') > 80"
     thresholds: { critical: 80, warning: 65 }
@@ -225,6 +242,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_supporting
     runbook: firewall-snat-exhaustion
     workflow: auto-capacity-ticket
     failure_domain: connectivity
@@ -241,6 +259,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: network_firewall
+    telemetry: [azure_integration]
     selector: "resource_type:azure_firewall"
     query: "max(next_12h):forecast(avg:azure.network_azurefirewalls.throughput{__SCOPE__} by {name}, 'linear', 1, interval='30m', history='1w') > 0"
     thresholds: { critical: 0 }
@@ -249,6 +268,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_supporting
     runbook: firewall-throughput-saturation
     workflow: auto-capacity-ticket
     failure_domain: connectivity
@@ -264,6 +284,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: network_firewall
+    telemetry: [azure_integration]
     selector: "resource_type:azure_firewall"
     query: "avg(last_30m):anomalies(sum:azure.network_azurefirewalls.network_rule_hit{__SCOPE__,status:deny} by {name}.as_rate(), 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -272,6 +293,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_supporting
     runbook: firewall-denied-traffic-anomaly
     workflow: diag-network
     failure_domain: connectivity
@@ -292,6 +314,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: network_security_group
+    telemetry: [log_derived_nsg_flows]
     selector: ""
     query: "avg(last_30m):anomalies(sum:acme.network.nsg_denied_flows{__SCOPE__} by {nsg_name}.as_rate(), 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -300,6 +323,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_supporting
     runbook: nsg-denied-flow-anomaly
     workflow: diag-network
     failure_domain: connectivity
@@ -312,6 +336,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: azure_private_endpoint
+    telemetry: [azure_integration]
     selector: "resource_type:azure_private_endpoint"
     query: "sum(last_30m):sum:azure.network_privateendpoints.pe_bytes_in{__SCOPE__} by {name}.as_count() < 1"
     thresholds: { critical: 1 }
@@ -320,6 +345,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_impacting
     runbook: private-endpoint-traffic-loss
     workflow: diag-network
     failure_domain: connectivity
@@ -337,6 +363,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: dns_zone
+    telemetry: [azure_integration]
     selector: "resource_type:azure_private_dns"
     query: "avg(last_30m):anomalies(sum:azure.network_privatednszones.query_volume{__SCOPE__} by {name}.as_rate(), 'agile', 3) >= 1"
     thresholds: { critical: 1.0 }
@@ -345,6 +372,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_impacting
     runbook: private-dns-query-anomaly
     workflow: diag-network
     failure_domain: connectivity
@@ -360,6 +388,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: dns_zone
+    telemetry: [azure_integration]
     selector: "resource_type:azure_private_dns"
     query: "avg(last_1h):max:azure.network_privatednszones.record_set_capacity_utilization{__SCOPE__} by {name} > 80"
     thresholds: { critical: 80, warning: 70 }
@@ -368,6 +397,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_supporting
     runbook: private-dns-recordset-capacity
     workflow: auto-capacity-ticket
     failure_domain: connectivity

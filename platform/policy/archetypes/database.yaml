@@ -26,6 +26,7 @@ archetypes:
     detection: service_check
     monitor_type: service check
     resource_type: db_instance
+    telemetry: [database_monitoring]
     selector: ""
     query: '"datadog.dbm.instance.up".over("__SCOPE__").by("db_instance").last(3).count_by_status()'
     thresholds: { critical: 2, warning: 1 }
@@ -34,6 +35,7 @@ archetypes:
     envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-database-availability
+    slo_relation: sli_producing
     runbook: db-availability
     workflow: diag-database
     failure_domain: databases
@@ -47,6 +49,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: db_instance
+    telemetry: [custom_backup_reporting]
     selector: ""
     query: 'max(last_4h):max:acme.database.hours_since_backup{__SCOPE__} by {db_instance} > 26'
     thresholds: { critical: 26, warning: 20 }
@@ -55,6 +58,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-database-availability
+    slo_relation: compliance
     runbook: db-backup-age
     workflow: auto-compliance-ticket
     failure_domain: database-capacity
@@ -69,6 +73,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: azure_sql
+    telemetry: [azure_integration]
     selector: "resource_type:azure_sql"
     query: "max(next_1d):forecast(avg:azure.sql_servers_databases.dtu_consumption_percent{__SCOPE__} by {subscription_name,name}, 'linear', 1, interval='30m', history='1w') > 90"
     thresholds: { critical: 90, warning: 80 }
@@ -77,6 +82,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-database-availability
+    slo_relation: slo_supporting
     runbook: azuresql-dtu-saturation
     workflow: remediate-scale-workload
     failure_domain: database-capacity
@@ -90,6 +96,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: db_instance
+    telemetry: [sqlserver_integration]
     selector: ""
     query: 'sum(last_30m):sum:sqlserver.stats.connections{__SCOPE__} by {db_instance}.as_count() < 1'
     thresholds: { critical: 1 }
@@ -98,6 +105,7 @@ archetypes:
     envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-database-availability
+    slo_relation: slo_supporting
     runbook: db-telemetry-loss
     workflow: diag-database
     failure_domain: databases

@@ -1,0 +1,150 @@
+{
+ "_comment": "Fleet fixture - the REQUIRED set. Shaped exactly like generated/inventory.json (tools/build_inventory.py) plus fixture_now_ts, so the offline path exercises the same code as --live. Eight hosts, chosen so every section-39 check has at least one true positive and the compliant hosts prove the checks can also pass.",
+ "fixture_now_ts": 1785542400.0,
+ "generated_at": "2026-08-01T00:00:00+00:00",
+ "resource_count": 8,
+ "resources": [
+  {
+   "env": "prod",
+   "id": "host:app-win-01",
+   "kind": "host",
+   "name": "app-win-01",
+   "region": "eastus2",
+   "service": "identity-api",
+   "source": "fixture",
+   "tags": {
+    "alert_band": "critical",
+    "env": "prod",
+    "service": "identity-api",
+    "service_archetype": "api",
+    "team": "application-development",
+    "tier": "tier1"
+   },
+   "team": "application-development"
+  },
+  {
+   "env": "prod",
+   "id": "host:sql-win-02",
+   "kind": "host",
+   "name": "sql-win-02",
+   "region": "eastus2",
+   "service": "orders-sql",
+   "source": "fixture",
+   "tags": {
+    "alert_band": "critical",
+    "db_engine": "sqlserver",
+    "env": "prod",
+    "service": "orders-sql",
+    "service_archetype": "datastore",
+    "team": "data-engineering",
+    "tier": "tier1"
+   },
+   "team": "data-engineering"
+  },
+  {
+   "env": "prod",
+   "id": "vm:app-lin-03",
+   "kind": "vm",
+   "name": "app-lin-03",
+   "region": "eastus2",
+   "service": "reporting-portal",
+   "source": "fixture",
+   "tags": {
+    "alert_band": "critical",
+    "env": "prod",
+    "service": "reporting-portal",
+    "service_archetype": "api",
+    "team": "application-development",
+    "tier": "tier1"
+   },
+   "team": "application-development"
+  },
+  {
+   "env": "prod",
+   "id": "vm:vm-legacy-04",
+   "kind": "vm",
+   "name": "vm-legacy-04",
+   "region": "eastus2",
+   "service": null,
+   "source": "fixture",
+   "tags": {
+    "env": "prod"
+   },
+   "team": null
+  },
+  {
+   "env": "prod",
+   "id": "host:batch-lin-05",
+   "kind": "host",
+   "name": "batch-lin-05",
+   "region": "eastus2",
+   "service": "nightly-settlement",
+   "source": "fixture",
+   "tags": {
+    "alert_band": "critical",
+    "env": "prod",
+    "service": "nightly-settlement",
+    "service_archetype": "batch_job",
+    "team": "data-engineering",
+    "tier": "tier1"
+   },
+   "team": "data-engineering"
+  },
+  {
+   "env": "prod",
+   "id": "host:appliance-06",
+   "kind": "host",
+   "name": "appliance-06",
+   "region": "eastus2",
+   "service": "storage-appliance",
+   "source": "fixture",
+   "tags": {
+    "alert_band": "critical",
+    "env": "prod",
+    "fleet_exempt": "true",
+    "service": "storage-appliance",
+    "service_archetype": "infrastructure_resource",
+    "team": "infrastructure-engineering",
+    "tier": "tier1"
+   },
+   "team": "infrastructure-engineering"
+  },
+  {
+   "env": "prod",
+   "id": "host:app-lin-07",
+   "kind": "host",
+   "name": "app-lin-07",
+   "region": "eastus2",
+   "service": "order-events-consumer",
+   "source": "fixture",
+   "tags": {
+    "alert_band": "critical",
+    "env": "prod",
+    "service": "order-events-consumer",
+    "service_archetype": "event_consumer",
+    "team": "application-development",
+    "tier": "tier1"
+   },
+   "team": "application-development"
+  },
+  {
+   "env": "production",
+   "id": "host:file-win-08",
+   "kind": "host",
+   "name": "file-win-08",
+   "region": "eastus2",
+   "service": "fileshare",
+   "source": "fixture",
+   "tags": {
+    "alert_band": "standard",
+    "env": "production",
+    "service": "fileshare",
+    "service_archetype": "infrastructure_resource",
+    "team": "infrastructure-engineering",
+    "tier": "tier2"
+   },
+   "team": "infrastructure-engineering"
+  }
+ ],
+ "service_count": 7
+}

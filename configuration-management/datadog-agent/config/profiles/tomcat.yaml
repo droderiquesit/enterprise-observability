@@ -1,0 +1,63 @@
+# =============================================================================
+# PROFILE — tomcat
+#
+# JMX-based. The Agent connects to the JVM's JMX endpoint rather than reading
+# files, which is why this profile needs a port and credentials rather than a
+# log path alone.
+# =============================================================================
+version: 2
+
+# WHAT THIS PROFILE CAN USE. Policy (environment, criticality) decides whether a
+# feature is ALLOWED; this decides whether it is USABLE. Both must agree, so a
+# tier1 poller does not get APM enabled — and an APM host licence consumed —
+# for an application it does not run.
+supports: [logs, apm]
+catalog_profile: application
+
+datadog_yaml:
+  logs_enabled: true
+
+conf_d:
+  tomcat.d/conf.yaml:
+    init_config: {}
+    instances:
+      - host: localhost
+        port: "{{ tomcat_jmx_port }}"
+        # A BOUNDED bean list. `conf: []` with no filter collects every MBean
+        # the JVM exposes, which on an application server is thousands of
+        # metrics per host and the fastest way to a custom-metrics bill nobody
+        # budgeted.
+        conf:
+          - include: { type: ThreadPool, attribute: { currentThreadCount: { alias: tomcat.threads.count, metric_type: gauge } } }
+          - include: { type: ThreadPool, attribute: { currentThreadsBusy: { alias: tomcat.threads.busy, metric_type: gauge } } }
+          - include: { type: GlobalRequestProcessor, attribute: { requestCount: { alias: tomcat.request_count, metric_type: counter } } }
+          - include: { type: GlobalRequestProcessor, attribute: { errorCount: { alias: tomcat.error_count, metric_type: counter } } }
+          - include: { type: GlobalRequestProcessor, attribute: { processingTime: { alias: tomcat.processing_time, metric_type: counter } } }
+          - include: { type: Manager, attribute: { activeSessions: { alias: tomcat.servlet.sessions.active, metric_type: gauge } } }
+        tags: ["{{ node_tags }}"]
+
+  # JVM health — heap, GC pause, thread count — feeds the app-jvm-* archetypes.
+  # It is a separate check because the JVM can be unhealthy while Tomcat's own
+  # request metrics still look fine, right up until they do not.
+  jmx.d/conf.yaml:
+    init_config: {}
+    instances:
+      - host: localhost
+        port: "{{ tomcat_jmx_port }}"
+        name: "{{ service }}"
+        conf:
+          - include: { domain: java.lang, type: Memory, attribute: { HeapMemoryUsage.used: { alias: jvm.heap_memory, metric_type: gauge } } }
+          - include: { domain: java.lang, type: GarbageCollector, attribute: { CollectionTime: { alias: jvm.gc.collection_time, metric_type: counter } } }
+
+logs:
+  - type: file
+    path: "{{ tomcat_log_dir }}/catalina.out"
+    source: tomcat
+    service: "{{ service }}"
+    log_processing_rules:
+      # Java stack traces are the canonical multiline case: without this, one
+      # exception becomes forty log lines and every error-rate signal is wrong
+      # by a factor nobody can predict.
+      - type: multi_line
+        name: java_log_start
+        pattern: \d{2}-\w{3}-\d{4}\s\d{2}:\d{2}:\d{2}

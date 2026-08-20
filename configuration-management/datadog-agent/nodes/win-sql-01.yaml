@@ -1,0 +1,16 @@
+# SQL Server on Windows, Agent local to the instance.
+node:
+  name: win-sql-01
+  os: windows
+  env: prod
+  team: data-engineering
+  criticality: tier1
+  service: orders-sql
+  platform: sqlserver
+  resource_type: database
+  support_model: 24x7
+  profiles: [windows-standard, sqlserver]
+  facts:
+    sqlserver_host: "win-sql-01,1433"
+    sqlserver_username: datadog_monitor
+    sqlserver_errorlog_path: 'C:\Program Files\Microsoft SQL Server\MSSQL16.MSSQLSERVER\MSSQL\Log\ERRORLOG'

@@ -6,9 +6,9 @@
 
 ## Summary
 
-- **264 archetypes** → **588 monitor instances** (archetype × environment × alert band)
-- **159** instances (27%) are permitted to page; everything else is a ticket or informational
-- **258** instances (43%) use predictive detection (anomaly, seasonal, forecast, outlier, rate-of-change)
+- **270 archetypes** → **613 monitor instances** (archetype × environment × alert band)
+- **166** instances (27%) are permitted to page; everything else is a ticket or informational
+- **258** instances (42%) use predictive detection (anomaly, seasonal, forecast, outlier, rate-of-change)
 - **21 domain SLOs** plus one per tier0 service
 
 Instances marked `Threshold*` use a fixed number. Every one of them carries a
@@ -288,7 +288,7 @@ Owner: `data-engineering` · Default SLO: `slo-data-freshness` · 31 instances
 
 ## Databases
 
-Owner: `data-engineering` · Default SLO: `slo-database-availability` · 95 instances
+Owner: `data-engineering` · Default SLO: `slo-database-availability` · 92 instances
 
 | Monitor | Signal | Detection | Env | Band | Pri | SLO | Teams | SNOW | Page | Runbook | Automation | Window | Grouping | Collapse |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -331,9 +331,6 @@ Owner: `data-engineering` · Default SLO: `slo-database-availability` · 95 inst
 | Database Instance Unavailable | availability | Service check | stage | standard | **P3** | `slo-database-availability` | yes | Task | — | `db-availability` | `diag-database` (diagnostic only) | last_3_checks | db_instance | — |
 | Database Backup Older Than RPO | backup_age | Threshold* | prod | critical | **P3** | `slo-database-availability` | yes | Task (sustained) | — | `db-backup-age` | `auto-compliance-ticket` (fully automatic) | last_4h | db_instance | — |
 | Database Backup Older Than RPO | backup_age | Threshold* | prod | standard | **P3** | `slo-database-availability` | yes | Task (sustained) | — | `db-backup-age` | `auto-compliance-ticket` (fully automatic) | last_4h | db_instance | — |
-| Database Connection Pool Saturation Forecast | saturation | Forecast | prod | critical | **P4** | `slo-database-availability` | yes | — | — | `db-availability` | `diag-database` (diagnostic only) | next_1d | db_instance | — |
-| Database Query Latency Anomaly | latency | Anomaly | prod | critical | **P4** | `slo-database-latency` | yes | — | — | `db-availability` | `diag-database` (diagnostic only) | last_30m | db_instance | — |
-| Database Replication Lag Beyond Limit | replication_lag | Threshold* | prod | critical | **P4** | `slo-database-availability` | yes | — | — | `db-availability` | `diag-database` (diagnostic only) | last_10m | db_instance | — |
 | Database Stopped Reporting Telemetry | telemetry_health | Threshold* | prod | baseline | **P4** | `slo-database-availability` | yes | — | — | `db-telemetry-loss` | `diag-database` (diagnostic only) | last_30m | db_instance | — |
 | Database Stopped Reporting Telemetry | telemetry_health | Threshold* | prod | critical | **P4** | `slo-database-availability` | yes | — | — | `db-telemetry-loss` | `diag-database` (diagnostic only) | last_30m | db_instance | — |
 | Database Stopped Reporting Telemetry | telemetry_health | Threshold* | prod | standard | **P4** | `slo-database-availability` | yes | — | — | `db-telemetry-loss` | `diag-database` (diagnostic only) | last_30m | db_instance | — |
@@ -440,7 +437,7 @@ Owner: `infrastructure-engineering` · Default SLO: `slo-infra-compute-availabil
 
 ## Integration Platforms & Batch
 
-Owner: `application-development` · Default SLO: `slo-integration-delivery` · 33 instances
+Owner: `application-development` · Default SLO: `slo-integration-delivery` · 61 instances
 
 | Monitor | Signal | Detection | Env | Band | Pri | SLO | Teams | SNOW | Page | Runbook | Automation | Window | Grouping | Collapse |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -456,6 +453,34 @@ Owner: `application-development` · Default SLO: `slo-integration-delivery` · 3
 | Batch Job Failed | job_failure | Threshold* | stage | standard | **P3** | `slo-batch-completion` | yes | Task | — | `batch-job-failure` | `remediate-rerun-job` (approval required) | last_2h | service, job_name | — |
 | Batch Output Not Produced In Window | freshness | Threshold* | prod | critical | **P1** | `slo-batch-completion` | yes | Incident P1 | PAGE | `batch-output-freshness` | `remediate-rerun-job` (approval required) | last_1h | service, job_name | — |
 | Batch Output Not Produced In Window | freshness | Threshold* | prod | standard | **P2** | `slo-batch-completion` | yes | Incident P2 | — | `batch-output-freshness` | `remediate-rerun-job` (approval required) | last_1h | service, job_name | — |
+| Control-M Job Blocked By A Failed Predecessor | job_failure | Threshold* | prod | critical | **P2** | `slo-integration-delivery` | yes | Incident P2 | PAGE | `controlm-dependency-failure` | `diag-dependency` (diagnostic only) | last_2h | folder, job_name | — |
+| Control-M Job Blocked By A Failed Predecessor | job_failure | Threshold* | prod | standard | **P3** | `slo-integration-delivery` | yes | Task (sustained) | — | `controlm-dependency-failure` | `diag-dependency` (diagnostic only) | last_2h | folder, job_name | — |
+| Control-M Job Blocked By A Failed Predecessor | job_failure | Threshold* | stage | critical | **P3** | `slo-integration-delivery` | yes | Task | — | `controlm-dependency-failure` | `diag-dependency` (diagnostic only) | last_2h | folder, job_name | — |
+| Control-M Job Blocked By A Failed Predecessor | job_failure | Threshold* | stage | standard | **P3** | `slo-integration-delivery` | yes | Task | — | `controlm-dependency-failure` | `diag-dependency` (diagnostic only) | last_2h | folder, job_name | — |
+| Control-M Exporter Stopped Reporting | telemetry_health | Threshold* | prod | critical | **P4** | `slo-batch-completion` | yes | — | — | `controlm-exporter-telemetry-loss` | `diag-batch-job` (diagnostic only) | last_30m | — | — |
+| Control-M Exporter Stopped Reporting | telemetry_health | Threshold* | prod | standard | **P4** | `slo-batch-completion` | yes | — | — | `controlm-exporter-telemetry-loss` | `diag-batch-job` (diagnostic only) | last_30m | — | — |
+| Control-M Exporter Stopped Reporting | telemetry_health | Threshold* | stage | critical | **P4** | `slo-batch-completion` | yes | — | — | `controlm-exporter-telemetry-loss` | `diag-batch-job` (diagnostic only) | last_30m | — | — |
+| Control-M Exporter Stopped Reporting | telemetry_health | Threshold* | stage | standard | **P4** | `slo-batch-completion` | yes | — | — | `controlm-exporter-telemetry-loss` | `diag-batch-job` (diagnostic only) | last_30m | — | — |
+| Control-M Job Ended Abnormally Fast | correctness | Threshold* | prod | critical | **P2** | `slo-batch-completion` | yes | Incident P2 | PAGE | `controlm-job-abnormally-short` | `diag-batch-job` (diagnostic only) | last_1h | folder, job_name | — |
+| Control-M Job Ended Abnormally Fast | correctness | Threshold* | prod | standard | **P3** | `slo-batch-completion` | yes | Task (sustained) | — | `controlm-job-abnormally-short` | `diag-batch-job` (diagnostic only) | last_1h | folder, job_name | — |
+| Control-M Job Ended Not OK | job_failure | Threshold* | prod | critical | **P2** | `slo-batch-completion` | yes | Incident P2 | PAGE | `controlm-job-failure` | `remediate-rerun-job` (approval required) | last_2h | folder, job_name | — |
+| Control-M Job Ended Not OK | job_failure | Threshold* | prod | standard | **P3** | `slo-batch-completion` | yes | Task (sustained) | — | `controlm-job-failure` | `remediate-rerun-job` (approval required) | last_2h | folder, job_name | — |
+| Control-M Job Ended Not OK | job_failure | Threshold* | stage | critical | **P3** | `slo-batch-completion` | yes | Task | — | `controlm-job-failure` | `remediate-rerun-job` (approval required) | last_2h | folder, job_name | — |
+| Control-M Job Ended Not OK | job_failure | Threshold* | stage | standard | **P3** | `slo-batch-completion` | yes | Task | — | `controlm-job-failure` | `remediate-rerun-job` (approval required) | last_2h | folder, job_name | — |
+| Control-M Job Overrunning While Still Running | latency | Threshold* | prod | critical | **P2** | `slo-batch-completion` | yes | Incident P2 | PAGE | `controlm-job-inflight-overrun` | `diag-batch-job` (diagnostic only) | last_5m | folder, job_name | — |
+| Control-M Job Overrunning While Still Running | latency | Threshold* | prod | standard | **P3** | `slo-batch-completion` | yes | Task (sustained) | — | `controlm-job-inflight-overrun` | `diag-batch-job` (diagnostic only) | last_5m | folder, job_name | — |
+| Control-M Job Overrunning While Still Running | latency | Threshold* | stage | critical | **P3** | `slo-batch-completion` | yes | Task | — | `controlm-job-inflight-overrun` | `diag-batch-job` (diagnostic only) | last_5m | folder, job_name | — |
+| Control-M Job Overrunning While Still Running | latency | Threshold* | stage | standard | **P3** | `slo-batch-completion` | yes | Task | — | `controlm-job-inflight-overrun` | `diag-batch-job` (diagnostic only) | last_5m | folder, job_name | — |
+| Control-M Job Has Not Succeeded Recently | freshness | Threshold* | prod | critical | **P1** | `slo-batch-completion` | yes | Incident P1 | PAGE | `controlm-job-last-success-stale` | `remediate-rerun-job` (approval required) | last_1h | folder, job_name | — |
+| Control-M Job Has Not Succeeded Recently | freshness | Threshold* | prod | standard | **P2** | `slo-batch-completion` | yes | Incident P2 | — | `controlm-job-last-success-stale` | `remediate-rerun-job` (approval required) | last_1h | folder, job_name | — |
+| Control-M Job Did Not Start By Its Deadline | schedule_miss | Threshold* | prod | critical | **P2** | `slo-integration-delivery` | yes | Incident P2 | PAGE | `controlm-job-late-start` | `remediate-rerun-job` (approval required) | last_15m | folder, job_name | — |
+| Control-M Job Did Not Start By Its Deadline | schedule_miss | Threshold* | prod | standard | **P3** | `slo-integration-delivery` | yes | Task (sustained) | — | `controlm-job-late-start` | `remediate-rerun-job` (approval required) | last_15m | folder, job_name | — |
+| Control-M Job Did Not Start By Its Deadline | schedule_miss | Threshold* | stage | critical | **P3** | `slo-integration-delivery` | yes | Task | — | `controlm-job-late-start` | `remediate-rerun-job` (approval required) | last_15m | folder, job_name | — |
+| Control-M Job Did Not Start By Its Deadline | schedule_miss | Threshold* | stage | standard | **P3** | `slo-integration-delivery` | yes | Task | — | `controlm-job-late-start` | `remediate-rerun-job` (approval required) | last_15m | folder, job_name | — |
+| Control-M Job Did Not Execute In Its Cycle | schedule_miss | Threshold* | prod | critical | **P1** | `slo-integration-delivery` | yes | Incident P1 | PAGE | `controlm-job-not-executed` | `remediate-rerun-job` (approval required) | last_1d | folder, job_name | — |
+| Control-M Job Did Not Execute In Its Cycle | schedule_miss | Threshold* | prod | standard | **P2** | `slo-integration-delivery` | yes | Incident P2 | — | `controlm-job-not-executed` | `remediate-rerun-job` (approval required) | last_1d | folder, job_name | — |
+| Control-M Job Runtime Drift | latency | Seasonal anomaly | prod | critical | **P3** | `slo-batch-completion` | yes | Task (sustained) | — | `controlm-job-runtime-drift` | `diag-batch-job` (diagnostic only) | last_4h | folder, job_name | — |
+| Control-M Job Runtime Drift | latency | Seasonal anomaly | prod | standard | **P3** | `slo-batch-completion` | yes | Task (sustained) | — | `controlm-job-runtime-drift` | `diag-batch-job` (diagnostic only) | last_4h | folder, job_name | — |
 | Integration Delivery Latency | latency | Rate of change | prod | critical | **P2** | `slo-integration-delivery` | yes | Incident P2 | PAGE | `integration-delivery-latency` | `diag-dependency` (diagnostic only) | last_30m | service, flow_name | — |
 | Integration Flow Failure Rate | error_rate | Anomaly | prod | critical | **P2** | `slo-integration-delivery` | yes | Incident P2 | PAGE | `integration-flow-failure` | `diag-dependency` (diagnostic only) | last_30m | service, flow_name | — |
 | Integration Flow Failure Rate | error_rate | Anomaly | prod | standard | **P3** | `slo-integration-delivery` | yes | Task (sustained) | — | `integration-flow-failure` | `diag-dependency` (diagnostic only) | last_30m | service, flow_name | — |

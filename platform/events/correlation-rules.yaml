@@ -59,6 +59,38 @@ rules:
     join_on: [env]
     behavior: suppress_children
 
+  - id: scheduler-job-suppresses-downstream-data-symptoms
+    description: >
+      Control-M topology. A job that is still running, started late, failed or
+      is blocked by a failed predecessor is the CAUSE of everything downstream
+      of it: the pipeline that never started, the load that never landed, the
+      data product that went stale. Without this rule the three alerts arrive
+      as three separate incidents in three different domains, and the freshness
+      alert — which is the loudest and the most symptomatic — becomes the
+      parent, sending the data team to look at a pipeline that is behaving
+      perfectly while the actual cause is a job in a batch folder.
+
+      Root-cause ranking cannot do this on its own: it ranks freshness ABOVE
+      latency, which is right everywhere else and exactly backwards here, where
+      the "latency" is a scheduler job holding the whole chain open.
+    parent_archetypes:
+      [controlm-job-inflight-overrun, controlm-job-late-start,
+       controlm-job-failure, controlm-dependency-failure,
+       controlm-job-not-executed]
+    child_domains: [data, integration]
+    join_on: [env]
+    behavior: suppress_children
+    # Wider than the global 5-minute window ON PURPOSE. The causal chain is
+    # slow by nature: the job overruns, the pipeline that waits on it misses
+    # its own start, and the data product only reads stale some minutes after
+    # that. Five minutes would split one incident into three.
+    lookback_seconds: 3600
+    # The parent is a P2 scheduler symptom; the stale data product it caused is
+    # a P1 customer-impact alert. Suppressing the child must not quietly
+    # downgrade the incident, so the group keeps the most severe priority
+    # among its members while keeping the job as the root cause.
+    inherit_child_priority: true
+
   - id: maintenance-window-suppression
     description: >
       Any event arriving inside an active downtime schedule is tagged

@@ -11,6 +11,22 @@ on:
     - cron: "0 6 * * *"     # drift, nightly
     - cron: "0 7 * * 1-5"   # coverage & quality, weekday mornings
   workflow_dispatch:
+    inputs:
+      purge_unmanaged:
+        description: >-
+          Delete catalog entries and runbook notebooks this repository does not
+          manage. Leave false to report only. Destructive; read the dry-run
+          report from a previous run first.
+        type: boolean
+        default: false
+      max_delete:
+        description: >-
+          Cap on objects removed in one purge. The default refuses a large
+          sweep on purpose: a reconciler that deletes hundreds of objects
+          because a path changed is worse than the drift it was fixing. Raise
+          it only after reading a dry-run report that says how many and which.
+        type: string
+        default: "40"
 # Each cron fires ONE job (gated per job below) — GitHub itself triggers the
 # whole workflow on every schedule, so without the gates both jobs would run
 # on both crons. workflow_dispatch runs both.
@@ -121,19 +137,80 @@ jobs:
           python profile_engine.py
           python coverage_report.py --live --gate governance
 
-      - name: Monitor quality scorecard
+      # THE MIRROR-IMAGE QUESTION (§6). Coverage asks whether everything we
+      # declared is deployed. This asks whether everything deployed is
+      # something we declared — catalog entries and runbooks left behind by
+      # pilots, superseded repositories and vendor agents, each of which looks
+      # exactly like a real one in the UI.
+      #
+      # Reports by default; deletes only when a human dispatches the workflow
+      # with purge_unmanaged. It never gates: drift in someone else's objects
+      # is not a reason to fail this repository's governance run.
+      - name: "Catalog reconciliation — entries and runbooks nothing owns (§6)"
+        continue-on-error: true
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        run: |
+          cd tools
+          python catalog_reconcile.py \
+            --max-delete "${{ (github.event_name == 'workflow_dispatch' && inputs.max_delete) || '40' }}" \
+            ${{ (github.event_name == 'workflow_dispatch' && inputs.purge_unmanaged) && '--delete' || '' }}
+
+      # Fleet compliance decays exactly the way coverage does — an agent that
+      # stops, a VM built without the extension, an integration switched off
+      # during a change — so it is measured on the same nightly cadence.
+      # REPORT-ONLY until the first rollout wave completes; the threshold and
+      # the condition for turning it into a gate live in
+      # platform/policy/agent_profiles.yaml → compliance.ratio.report_targets.
+      - name: Fleet compliance — agent, integration and tag coverage
         if: always()
-        run: cd tools && python monitor_scorecard.py --min-fleet-score 85 --max-failing 0
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        run: cd tools && python fleet_compliance.py --live
+
+      # `--enforce-entity-minimums` is set HERE and not in deploy.yml on purpose:
+      # the deploy gate keeps meaning exactly what it meant before §41 (fleet
+      # average >= 85, zero F), while erosion of a per-kind score is caught by
+      # this run and by the test suite. Changing what a deploy gate means
+      # without anybody deciding to change it is how a gate stops being trusted.
+      - name: Monitor quality scorecard (fleet gate + per-entity-kind minimums)
+        if: always()
+        run: |
+          cd tools && python monitor_scorecard.py --min-fleet-score 85 \
+            --max-failing 0 --enforce-entity-minimums
+
+      # The five report families (§34). NOT a gate — coverage and the scorecard
+      # are the gates, and a third one that fires on a review backlog would only
+      # teach people to ignore all three. This publishes the queue the weekly
+      # reliability review works from.
+      - name: Report families (executive, operations, platform, database, Azure)
+        if: always()
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        run: cd tools && python reports.py --live
 
       - name: Publish the report to the run summary
         if: always()
         run: |
+          if [ -f generated/fleet_compliance.md ]; then
+            cat generated/fleet_compliance.md >> "$GITHUB_STEP_SUMMARY"
+          fi
           if [ -f generated/coverage_report.md ]; then
             cat generated/coverage_report.md >> "$GITHUB_STEP_SUMMARY"
           else
             echo "⚠️ No coverage report was generated — the measurement step " \
                  "failed before producing output. See the earlier step's log." \
                  >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Publish the report catalog to the run summary
+        if: always()
+        run: |
+          if [ -f generated/reports.md ]; then
+            cat generated/reports.md >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - uses: actions/upload-artifact@v4

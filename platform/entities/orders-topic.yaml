@@ -1,0 +1,29 @@
+# WORKED EXAMPLE — QUEUE.
+#
+# An Azure Service Bus topic. The messaging archetypes
+# (platform/policy/archetypes/azure-messaging.yaml) already monitor Service Bus
+# by namespace; what was missing was an OWNED CATALOG OBJECT to attach that
+# telemetry, that ownership and that dependency edge to. Without it,
+# `dependencies: [orders-topic]` on the consumer pointed at nothing.
+#
+# No `service_archetype`: the archetype vocabulary describes what a *service*
+# does, and there is no `queue` member (global.yaml tag_vocabulary). The queue
+# itself is covered by the messaging domain's archetypes through its platform
+# and namespace tags; `event_consumer` belongs to the consumer, not the topic.
+# That asymmetry is deliberate and is why `requires_archetype: false` for this
+# kind in platform/policy/entity_kinds.yaml.
+entity:
+  kind: queue
+  name: orders-topic
+  display_name: Orders (Service Bus topic)
+  team: cloud-engineering
+  criticality: tier1
+  platform: azure_service_bus
+  domain: messaging
+  region: eastus2
+  description: Azure Service Bus topic carrying order lifecycle events to subscribers.
+  envs: [dev, qa, stage, prod]
+  env: prod
+  lifecycle: production
+  slo:
+    scope: domain

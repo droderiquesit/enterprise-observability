@@ -1,0 +1,77 @@
+# =============================================================================
+# AZURE SQL AND COSMOS DB — the agentless model  (§5)
+#
+# THIS PROFILE INSTALLS NOTHING. It exists so the question "where is the Agent
+# config for Azure SQL?" has an answer in the place someone will look, instead
+# of being answered by silence and a hand-rolled VM.
+#
+# There is no host. Azure SQL Database and Cosmos DB are PaaS: Microsoft owns
+# the operating system and does not expose it, so there is nowhere to install a
+# Datadog Agent and no supported way to try. Telemetry arrives by two paths
+# instead, and which one carries which signal matters when something is
+# missing.
+#
+#   1. AZURE INTEGRATION (agentless, org-wide). Resource-level metrics through
+#      Azure Monitor: DTU/vCore utilisation, storage, connection counts,
+#      deadlocks, RU consumption, throttling, replication latency, regional
+#      availability. This is what the azuresql-* and cosmos-* archetypes read.
+#      It is configured once per subscription in Azure, not per database, and
+#      it is NOT managed by this folder — it is Terraform in stacks/foundation.
+#
+#   2. CENTRALIZED DATABASE POLLER (Agent, optional). Query-level DBM for Azure
+#      SQL only, from the database-poller profile reaching the logical server
+#      over TCP 1433. This is the ONLY part of Azure SQL monitoring that
+#      involves an Agent, and it is opt-in per environment because DBM is
+#      separately licensed.
+#
+# Cosmos DB has no equivalent to (2). There is no SQL endpoint to poll and no
+# DBM support; everything comes from the Azure integration. A "Cosmos DB
+# poller" would be a host running nothing.
+# =============================================================================
+version: 2
+
+azure_sql:
+  telemetry_source: azure_integration
+  agent_involved: false
+  dbm_available: true
+  dbm_via: database-poller          # profile that carries it when enabled
+  # Signals covered by the Azure integration alone, with no Agent anywhere:
+  covers:
+    - availability
+    - dtu_or_vcore_utilisation
+    - storage_utilisation
+    - connection_count_and_failures
+    - deadlocks
+    - firewall_blocked_connections
+    - tempdb_and_log_utilisation
+  requires_agent_for:
+    - query_level_performance      # DBM only
+    - execution_plans              # DBM only
+
+cosmos_db:
+  telemetry_source: azure_integration
+  agent_involved: false
+  dbm_available: false
+  covers:
+    - availability
+    - request_rate
+    - server_side_latency
+    - normalized_ru_consumption
+    - request_throttling_429
+    - replication_latency
+    - storage_growth
+    - partition_key_distribution
+    - regional_availability_and_failover
+  # Stated explicitly because it is the thing people try: there is no
+  # supported way to run a Datadog Agent inside Cosmos DB, and no host to
+  # attach one to.
+  requires_agent_for: []
+
+# The integration itself is enabled per Azure subscription and is a Terraform
+# concern, not an Agent concern. Named here so the boundary is not ambiguous.
+managed_elsewhere:
+  what: Azure integration registration and subscription scope
+  where: stacks/foundation (Terraform), Azure portal / az CLI
+  why: It is an Azure resource, configured once per subscription. Managing it
+    from a host-configuration folder would put a subscription-wide setting in a
+    per-node system and give two owners one switch.

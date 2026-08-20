@@ -18,6 +18,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: esxi_host
+    telemetry: [vmware_integration]
     selector: ""
     query: 'max(last_10m):sum:vsphere.host.status{__SCOPE__,status:disconnected} by {vsphere_cluster,vsphere_host} >= 1'
     thresholds: { critical: 1 }
@@ -26,6 +27,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-vmware-cluster-availability
+    slo_relation: sli_producing
     runbook: vmware-host-disconnected
     workflow: diag-vmware
     failure_domain: virtualization
@@ -40,6 +42,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: vsphere_cluster
+    telemetry: [vmware_integration]
     selector: ""
     query: 'min(last_15m):avg:vsphere.cluster.failover_capacity{__SCOPE__} by {vsphere_cluster} < 1'
     thresholds: { critical: 1, warning: 2 }
@@ -48,6 +51,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-vmware-cluster-availability
+    slo_relation: sli_producing
     runbook: vmware-cluster-ha-degraded
     workflow: diag-vmware
     failure_domain: vmware-cluster
@@ -63,6 +67,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: vsphere_datastore
+    telemetry: [vmware_integration]
     selector: ""
     query: "max(next_1w):forecast(avg:vsphere.datastore.disk.used{__SCOPE__} by {vsphere_datastore} / avg:vsphere.datastore.disk.capacity{__SCOPE__} by {vsphere_datastore}, 'linear', 1, interval='60m', history='2w') > 0.9"
     thresholds: { critical: 0.9, warning: 0.85 }
@@ -71,6 +76,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-vmware-cluster-availability
+    slo_relation: slo_supporting
     runbook: vmware-datastore-capacity-forecast
     workflow: auto-capacity-ticket
     failure_domain: datastore
@@ -86,6 +92,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: vsphere_datastore
+    telemetry: [vmware_integration]
     selector: ""
     query: "avg(last_30m):anomalies(avg:vsphere.datastore.totalLatency{__SCOPE__} by {vsphere_datastore}, 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -94,6 +101,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-vmware-cluster-availability
+    slo_relation: slo_impacting
     runbook: vmware-datastore-latency
     workflow: diag-vmware
     failure_domain: datastore
@@ -106,6 +114,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: esxi_host
+    telemetry: [vmware_integration]
     selector: ""
     query: 'avg(last_30m):avg:vsphere.cpu.ready{__SCOPE__} by {vsphere_cluster,vsphere_host} > 10'
     thresholds: { critical: 10, warning: 5 }
@@ -114,6 +123,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-vmware-cluster-availability
+    slo_relation: slo_supporting
     runbook: vmware-cpu-ready-contention
     workflow: diag-vmware
     failure_domain: virtualization
@@ -130,6 +140,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: esxi_host
+    telemetry: [vmware_integration]
     selector: ""
     query: 'avg(last_30m):avg:vsphere.mem.swapinRate{__SCOPE__} by {vsphere_cluster,vsphere_host} > 0'
     thresholds: { critical: 0 }
@@ -138,6 +149,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-vmware-cluster-availability
+    slo_relation: slo_supporting
     runbook: vmware-memory-ballooning
     workflow: diag-vmware
     failure_domain: virtualization
@@ -154,6 +166,7 @@ archetypes:
     detection: event
     monitor_type: event-v2 alert
     resource_type: vsphere_vm
+    telemetry: [vmware_integration]
     selector: ""
     query: 'events("source:vsphere __ESCOPE__ \"powered off\"").rollup("count").by("vsphere_cluster").last("15m") >= 1'
     thresholds: { critical: 1 }
@@ -162,6 +175,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-vmware-cluster-availability
+    slo_relation: slo_impacting
     runbook: vmware-vm-powered-off-unexpectedly
     workflow: diag-vmware
     failure_domain: virtualization
@@ -175,6 +189,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: vsphere_vm
+    telemetry: [custom_vmware_inventory_export]
     selector: ""
     query: 'max(last_6h):max:acme.vmware.snapshot_age_days{__SCOPE__} by {vsphere_cluster,vm_name} > 7'
     thresholds: { critical: 7, warning: 3 }
@@ -183,6 +198,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-vmware-cluster-availability
+    slo_relation: slo_supporting
     runbook: vmware-snapshot-age
     workflow: auto-capacity-ticket
     failure_domain: datastore

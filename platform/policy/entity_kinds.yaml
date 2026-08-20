@@ -1,0 +1,208 @@
+# =============================================================================
+# LAYER 2a — ENTITY KIND
+#
+# WHY this layer exists. Until Phase 1 every catalog object was emitted as a
+# Datadog *Service* (`datadog_service_definition_yaml`, schema v2.2), because
+# that is the only object the v2 catalog has. The result is the defect the
+# audit records in §5: an Azure SQL database, a Service Bus topic and a VM all
+# appeared in the Software Catalog as "services". Ownership pages the wrong
+# rota, dependency maps are nonsense, and Datadog Scorecards (§41) would grade
+# a database against service criteria it can never meet.
+#
+# This file is the ONE place that answers two questions:
+#   1. which entity kinds this platform accepts in platform/entities/, and
+#   2. what each one becomes in Datadog.
+# tools/entity_resolver.py and modules/catalog_entity both READ it; neither
+# re-implements the other (same rule as every other policy file — see the
+# module docstring in tools/obs_common.py).
+# =============================================================================
+version: 1
+
+# -----------------------------------------------------------------------------
+# What Datadog actually accepts.
+#
+# CONSTRAINT DISCOVERED (verified, not assumed): the v3 entity schema is a
+# discriminated union with exactly FIVE members. Checked against the generated
+# API client (`datadog-api-client-go`, `EntityV3` → EntityV3Service,
+# EntityV3Datastore, EntityV3Queue, EntityV3System, EntityV3API) and against
+# the pinned provider (DataDog/datadog 3.91.0), whose `datadog_software_catalog`
+# resource takes one free-form `entity` string and validates only that
+# `apiVersion` is >= v3 — it does NOT validate `kind`, so a bad kind is a
+# runtime API rejection, not a plan-time one. That is why the list is pinned
+# here and linted in tools/validate_policy.py.
+#
+# The product documentation additionally mentions `ui` and `library` kinds.
+# They are NOT in the typed union, so nothing in this repository emits them;
+# `frontend_app` therefore lands on `service` (see below). Revisit when the
+# API client grows the variants.
+# -----------------------------------------------------------------------------
+datadog_entity_kinds: [service, datastore, queue, system, api]
+
+# -----------------------------------------------------------------------------
+# The kinds a team may declare, and how each resolves.
+#
+#   datadog_kind          what `kind:` becomes in the emitted v3 document;
+#                         null means "this is not a Datadog catalog entity"
+#   emits                 false = deliberately produces no Datadog object
+#   spec_depends_on       the kind's spec carries `dependsOn` (service/API-shaped
+#                         only — EntityV3DatastoreSpec and EntityV3QueueSpec
+#                         carry componentOf/lifecycle/tier/type and nothing
+#                         else, so a dependency declared on a datastore would
+#                         be silently dropped by the API)
+#   spec_component_of     the kind's spec carries `componentOf`
+#   spec_components       the kind's spec carries `components` (system only)
+#   requires_archetype    a service_archetype must be declared, because the
+#                         monitor packs are selected from it
+#   performance_data      emit `datadog.performanceData.tags: [service:<name>]`,
+#                         i.e. this kind's telemetry is keyed by the `service`
+#                         tag. A datastore's telemetry is keyed by db_instance
+#                         and a queue's by namespace, so they are false.
+# -----------------------------------------------------------------------------
+entity_kinds:
+
+  service:
+    datadog_kind: service
+    emits: true
+    spec_depends_on: true
+    spec_component_of: true
+    spec_components: false
+    requires_archetype: true
+    performance_data: true
+    description: >
+      Something we deploy and run that serves requests or processes work —
+      an API, a worker, a consumer, a scheduled job.
+
+  system:
+    datadog_kind: system
+    emits: true
+    spec_depends_on: false
+    spec_component_of: false
+    spec_components: true
+    requires_archetype: false
+    performance_data: false
+    description: >
+      A named business capability made of other entities. The only kind that
+      has `components`, and the entity a progressive drilldown (§48) starts
+      from. Systems own no telemetry of their own — they aggregate.
+
+  datastore:
+    datadog_kind: datastore
+    emits: true
+    spec_depends_on: false
+    spec_component_of: true
+    spec_components: false
+    requires_archetype: true
+    performance_data: false
+    description: >
+      A database, cache or search cluster. Azure SQL, SQL Server, Cosmos DB,
+      Snowflake and Redis in this estate.
+
+  queue:
+    datadog_kind: queue
+    emits: true
+    spec_depends_on: false
+    spec_component_of: true
+    spec_components: false
+    requires_archetype: false
+    performance_data: false
+    description: >
+      A queue, topic or stream — Azure Service Bus and Event Hub here. NOTE
+      the distinction the old model could not express: the queue is a `queue`,
+      the thing reading it is a `service` with archetype `event_consumer`.
+
+  api:
+    datadog_kind: api
+    emits: true
+    spec_depends_on: false
+    spec_component_of: true
+    spec_components: false
+    requires_archetype: false
+    performance_data: false
+    description: >
+      An interface CONTRACT (OpenAPI/gRPC, or an endpoint watched from outside
+      the perimeter), implemented by one or more services. This is not "an HTTP
+      service": an HTTP service is `kind: service`, archetype `api`.
+
+  frontend_app:
+    datadog_kind: service
+    emits: true
+    spec_depends_on: true
+    spec_component_of: true
+    spec_components: false
+    requires_archetype: true
+    performance_data: true
+    spec_type_override: web
+    description: >
+      A browser-delivered application (RUM, Core Web Vitals).
+    note: >
+      CONSTRAINT: the v3 union has no frontend/ui variant, so this emits
+      `kind: service` with `spec.type: web` and carries the tag
+      `entity_kind:frontend_app`. That tag is what a catalog census or a
+      Scorecard rule filters on until Datadog ships a UI kind. It is a real
+      divergence from §5, which names "Frontend App" as an entity type.
+
+  repository:
+    datadog_kind: null
+    emits: false
+    spec_depends_on: false
+    spec_component_of: false
+    spec_components: false
+    requires_archetype: false
+    performance_data: false
+    description: >
+      A source repository, declared so that ownership of CODE is reviewed in
+      the same YAML as ownership of runtime.
+    note: >
+      CONSTRAINT: Datadog has no repository entity kind. Repositories reach the
+      catalog through the source-code integration and through
+      `datadog.codeLocations` / a `repo` link on the entity that owns them.
+      Declaring one here therefore produces NO Datadog object — it produces a
+      repo link on its owner. §5 names "Repository" as an entity type; the API
+      does not have one, and inventing a custom kind would create an object
+      no Datadog feature reads.
+
+# -----------------------------------------------------------------------------
+# service_archetype → entity kind. DETERMINISTIC and total: every value in the
+# `service_archetype` vocabulary (platform/policy/global.yaml) appears exactly
+# once, so kind inference never guesses and never depends on file order.
+#
+# `null` means the archetype is NOT a catalog entity. infrastructure_resource
+# is the important one: a VM, an ESXi host, a network device or a cluster node
+# is INFRASTRUCTURE. It is a host in Datadog's infrastructure list, monitored
+# by the host-core pack through tags; making it a catalog entity is exactly the
+# §5 defect. Declaring one in platform/entities/ is a lint error, not a
+# silently-created Service.
+# -----------------------------------------------------------------------------
+kind_by_service_archetype:
+  api: service
+  web: frontend_app
+  worker: service
+  event_consumer: service
+  batch_job: service
+  scheduled_job: service
+  integration_flow: service
+  saas_dependency: service
+  external_endpoint: api
+  platform_service: service
+  datastore: datastore
+  infrastructure_resource: null
+
+# -----------------------------------------------------------------------------
+# SLO scope — the `slo.scope` key on an entity. DOES this entity get its own
+# SLO, or is it covered by its domain's?
+#
+# The vocabulary is NOT invented here: it is the `slo.scope` already declared
+# per tier in platform/policy/tiers.yaml. An entity may only narrow or restate
+# its tier's scope.
+#
+# THIS IS NOT `slo.profile`. The two keys were briefly the same key, and the
+# collision was silent in the worst way: an entity saying `domain` — meaning
+# "I am covered by the database domain SLO, do not build me one" — was read by
+# the resolver as "this entity declared an slo: block, therefore it opted IN to
+# a per-service SLO", which is the exact opposite. Terraform materialized four
+# such SLOs while the coverage report counted one, and neither side was wrong
+# about its own half. `scope` answers WHETHER; `profile` (below, vocabulary in
+# slo_profiles.yaml) answers WHICH OBJECTIVES, and only when scope is
+# per_service.
+# -----------------------------------------------------------------------------
+slo_scopes: [per_service, domain, none]

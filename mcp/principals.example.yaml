@@ -1,0 +1,58 @@
+# =============================================================================
+# MCP PRINCIPAL REGISTRY — template.
+#
+# Copy to `mcp/principals.yaml` (gitignored) or point OBS_MCP_PRINCIPALS at a
+# path outside the repository. The real file is NOT committed, because the set
+# of people who can open monitoring pull requests is operational configuration,
+# not documentation.
+#
+# NO SECRET LIVES IN THIS FILE. `token_sha256` is the SHA-256 digest of the
+# bearer token the caller exports as OBS_MCP_TOKEN. Mint one with:
+#
+#     python3 -c "import secrets,hashlib; t=secrets.token_urlsafe(32); \
+#       print('token:', t); print('sha256:', hashlib.sha256(t.encode()).hexdigest())"
+#
+# `role` MUST be one of the platform's four Datadog roles (see
+# stacks/foundation/main.tf → module "rbac"). Inventing a fifth here would
+# recreate exactly the parallel permission universe that module refuses to
+# build. The MCP capability grant for each role is in mcp/obs_governance.py and
+# is always a subset of what the role already holds in Datadog.
+#
+# `environments` scopes Act mode: which environments this principal may propose
+# changes for. It does NOT restrict Ask mode — an auditor who can only read
+# should still be able to read everything, and a responder who cannot change
+# production still has to be able to see it.
+#
+# `approver: true` means this principal may be NAMED as the second person on a
+# production change. It never lets them approve their own.
+# =============================================================================
+version: 1
+
+principals:
+
+  sre-oncall:
+    display: SRE on-call (read-only console)
+    role: viewer-auditor
+    environments: []
+    token_sha256: "REPLACE_ME"
+
+  incident-commander:
+    display: Incident commander
+    role: incident-responder
+    # Can dry-run "what would this change do" anywhere; can propose nowhere,
+    # because incident-responder holds no `propose` capability at all.
+    environments: []
+    token_sha256: "REPLACE_ME"
+
+  o11y-engineer:
+    display: Observability engineer
+    role: observability-engineer
+    environments: [dev, qa, stage]
+    token_sha256: "REPLACE_ME"
+
+  o11y-lead:
+    display: Observability platform lead
+    role: platform-admin
+    environments: [dev, qa, stage, prod]
+    approver: true
+    token_sha256: "REPLACE_ME"

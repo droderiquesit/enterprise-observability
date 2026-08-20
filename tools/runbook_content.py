@@ -784,8 +784,13 @@ _FAMILY_BY_RESOURCE = {
                  "sqlserver_instance", "availability_group", "snowflake_account",
                  "snowflake_warehouse"],
     "messaging": ["queue", "stream", "stream_consumer", "messaging_namespace"],
+    # Control-M jobs sit in the `data` family because the investigation surface
+    # is identical to any other scheduled work — run history, per-run duration,
+    # the job's own output log. `controlm_server` is the exporter/Enterprise
+    # Manager side of the same integration: when it is the subject, the run
+    # history is exactly what is missing, and the pointer still leads there.
     "data": ["pipeline", "data_product", "batch_job", "scheduled_job", "integration_flow",
-             "backup_job"],
+             "backup_job", "controlm_job", "controlm_server"],
     "cloud": ["azure_subscription", "azure_app_service", "azure_app_service_plan", "azure_function",
               "azure_storage", "azure_application_gateway", "azure_key_vault", "azure_load_balancer",
               "azure_front_door", "azure_cdn", "azure_apim",

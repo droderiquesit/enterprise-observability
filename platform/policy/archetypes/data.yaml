@@ -18,6 +18,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: data_product
+    telemetry: [custom_data_pipeline_metrics]
     selector: ""
     query: 'max(last_30m):max:acme.data.minutes_since_update{__SCOPE__} by {data_product,pipeline} > 120'
     thresholds: { critical: 120, warning: 60 }
@@ -26,6 +27,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-data-freshness
+    slo_relation: sli_producing
     runbook: pipeline-output-stale
     workflow: diag-data-pipeline
     failure_domain: data-pipelines
@@ -41,6 +43,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: pipeline
+    telemetry: [custom_data_pipeline_metrics]
     selector: ""
     # Grouped by data_product AND pipeline so this can be composited with the
     # freshness archetype — Datadog only evaluates a composite per group when
@@ -54,6 +57,7 @@ archetypes:
     envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-data-freshness
+    slo_relation: slo_supporting
     runbook: pipeline-job-failure
     workflow: remediate-rerun-job
     failure_domain: data-pipelines
@@ -67,6 +71,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: pipeline
+    telemetry: [custom_data_pipeline_metrics]
     selector: ""
     query: "avg(last_2h):anomalies(avg:acme.data.pipeline.duration_seconds{__SCOPE__} by {pipeline}, 'robust', 3, direction='above', seasonality='daily') >= 1"
     thresholds: { critical: 1.0 }
@@ -75,6 +80,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-data-freshness
+    slo_relation: slo_supporting
     runbook: pipeline-duration-anomaly
     workflow: diag-data-pipeline
     failure_domain: data-pipelines
@@ -91,6 +97,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: data_product
+    telemetry: [custom_data_pipeline_metrics]
     selector: ""
     query: "avg(last_2h):anomalies(sum:acme.data.rows_written{__SCOPE__} by {data_product}.as_count(), 'robust', 3, seasonality='weekly') >= 1"
     thresholds: { critical: 1.0 }
@@ -99,6 +106,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-data-freshness
+    slo_relation: sli_producing
     runbook: pipeline-volume-anomaly
     workflow: diag-data-pipeline
     failure_domain: data-quality
@@ -114,6 +122,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: data_product
+    telemetry: [custom_data_pipeline_metrics]
     selector: ""
     query: 'sum(last_2h):sum:acme.data.quality_checks{__SCOPE__,result:failed} by {data_product,check_name}.as_count() >= 1'
     thresholds: { critical: 1 }
@@ -122,6 +131,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-data-freshness
+    slo_relation: sli_producing
     runbook: data-quality-check-failure
     workflow: diag-data-pipeline
     failure_domain: data-quality
@@ -135,6 +145,7 @@ archetypes:
     detection: event
     monitor_type: event-v2 alert
     resource_type: data_product
+    telemetry: [custom_data_pipeline_metrics]
     selector: ""
     query: 'events("source:acme-data __ESCOPE__ tags:\"event:schema_drift\"").rollup("count").by("data_product").last("1h") >= 1'
     thresholds: { critical: 1 }
@@ -143,6 +154,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-data-freshness
+    slo_relation: diagnostic
     runbook: data-schema-drift
     workflow: diag-data-pipeline
     failure_domain: data-quality
@@ -156,6 +168,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: warehouse
+    telemetry: [custom_data_pipeline_metrics]
     selector: ""
     query: "max(next_1d):forecast(avg:acme.warehouse.queued_queries{__SCOPE__} by {warehouse}, 'linear', 1, interval='30m', history='1w') > 50"
     thresholds: { critical: 50, warning: 25 }
@@ -164,6 +177,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-data-freshness
+    slo_relation: slo_supporting
     runbook: warehouse-queue-saturation
     workflow: remediate-scale-workload
     failure_domain: data-warehouse
@@ -176,6 +190,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: stream_consumer
+    telemetry: [custom_messaging_client_metrics]
     selector: ""
     query: "max(next_1d):forecast(avg:acme.streaming.consumer_lag_records{__SCOPE__} by {stream,consumer_group}, 'linear', 1, interval='15m', history='1d') > 1000000"
     thresholds: { critical: 1000000, warning: 250000 }
@@ -184,6 +199,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-data-freshness
+    slo_relation: slo_supporting
     runbook: streaming-consumer-lag-forecast
     workflow: remediate-scale-workload
     failure_domain: data-pipelines
@@ -196,6 +212,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: pipeline
+    telemetry: [custom_data_pipeline_metrics]
     selector: ""
     query: 'sum(last_2h):sum:acme.data.pipeline.runs{__SCOPE__}.as_count() < 1'
     thresholds: { critical: 1 }
@@ -204,6 +221,7 @@ archetypes:
     envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-data-freshness
+    slo_relation: slo_supporting
     runbook: data-telemetry-loss
     workflow: diag-data-pipeline
     failure_domain: data-pipelines

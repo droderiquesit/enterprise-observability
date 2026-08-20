@@ -1,0 +1,37 @@
+# =============================================================================
+# LAYER 5 — CRITICALITY. What changes because the thing matters more.
+#
+# Tier vocabulary is platform/policy/tiers.yaml. This file does not invent
+# tiers and does not restate their meaning; it says only what a tier changes
+# about AGENT configuration.
+# =============================================================================
+version: 2
+
+criticality:
+  tier0:
+    # Tightest collection the Agent supports without becoming a load source
+    # itself. A tier0 outage is measured in seconds and a 15s interval hides
+    # a third of a one-minute incident.
+    datadog_yaml: { min_collection_interval: 10 }
+    apm_enabled: true
+    dbm_enabled: true
+    process_arguments: false      # still stripped — tier does not relax privacy
+    validation_required: true     # DD-Agent-Validate must pass before the ring advances
+
+  tier1:
+    datadog_yaml: { min_collection_interval: 15 }
+    apm_enabled: true
+    dbm_enabled: true
+    validation_required: true
+
+  tier2:
+    datadog_yaml: { min_collection_interval: 30 }
+    apm_enabled: false
+    dbm_enabled: false
+    validation_required: false
+
+  tier3:
+    datadog_yaml: { min_collection_interval: 60 }
+    apm_enabled: false
+    dbm_enabled: false
+    validation_required: false

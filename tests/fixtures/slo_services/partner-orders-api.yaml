@@ -1,0 +1,40 @@
+# §59 PROOF, service 1 of 2.
+#
+# This file and internal-orders-api.yaml are IDENTICAL everywhere the platform
+# looks when it decides what to MONITOR: same service_archetype, so the same
+# packs; same tier, so the same alert band, priorities, routing and support
+# model; same team, same environments. They differ in exactly one place — the
+# promise — and this one is under a partner contract.
+#
+# They live in tests/fixtures rather than platform/services for the same reason
+# platform/monitors/ is empty: a file in the registry is DEPLOYED, and a proof
+# should not create objectives in a real Datadog organization.
+service:
+  name: partner-orders-api
+  team: application-development
+  tier: tier0
+  service_archetype: api
+  description: Partner-facing order submission API under a commercial SLA.
+  envs: [dev, qa, stage, prod]
+  dependencies: [orders-sql, identity-api]
+  slo:
+    scope: per_service
+    profile: api-critical
+    objectives:
+      availability:
+        # Beats the profile (99.95) and the tier (99.95). Nothing sits above a
+        # service override, which is exactly why it has to carry its reason.
+        target: 99.99
+        rationale: >
+          Contractual: the partner agreement commits to four nines with service
+          credits per breached hour (CONTRACT-4471). The tier target is the
+          enterprise floor, not this service's promise.
+      latency:
+        threshold:
+          # Only the boundary moves. `statistic` and `unit` are inherited from
+          # the entity type, which is the point of merging thresholds field-wise
+          # rather than replacing them.
+          value: 200
+        rationale: >
+          The partner's own timeout is 250ms; a p99 above 200ms produces their
+          incident, not ours, and we find out from their support desk.

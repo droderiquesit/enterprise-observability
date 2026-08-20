@@ -194,19 +194,63 @@ slos:
        snowflake-connectivity-failure]
     burn_alerts: [fast, medium, slow]
 
+  # Rebuilt as a MONITOR SLO, for the same reason slo-database-availability was.
+  # It used to be a metric SLO over `postgresql.queries.count`, left behind when
+  # the database domain was rebuilt for the real estate (Azure SQL, SQL Server,
+  # Cosmos DB, Snowflake — no PostgreSQL anywhere). Live, it read:
+  #
+  #   state: no_data — "overall denominator (total events) is 0"
+  #
+  # A denominator that is permanently zero is the worst shape an objective can
+  # take: it never breaches, never burns budget, and never alerts, so it reads
+  # as a promise being kept. It was measuring an engine this estate does not run.
+  #
+  # There is no cross-engine "fast queries / total queries" ratio to replace it
+  # with — Azure SQL, Cosmos and Snowflake each expose latency differently — so
+  # the objective is expressed the way the platform already expresses
+  # multi-engine database health: over the latency monitors themselves.
+  # TWO-PHASE MIGRATION — PHASE A. `burn_alerts` is deliberately empty; restore
+  # it to [slow] in the next release and delete this note.
+  #
+  # Changing `type` from metric to monitor forces Terraform to REPLACE the SLO,
+  # and Datadog refuses to delete an SLO a monitor still references:
+  #
+  #   409 Conflict: slo d0fb22d3f0fb59669... is referenced in monitor_id: 314427621
+  #
+  # 314427621 is this objective's OWN burn-rate monitor. Its query embeds the
+  # SLO id — burn_rate("d0fb...").over("30d") — so the reference is a literal
+  # inside the monitor, not a soft association. Leaving `burn_alerts: [slow]`
+  # unchanged meant Terraform saw no reason to touch that monitor, so the SLO
+  # destroy ran first and always failed.
+  #
+  # Emptying `burn_alerts` is what fixes the ORDER. The burn monitor is built
+  # from `module.slos.slo_datadog_ids[slo_id]` (stacks/coverage/slos.tf), which
+  # is a real dependency edge, so Terraform destroys the dependent monitor
+  # before it destroys the SLO it depends on. The replace then finds nothing
+  # referencing it.
+  #
+  # PHASE B is one line: `burn_alerts: [slow]`. It is a pure create against the
+  # new SLO id, with no ordering hazard.
+  #
+  # The generalisation, which cost two failed applies to learn: an SLO whose
+  # TYPE changes cannot be migrated in the same apply as the burn monitors that
+  # reference it, because a type change is a replace and a burn monitor pins the
+  # id it was created against.
   slo-database-latency:
     name: Database query latency objective
     scope: domain
     domain: database
     service: database-platform
     team: data-engineering
-    type: metric
+    type: monitor
     target: 99.0
     timeframe: 30d
-    query:
-      numerator: "sum:postgresql.queries.count{env:prod,latency_bucket:fast}.as_count()"
-      denominator: "sum:postgresql.queries.count{env:prod}.as_count()"
-    burn_alerts: [slow]
+    member_archetypes:
+      [sqlserver-lock-wait-degradation, sqlserver-blocking-sessions,
+       sqlserver-log-flush-wait-degradation, azuresql-log-write-saturation,
+       cosmos-server-side-latency-anomaly, snowflake-query-latency-anomaly,
+       snowflake-warehouse-queueing]
+    burn_alerts: []
 
   # --- data ------------------------------------------------------------------
   slo-data-freshness:
@@ -312,16 +356,17 @@ slos:
     burn_alerts: [fast, slow]
 
 # -----------------------------------------------------------------------------
-# TIER0 PER-SERVICE SLOs
-# Generated from platform/services/*.yaml where tier == tier0. This is the ONLY
-# place per-service objects are created, and it is bounded by the number of
-# mission-critical services (tens), not by the size of the estate.
+# PER-SERVICE SLOs — NOT DEFINED HERE
+#
+# They live in platform/policy/slo_profiles.yaml, which resolves a service's
+# objectives through the §12 chain (enterprise → entity type → platform →
+# criticality → environment → profile → the service's own override).
+#
+# This file previously carried a `tier0_slo_template`: one HTTP-trace SLI
+# applied to every tier0 service, at one target, with one objective. It could
+# not express a second objective, and it measured a tier0 datastore with
+# `trace.http.request.*` — a query that returns nothing, and therefore an SLO
+# that is permanently, silently green. The profile model replaced it; a tier0
+# service that names no profile still resolves exactly the objective the
+# template produced, which is what made the change safe to apply.
 # -----------------------------------------------------------------------------
-tier0_slo_template:
-  type: metric
-  timeframe: 30d
-  target_from_tier: true          # tiers.yaml → tier0.slo.objectives.availability
-  burn_alerts: [fast, medium, slow]
-  query:
-    numerator: "sum:trace.http.request.hits{env:prod,service:__SERVICE__}.as_count() - sum:trace.http.request.errors{env:prod,service:__SERVICE__,http.status_class:5xx}.as_count()"
-    denominator: "sum:trace.http.request.hits{env:prod,service:__SERVICE__}.as_count()"

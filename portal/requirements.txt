@@ -1,0 +1,12 @@
+# Executive portal runtime dependencies.
+#
+# There is no web framework here and no build toolchain. The HTTP layer is
+# Python's stdlib http.server (see portal/app/http_app.py for why), and the
+# frontend is three static files served as they are written.
+#
+# Both entries below are ALREADY required by tools/ — the portal adds nothing
+# to the repository's dependency surface:
+#   PyYAML    reading platform/policy/ through tools/obs_common.py
+#   requests  Datadog reads, and ONLY in --live mode; the offline default never
+#             imports it
+-r ../tools/requirements.txt

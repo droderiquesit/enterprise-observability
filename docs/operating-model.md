@@ -6,12 +6,14 @@
 |---|---|---|
 | Policy hierarchy, archetype catalog, modules, stacks | observability-platform | PR + CI + approval gate |
 | Self-service manifests (`platform/monitors/`) | requesting team | PR; CI validates; platform reviews only exceptions |
-| Service registrations (`platform/services/`) | owning team | PR; tier changes reviewed by the platform team |
+| Entity registrations (`platform/entities/`) | owning team | PR; kind and criticality changes reviewed by the platform team |
 | Runbook content | the archetype's owning team | PR to `platform/runbooks/`; the publisher deploys |
 | On-call rosters (`oncall_members`) | each team | tfvars from IdP sync — never edited by hand |
 | Exceptions | requesting team + approver | PR; approver recorded; expiry enforced by CI |
 | Coverage findings | the team named in the report | 14-day SLA for C2 (unowned); next business day for C9 (click-ops) |
 | Alert quality | domain owners | Monthly review; below-C monitors retuned or deleted after two cycles |
+| Report catalog (`platform/policy/reports.yaml`) | observability-platform | PR; a new report needs an audience, a question and a stated action, or the linter rejects it |
+| Report findings | the family's audience | Weekly for operations/platform/database/Azure; monthly for executive |
 
 ## Cadences
 
@@ -21,10 +23,20 @@
   target `production`, behind the `datadog-production` approval environment,
   concurrency-locked (see docs/deployment.md).
 - **Daily 06:00 UTC** — drift detection (Terraform + runbook content hash).
-- **Weekdays 07:00 UTC** — coverage & compliance report + quality scorecard. A
-  red run opens a governance issue automatically.
+- **Weekdays 07:00 UTC** — coverage & compliance report + quality scorecard
+  (fleet gate *and* per-entity-kind minimums) + the five report families
+  (`tools/reports.py --live`). A red coverage or scorecard run opens a
+  governance issue automatically. The report families do **not** gate: they are
+  the review queue, and a third gate firing on a backlog would only teach people
+  to ignore all three.
+- **Weekly** — reliability review from the operations family: monitors that
+  never fire, monitors that fire constantly, monitors that flap, services with
+  no telemetry, missing ownership, runbook coverage, on-call coverage.
 - **Monthly** — alert-quality review with domain owners: pages per team, top 20
-  noisiest monitors, actionability rate, auto-resolved rate.
+  noisiest monitors, actionability rate, auto-resolved rate, and the per-entity-
+  kind scorecard (service / datastore / infrastructure).
+- **Monthly** — executive review from the executive family: objective health,
+  risk posture, alert load per team.
 - **Quarterly** — exception re-approval sweep; RBAC access review; archetype
   catalog review; tier re-validation for tier0 and tier1.
 

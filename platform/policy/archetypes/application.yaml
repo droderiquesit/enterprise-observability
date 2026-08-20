@@ -21,6 +21,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: synthetic_check
+    telemetry: [synthetics]
     selector: "service_archetype:web"
     query: 'sum(last_10m):sum:synthetics.test_runs{__SCOPE__,status:failed} by {service,check_id}.as_count() >= 3'
     thresholds: { critical: 3, warning: 1 }
@@ -29,6 +30,7 @@ archetypes:
     envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-web-availability
+    slo_relation: sli_producing
     runbook: web-synthetic-availability
     workflow: diag-app-health
     failure_domain: web-frontends
@@ -45,6 +47,7 @@ archetypes:
     detection: rate_of_change
     monitor_type: query alert
     resource_type: service
+    telemetry: [synthetics]
     selector: "service_archetype:web"
     query: 'pct_change(avg(last_15m),last_1h):avg:synthetics.browser.page_load{__SCOPE__} by {service} > 40'
     thresholds: { critical: 40, warning: 25 }
@@ -53,6 +56,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-web-availability
+    slo_relation: slo_impacting
     runbook: web-page-load-degradation
     workflow: diag-app-health
     failure_domain: web-frontends
@@ -65,6 +69,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: service
+    telemetry: [rum]
     selector: "service_archetype:web"
     query: "avg(last_15m):anomalies(sum:rum.error.count{__SCOPE__} by {service}.as_rate(), 'agile', 3) >= 1"
     thresholds: { critical: 1.0 }
@@ -73,6 +78,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-web-availability
+    slo_relation: slo_impacting
     runbook: web-js-error-anomaly
     workflow: diag-app-health
     failure_domain: web-frontends
@@ -85,6 +91,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: service
+    telemetry: [apm]
     selector: "service_archetype:web"
     query: "avg(last_10m):anomalies(sum:trace.http.request.errors{__SCOPE__,http.status_class:5xx} by {service}.as_rate(), 'agile', 3) >= 1"
     thresholds: { critical: 1.0 }
@@ -93,6 +100,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-web-availability
+    slo_relation: sli_producing
     runbook: web-origin-5xx-anomaly
     workflow: diag-app-health
     failure_domain: web-frontends
@@ -106,6 +114,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: service
+    telemetry: [apm]
     selector: "service_archetype:worker"
     query: "avg(last_30m):anomalies(sum:trace.async.operation.hits{__SCOPE__} by {service}.as_rate(), 'agile', 3, direction='below') >= 1"
     thresholds: { critical: 1.0 }
@@ -114,6 +123,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-worker-throughput
+    slo_relation: slo_impacting
     runbook: worker-throughput-anomaly
     workflow: diag-app-health
     failure_domain: worker-platform
@@ -126,6 +136,7 @@ archetypes:
     detection: rate_of_change
     monitor_type: query alert
     resource_type: service
+    telemetry: [apm]
     selector: "service_archetype:worker"
     query: 'pct_change(avg(last_15m),last_1h):avg:trace.async.operation.duration{__SCOPE__} by {service} > 75'
     thresholds: { critical: 75, warning: 40 }
@@ -134,6 +145,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-worker-throughput
+    slo_relation: slo_impacting
     runbook: worker-processing-latency
     workflow: diag-app-health
     failure_domain: worker-platform
@@ -146,6 +158,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: service
+    telemetry: [apm]
     selector: "service_archetype:worker"
     query: "avg(last_15m):anomalies(sum:trace.async.operation.errors{__SCOPE__} by {service}.as_rate(), 'agile', 3) >= 1"
     thresholds: { critical: 1.0 }
@@ -154,6 +167,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-worker-throughput
+    slo_relation: sli_producing
     runbook: worker-error-anomaly
     workflow: diag-app-health
     failure_domain: worker-platform
@@ -166,6 +180,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: service
+    telemetry: [apm]
     selector: "service_archetype:worker"
     query: 'sum(last_30m):sum:trace.async.operation.hits{__SCOPE__} by {service}.as_count() < 1'
     thresholds: { critical: 1 }
@@ -174,6 +189,7 @@ archetypes:
     envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-worker-throughput
+    slo_relation: sli_producing
     runbook: worker-stalled
     workflow: diag-app-health
     failure_domain: worker-platform
@@ -192,6 +208,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: service
+    telemetry: [apm]
     selector: ""
     query: "avg(last_15m):anomalies(sum:trace.span.errors{__SCOPE__,error.type:fatal} by {service}.as_rate(), 'agile', 3) >= 1"
     thresholds: { critical: 1.0 }
@@ -200,6 +217,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-app-availability
+    slo_relation: slo_impacting
     runbook: app-crash-anomaly
     workflow: diag-app-health
     failure_domain: application-platform
@@ -212,6 +230,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: service
+    telemetry: [apm_runtime_metrics]
     selector: ""
     query: "avg(last_15m):anomalies(avg:runtime.thread_pool.utilization{__SCOPE__} by {service}, 'agile', 3, direction='above') >= 1"
     thresholds: { critical: 1.0 }
@@ -220,6 +239,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-app-availability
+    slo_relation: slo_supporting
     runbook: app-saturation-threadpool
     workflow: diag-app-health
     failure_domain: application-platform
@@ -232,6 +252,7 @@ archetypes:
     detection: forecast
     monitor_type: query alert
     resource_type: service
+    telemetry: [apm_runtime_metrics]
     selector: ""
     query: "max(next_1d):forecast(avg:runtime.memory.heap_used_pct{__SCOPE__} by {service}, 'linear', 1, interval='30m', history='1w') > 0.92"
     thresholds: { critical: 0.92 }
@@ -240,6 +261,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-app-availability
+    slo_relation: slo_supporting
     runbook: app-memory-leak-forecast
     workflow: remediate-recycle-app-pool
     failure_domain: application-platform
@@ -252,6 +274,7 @@ archetypes:
     detection: threshold
     monitor_type: query alert
     resource_type: service
+    telemetry: [apm]
     selector: ""
     query: 'sum(last_30m):sum:trace.span.hits{__SCOPE__} by {service}.as_count() < 1'
     thresholds: { critical: 1 }
@@ -260,6 +283,7 @@ archetypes:
     envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-app-availability
+    slo_relation: slo_supporting
     runbook: app-telemetry-loss
     workflow: diag-app-health
     failure_domain: application-platform
@@ -278,6 +302,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: service
+    telemetry: [apm]
     selector: ""
     query: "avg(last_15m):anomalies(sum:trace.http.client.request.errors{__SCOPE__} by {service,peer.service}.as_rate(), 'agile', 3) >= 1"
     thresholds: { critical: 1.0 }
@@ -286,6 +311,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-app-availability
+    slo_relation: dependency
     runbook: dependency-error-anomaly
     workflow: diag-dependency
     failure_domain: application-platform
@@ -298,6 +324,7 @@ archetypes:
     detection: rate_of_change
     monitor_type: query alert
     resource_type: service
+    telemetry: [apm]
     selector: ""
     query: 'pct_change(avg(last_15m),last_1h):avg:trace.http.client.request.duration{__SCOPE__} by {service,peer.service} > 100'
     thresholds: { critical: 100, warning: 50 }
@@ -306,6 +333,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-app-latency
+    slo_relation: dependency
     runbook: dependency-latency-degradation
     workflow: diag-dependency
     failure_domain: application-platform
@@ -319,6 +347,7 @@ archetypes:
     detection: rate_of_change
     monitor_type: query alert
     resource_type: service
+    telemetry: [apm]
     selector: ""
     query: 'pct_change(avg(last_10m),last_30m):sum:trace.span.errors{__SCOPE__} by {service}.as_rate() > 300'
     thresholds: { critical: 300, warning: 150 }
@@ -327,6 +356,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-app-availability
+    slo_relation: slo_impacting
     runbook: deployment-regression
     workflow: auto-enrich-change
     failure_domain: application-platform
@@ -340,6 +370,7 @@ archetypes:
     detection: anomaly
     monitor_type: query alert
     resource_type: service
+    telemetry: [apm]
     selector: ""
     query: "avg(last_10m):anomalies(sum:trace.span.errors{__SCOPE__,version:*} by {service,version}.as_rate(), 'agile', 4) >= 1"
     thresholds: { critical: 1.0 }
@@ -348,6 +379,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-app-availability
+    slo_relation: slo_impacting
     runbook: deployment-error-spike
     workflow: auto-enrich-change
     failure_domain: application-platform

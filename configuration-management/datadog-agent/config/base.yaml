@@ -1,0 +1,75 @@
+# =============================================================================
+# LAYER 1 — GLOBAL AGENT CONFIGURATION
+#
+# Applies to EVERY Datadog Agent in the estate, whatever it runs on. Layers
+# above this one may add to it and may override a named key; nothing below it
+# exists.
+#
+# Composition order (tools/agent_config.py):
+#   base → os → profile(s) → environment → criticality → node → exception
+#
+# WHAT DOES NOT BELONG HERE
+#   * Anything host-specific. If a value differs per host it is a node fact or
+#     a tag, never a config file.
+#   * Secrets. `api_key` is deliberately absent — see policies/secrets.yaml and
+#     docs/secrets.md. The Agent resolves it through the secrets backend at
+#     start-up, so no rendered file ever contains one.
+# =============================================================================
+version: 2
+
+datadog_yaml:
+  # Site is org-wide and wrong-by-default is expensive: an Agent pointed at the
+  # wrong site reports nothing and looks like a network problem for a day.
+  site: datadoghq.com
+
+  # THE SECRETS BACKEND. `api_key` is an ENC[] handle, not a value. The Agent
+  # shells out to the backend command, which is the only component that ever
+  # holds the key material.
+  api_key: "ENC[datadog_api_key]"
+  secret_backend_command: "%PROGRAMFILES%\\Datadog\\secrets\\datadog-secrets.exe"
+  secret_backend_timeout: 30
+
+  # Unified service tagging. env/service/version are what join a metric to a
+  # log to a trace to a Service Catalog entry; without all three the
+  # correlation the rest of this platform assumes silently does not happen.
+  # `service` and `version` are set per node, `env` per environment layer.
+  tags: []
+
+  # Inventory and metadata. `enable_metadata_collection` is what populates the
+  # host list that fleet compliance measures against; disabling it makes a host
+  # invisible rather than quiet.
+  enable_metadata_collection: true
+  inventories_configuration_enabled: true
+
+  # Payload size and cardinality guards. The default is generous for a small
+  # fleet and expensive at ten thousand nodes.
+  histogram_aggregates: [max, median, avg, count]
+  histogram_percentiles: ["0.95"]
+
+  # Process collection is ON but container-scoped OFF: process metrics are what
+  # `host-process-down` reads, and full command-line capture is a data-handling
+  # decision nobody has signed off.
+  process_config:
+    process_collection:
+      enabled: true
+    strip_process_arguments: true
+
+  logs_enabled: false            # per-profile opt-in; see docs/logging.md
+  apm_config:
+    enabled: false               # per-profile opt-in
+
+  # Agent self-telemetry. Without this the fleet-health monitors have no signal
+  # and an Agent that is failing silently looks identical to one that is idle.
+  telemetry:
+    enabled: true
+
+# conf.d fragments every Agent gets. Keyed by the file that will be written
+# under conf.d/; the renderer merges `instances` across layers by check name.
+conf_d:
+  ntp.d/conf.yaml:
+    init_config: {}
+    instances:
+      - offset_threshold: 60
+        # Clock drift breaks metric ordering and makes anomaly detection lie
+        # about when something happened. It is cheap to check and expensive to
+        # discover during an incident.

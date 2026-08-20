@@ -342,25 +342,6 @@
   ]
  },
  {
-  "id": "slo495",
-  "name": "checkout-api availability (tier0)",
-  "tags": [
-   "domain:api",
-   "env:prod",
-   "managed_by:terraform",
-   "monitor_type:slo",
-   "owner:payments",
-   "scope:service",
-   "service:checkout-api",
-   "slo_id:slo-svc-checkout-api",
-   "team:payments",
-   "tier:tier0"
-  ],
-  "overall_status": [
-   {}
-  ]
- },
- {
   "id": "slo496",
   "name": "identity-api availability (tier0)",
   "tags": [

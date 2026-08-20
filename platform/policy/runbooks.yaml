@@ -1332,3 +1332,54 @@ runbooks:
     domain: application
     source: web-vitals-lcp-degradation.md
     id: 15318475
+
+  # --- Control-M (docs/requirement-traceability.md §24) ----------------------
+  # No `id:` yet, deliberately. The notebook id is assigned by Datadog when
+  # tools/publish_runbooks.py first publishes these, and it is written back here
+  # by that run — inventing a number now would bind every Control-M monitor's
+  # `assets` block to a notebook that does not exist.
+  controlm-dependency-failure:
+    title: "Control-M Job Blocked By A Failed Predecessor"
+    domain: integration
+    source: controlm-dependency-failure.md
+    id: 15320570
+  controlm-exporter-telemetry-loss:
+    title: "Control-M Exporter Stopped Reporting"
+    domain: integration
+    source: controlm-exporter-telemetry-loss.md
+    id: 15320571
+  controlm-job-abnormally-short:
+    title: "Control-M Job Ended Abnormally Fast"
+    domain: integration
+    source: controlm-job-abnormally-short.md
+    id: 15320572
+  controlm-job-failure:
+    title: "Control-M Job Ended Not OK"
+    domain: integration
+    source: controlm-job-failure.md
+    id: 15320573
+  controlm-job-inflight-overrun:
+    title: "Control-M Job Overrunning While Still Running"
+    domain: integration
+    source: controlm-job-inflight-overrun.md
+    id: 15320574
+  controlm-job-last-success-stale:
+    title: "Control-M Job Has Not Succeeded Recently"
+    domain: integration
+    source: controlm-job-last-success-stale.md
+    id: 15320575
+  controlm-job-late-start:
+    title: "Control-M Job Did Not Start By Its Deadline"
+    domain: integration
+    source: controlm-job-late-start.md
+    id: 15320577
+  controlm-job-not-executed:
+    title: "Control-M Job Did Not Execute In Its Cycle"
+    domain: integration
+    source: controlm-job-not-executed.md
+    id: 15320578
+  controlm-job-runtime-drift:
+    title: "Control-M Job Runtime Drift"
+    domain: integration
+    source: controlm-job-runtime-drift.md
+    id: 15320579
