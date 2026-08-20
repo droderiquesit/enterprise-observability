@@ -24,9 +24,14 @@ on:
       datadogKeyVaultUrl: { required: false, type: string, default: '' }
       bicepVersion:       { required: false, type: string, default: 'v0.30.23' }
     secrets:
-      AZURE_CLIENT_ID:       { required: true }
-      AZURE_TENANT_ID:       { required: true }
-      AZURE_SUBSCRIPTION_ID: { required: true }
+      # NOT `required: true`. A required secret that the repository does not
+      # define fails the workflow_call before any job starts, with no logs to
+      # explain it — a red run on main for every config change, on a repository
+      # that has simply not onboarded Azure yet. The preflight step below
+      # reports that state as a notice and skips instead.
+      AZURE_CLIENT_ID:       { required: false }
+      AZURE_TENANT_ID:       { required: false }
+      AZURE_SUBSCRIPTION_ID: { required: false }
 
 permissions:
   id-token: write     # OIDC federation — no client secret is ever stored
@@ -61,7 +66,27 @@ jobs:
 
       # Azure CLI ships on ubuntu-latest; the Bicep CLI does not, and `az`
       # would otherwise silently fetch a floating version on first use.
+      - name: "Preflight — are Azure credentials configured?"
+        id: pre
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for v in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID; do
+            [ -n "${!v:-}" ] || missing+=("$v")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Deploy skipped::Azure credentials are not configured (${missing[*]}). Add them as repository secrets and create the otel-collector-* environments — see deploy/otel-collector/README.md. Nothing was deployed."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: "Toolchain — Azure CLI, Bicep (pinned), jq"
+        if: steps.pre.outputs.configured == 'true'
         run: |
           set -euo pipefail
           command -v az >/dev/null || { echo "::error::Azure CLI missing from the runner image"; exit 1; }
@@ -72,6 +97,7 @@ jobs:
           echo "jq    $(jq --version)"
 
       - name: "Azure login (OIDC)"
+        if: steps.pre.outputs.configured == 'true'
         uses: azure/login@v2
         with:
           client-id:       ${{ secrets.AZURE_CLIENT_ID }}
@@ -79,20 +105,24 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: "Preflight"
+        if: steps.pre.outputs.configured == 'true'
         run: ./deploy/otel-collector/scripts/preflight.sh "${{ inputs.environment }}"
 
       - name: "Deploy (what-if preview, then apply)"
+        if: steps.pre.outputs.configured == 'true'
         run: ./deploy/otel-collector/scripts/deploy.sh "${{ inputs.environment }}"
 
       # The gate: re-run what-if and fail if anything would still change.
       - name: "Idempotency gate — a second deployment must change nothing"
+        if: steps.pre.outputs.configured == 'true'
         run: ./deploy/otel-collector/scripts/idempotency-gate.sh "${{ inputs.environment }}"
 
       - name: "Smoke — the revision actually started"
+        if: steps.pre.outputs.configured == 'true'
         run: ./deploy/otel-collector/scripts/smoke.sh "${{ inputs.environment }}"
 
       - name: "Diagnostics on failure"
-        if: failure()
+        if: failure() && steps.pre.outputs.configured == 'true'
         continue-on-error: true
         run: |
           set +e
