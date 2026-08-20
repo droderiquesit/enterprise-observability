@@ -354,16 +354,6 @@ telemetry_sources:
     metric_namespaces: ["sqlserver."]
     provided_by: Agent sqlserver check with a monitoring login on the instance.
 
-  postgresql_integration:
-    display: PostgreSQL integration
-    kind: agent_integration
-    metric_namespaces: ["postgresql."]
-    # Retained only for _migration-postgres-retirement.yaml. PostgreSQL is not
-    # in this estate, which is exactly why those three archetypes are inert —
-    # and the applicability engine is what makes that visible instead of
-    # asserted in a comment.
-    provided_by: Agent postgres check. NOT PRESENT in this estate.
-
   snowflake_integration:
     display: Snowflake integration
     kind: agent_integration

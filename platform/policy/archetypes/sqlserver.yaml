@@ -70,7 +70,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-database-latency
-    slo_relation: slo_supporting
+    slo_relation: sli_producing
     runbook: sqlserver-blocking-sessions
     workflow: diag-database
     failure_domain: databases
@@ -95,7 +95,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-database-latency
-    slo_relation: slo_impacting
+    slo_relation: sli_producing
     runbook: sqlserver-lock-wait-degradation
     workflow: diag-database
     failure_domain: databases
@@ -245,7 +245,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-database-latency
-    slo_relation: slo_impacting
+    slo_relation: sli_producing
     runbook: sqlserver-log-flush-wait-degradation
     workflow: diag-database
     failure_domain: databases
@@ -466,7 +466,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-database-latency
-    slo_relation: slo_supporting
+    slo_relation: sli_producing
     runbook: azuresql-log-write-saturation
     workflow: diag-database
     failure_domain: databases

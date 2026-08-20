@@ -194,18 +194,35 @@ slos:
        snowflake-connectivity-failure]
     burn_alerts: [fast, medium, slow]
 
+  # Rebuilt as a MONITOR SLO, for the same reason slo-database-availability was.
+  # It used to be a metric SLO over `postgresql.queries.count`, left behind when
+  # the database domain was rebuilt for the real estate (Azure SQL, SQL Server,
+  # Cosmos DB, Snowflake — no PostgreSQL anywhere). Live, it read:
+  #
+  #   state: no_data — "overall denominator (total events) is 0"
+  #
+  # A denominator that is permanently zero is the worst shape an objective can
+  # take: it never breaches, never burns budget, and never alerts, so it reads
+  # as a promise being kept. It was measuring an engine this estate does not run.
+  #
+  # There is no cross-engine "fast queries / total queries" ratio to replace it
+  # with — Azure SQL, Cosmos and Snowflake each expose latency differently — so
+  # the objective is expressed the way the platform already expresses
+  # multi-engine database health: over the latency monitors themselves.
   slo-database-latency:
     name: Database query latency objective
     scope: domain
     domain: database
     service: database-platform
     team: data-engineering
-    type: metric
+    type: monitor
     target: 99.0
     timeframe: 30d
-    query:
-      numerator: "sum:postgresql.queries.count{env:prod,latency_bucket:fast}.as_count()"
-      denominator: "sum:postgresql.queries.count{env:prod}.as_count()"
+    member_archetypes:
+      [sqlserver-lock-wait-degradation, sqlserver-blocking-sessions,
+       sqlserver-log-flush-wait-degradation, azuresql-log-write-saturation,
+       cosmos-server-side-latency-anomaly, snowflake-query-latency-anomaly,
+       snowflake-warehouse-queueing]
     burn_alerts: [slow]
 
   # --- data ------------------------------------------------------------------

@@ -180,13 +180,24 @@ def test_the_catalog_view_covers_the_whole_catalog():
     assert s["catalog_blocked"] > 0
 
 
-def test_postgres_archetypes_are_blocked_in_an_estate_with_no_postgres():
-    """The transitional file says PostgreSQL is not in this estate. The engine
-    is what turns that comment into a checkable fact."""
-    report = applicability.evaluate(POLICY, ESTATE)
-    blocked = {r["archetype"] for r in report["catalog"]["blocked_by_missing_telemetry"]}
-    assert "db-query-latency-anomaly" in blocked
-    assert "postgresql_integration" in report["summary"]["telemetry_sources_missing"]
+def test_the_postgres_retirement_is_complete():
+    """Phase B of the two-phase retirement: the three PostgreSQL-era archetypes
+    are gone from the catalog, and so is the integration that fed them.
+
+    They could not be deleted in the same apply that moved the composite and the
+    SLO off them — Datadog refuses to delete a monitor a composite or an SLO
+    still references, and Terraform sequences those updates after the monitor
+    map. The transitional file held them at exactly their production instance
+    until the references moved; this asserts the second phase actually happened,
+    rather than the file being deleted while something still pointed at them."""
+    for aid in ("db-query-latency-anomaly", "db-connection-saturation",
+                "db-replication-lag"):
+        assert aid not in POLICY["archetypes"], f"{aid} survived the retirement"
+    assert "postgresql_integration" not in oc.telemetry_sources(POLICY)
+    assert not [a for a, v in POLICY["archetypes"].items()
+                if "postgresql." in (v.get("query") or "")]
+    assert not [s for s in POLICY["slos"].values()
+                if "postgresql." in json.dumps(s.get("query") or {})]
 
 
 def test_an_unknown_source_in_the_inventory_is_reported_not_ignored():

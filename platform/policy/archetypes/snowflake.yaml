@@ -62,7 +62,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-database-latency
-    slo_relation: slo_impacting
+    slo_relation: sli_producing
     runbook: snowflake-query-latency-anomaly
     workflow: diag-database
     failure_domain: analytics
@@ -87,7 +87,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-database-latency
-    slo_relation: slo_supporting
+    slo_relation: sli_producing
     runbook: snowflake-warehouse-queueing
     workflow: diag-database
     failure_domain: analytics
