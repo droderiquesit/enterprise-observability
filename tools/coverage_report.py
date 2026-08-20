@@ -204,7 +204,8 @@ def fetch_live():
     return monitors, slos
 
 
-def _covering_archetypes(policy: dict, service_archetype: str) -> set[str]:
+def _covering_archetypes(policy: dict, service_archetype: str,
+                         platform: str | None = None) -> set[str]:
     """The archetypes that MUST be deployed for this service archetype.
 
     Only `mandatory` archetypes count towards coverage. A resource is not
@@ -212,14 +213,7 @@ def _covering_archetypes(policy: dict, service_archetype: str) -> set[str]:
     — that reading would let an entire golden-signal pack be deleted while the
     report still claimed 100%.
     """
-    sa = policy["service_archetypes"].get(service_archetype)
-    if not sa:
-        return set()
-    out: set[str] = set()
-    for pack in sa["packs"]:
-        out.update(a for a in policy["packs"][pack]["archetypes"]
-                   if policy["archetypes"].get(a, {}).get("mandatory"))
-    return out
+    return set(oc.archetypes_for(policy, service_archetype, platform, mandatory_only=True))
 
 
 # ------------------------------ C18 (§13) — begin ------------------------------
@@ -400,7 +394,7 @@ def run_checks(inventory, assignments, monitors, slos, policy) -> dict:
                 checks["C10"].append({"id": a["id"], "problem": "observe_only with no recorded reason"})
             continue
 
-        expected = _covering_archetypes(policy, a["service_archetype"])
+        expected = _covering_archetypes(policy, a["service_archetype"], a.get("platform"))
         missing = [
             arch for arch in expected
             # An archetype only covers this resource where it is instantiated

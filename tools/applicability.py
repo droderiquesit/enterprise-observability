@@ -55,22 +55,15 @@ import obs_common as oc
 # -----------------------------------------------------------------------------
 # Resolution
 # -----------------------------------------------------------------------------
-def pack_archetypes(policy: dict, service_archetype: str) -> list[str]:
+def pack_archetypes(policy: dict, service_archetype: str,
+                    platform: str | None = None) -> list[str]:
     """Archetypes a service archetype's packs instantiate.
 
     Unknown service archetypes resolve to nothing rather than to a guess: a
     silently-substituted default would report coverage for monitors that were
     never aimed at the entity.
     """
-    sa = policy["service_archetypes"].get(service_archetype)
-    if not sa:
-        return []
-    out: list[str] = []
-    for pack in sa["packs"]:
-        for aid in policy["packs"].get(pack, {}).get("archetypes", []):
-            if aid in policy["archetypes"] and aid not in out:
-                out.append(aid)
-    return out
+    return oc.archetypes_for(policy, service_archetype, platform)
 
 
 def available_sources(estate: dict, entity: dict) -> set[str]:
@@ -137,7 +130,8 @@ def evaluate_entity(policy: dict, estate: dict, entity: dict) -> dict:
     vocab = oc.telemetry_sources(policy)
     unknown = sorted(s for s in available if s not in vocab)
 
-    ids = pack_archetypes(policy, entity.get("service_archetype", ""))
+    ids = pack_archetypes(policy, entity.get("service_archetype", ""),
+                          entity.get("platform"))
     result = evaluate_archetypes(policy, ids, available)
     n_ok = len(result["applicable"])
     n_blocked = len(result["blocked_by_missing_telemetry"])

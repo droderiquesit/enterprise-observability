@@ -118,7 +118,23 @@ service_archetypes:
     display: Datastore
     domain: database
     description: Managed or self-hosted database / cache / search cluster.
-    packs: [datastore-core, sqlserver-core, cosmos-core, snowflake-core]
+    # `packs` is what EVERY datastore gets, whatever it runs on: connection
+    # saturation, replication lag, backup age. Technology-specific packs are
+    # selected by the entity's `platform:` instead of bundled here.
+    #
+    # They used to be bundled. Every datastore therefore claimed SQL Server,
+    # Cosmos DB and Snowflake coverage at once, which meant an Azure SQL
+    # database carried Snowflake runbook links in the catalog and was measured
+    # against Cosmos archetypes in the coverage report. A datastore that
+    # declares no `platform` now gets the engine-agnostic pack alone — "we do
+    # not know what this runs on" stays visible instead of resolving to a
+    # confident claim about three engines it is not.
+    packs: [datastore-core]
+    packs_by_platform:
+      azure_sql: [sqlserver-core]
+      sqlserver: [sqlserver-core]
+      cosmosdb: [cosmos-core]
+      snowflake: [snowflake-core]
     required_telemetry: [dbm_or_integration_metrics]
     default_slis: [availability, latency, replication]
     group_by: [db_instance]

@@ -182,6 +182,19 @@ def assign(inventory: dict, policy: dict, services: dict | None = None,
             "domain", KIND_DOMAIN.get(r["kind"], "application")
         )
 
+        # --- 2b. platform — WHAT IT RUNS ON, which selects the technology packs
+        # A registration is a reviewed decision and outranks a tag, the same
+        # precedence tier uses below. Neither present means None, and None
+        # means the engine-agnostic packs alone: a datastore whose technology
+        # nothing records must not be measured against SQL Server, Cosmos and
+        # Snowflake at once and reported as covering all three.
+        platform = None
+        _reg = services.get(r.get("service")) if r.get("service") else None
+        if _reg and _reg.get("platform"):
+            platform = _reg["platform"]
+        elif tags.get("platform"):
+            platform = tags["platform"]
+
         # --- 3. tier ----------------------------------------------------------
         svc = r.get("service")
         registered = services.get(svc) if svc else None
@@ -242,7 +255,7 @@ def assign(inventory: dict, policy: dict, services: dict | None = None,
         if tel is not None:
             sources = _telemetry_for(tel, r["id"], svc)
             verdict = applicability.evaluate_archetypes(
-                policy, applicability.pack_archetypes(policy, sa), sources)
+                policy, applicability.pack_archetypes(policy, sa, platform), sources)
             n_ok = len(verdict["applicable"])
             n_blocked = len(verdict["blocked_by_missing_telemetry"])
             telemetry_available = sorted(sources)
@@ -269,6 +282,7 @@ def assign(inventory: dict, policy: dict, services: dict | None = None,
                 "kind": r["kind"],
                 "service": svc,
                 "service_archetype": sa,
+                "platform": platform,
                 "env": env,
                 "region": r.get("region", "global"),
                 "domain": domain,

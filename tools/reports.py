@@ -481,7 +481,7 @@ def _ops_no_telemetry(ctx: Context) -> dict:
         problems = []
         sa = svc.get("service_archetype", "")
         band = tiers[svc["tier"]]["alert_band"]
-        expected = cr._covering_archetypes(ctx.policy, sa)
+        expected = cr._covering_archetypes(ctx.policy, sa, svc.get("platform"))
         missing = sorted(
             a for a in expected
             if band in ctx.policy["archetypes"][a]["bands"]

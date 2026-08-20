@@ -257,6 +257,17 @@ def lint() -> list[str]:
         for pack in sa["packs"]:
             if pack not in policy["packs"]:
                 err("PACKS", f"service_archetype {said}", f"unknown pack {pack!r}")
+        # Platform-selected packs are checked the same way, and additionally
+        # must not restate a base pack: a pack in both lists would be claimed
+        # unconditionally while looking conditional.
+        for plat, packs in (sa.get("packs_by_platform") or {}).items():
+            for pack in packs:
+                if pack not in policy["packs"]:
+                    err("PACKS", f"service_archetype {said} platform {plat}",
+                        f"unknown pack {pack!r}")
+                if pack in sa["packs"]:
+                    err("PACKS", f"service_archetype {said} platform {plat}",
+                        f"pack {pack!r} is already unconditional in `packs`")
     for pid, pack in policy["packs"].items():
         for aid in pack["archetypes"]:
             if aid not in policy["archetypes"]:
@@ -267,6 +278,23 @@ def lint() -> list[str]:
     # entity model exists to enforce: a database is a datastore, a VM is not a
     # catalog entity at all, and a system contains things that exist.
     entities = oc.load_entities()
+
+    # An entity whose `platform` no archetype recognizes silently receives the
+    # engine-agnostic packs only. That is the right DEFAULT for a platform
+    # nobody has declared, but a typo — `azuresql` for `azure_sql` — would take
+    # the same path and quietly drop the technology monitors, so a platform
+    # that resembles a known one closely enough to be a typo is an error.
+    for _name, _ent in entities.items():
+        _sa = policy["service_archetypes"].get(_ent.get("service_archetype") or "")
+        _plat = _ent.get("platform")
+        _known = (_sa or {}).get("packs_by_platform") or {}
+        if _sa and _plat and _known and _plat not in _known:
+            _near = [k for k in _known
+                     if k.replace("_", "") == _plat.replace("_", "").replace("-", "")]
+            if _near:
+                err("PACKS", f"entity {_name}",
+                    f"platform {_plat!r} selects no packs; did you mean {_near[0]!r}?")
+
     legacy = {}
     for f in sorted((oc.PLATFORM_DIR / "services").glob("*.yaml")):
         legacy[oc._yaml(f)["service"]["name"]] = f.name

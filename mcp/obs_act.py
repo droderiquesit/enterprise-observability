@@ -271,7 +271,11 @@ def resolve_monitoring_profile(state, *, service_archetype: str, tier: str, env:
         "alert_band": result["alert_band"],
         "support_model": result["support_model"],
         "observe_only_reason": result["observe_only_reason"],
+        # The archetype's UNCONDITIONAL packs. This resolver is given a
+        # service_archetype, not an entity, so it has no `platform` with which
+        # to select the technology packs — named rather than silently omitted.
         "packs": sa["packs"],
+        "packs_by_platform_available": sorted(sa.get("packs_by_platform") or {}),
         "required_telemetry": sa.get("required_telemetry", []),
         "default_slis": sa.get("default_slis", []),
         "environment_policy": {
@@ -382,7 +386,8 @@ def resolve_slo_profile(state, *, service: str | None = None, tier: str,
     }
 
 
-def missing_telemetry(state, *, service_archetype: str, observed=None) -> dict:
+def missing_telemetry(state, *, service_archetype: str, observed=None,
+                      platform: str | None = None) -> dict:
     """What this entity must emit for its monitors to be able to fire.
 
     `required_telemetry` in service_archetypes.yaml is a COARSE, per-archetype
@@ -397,7 +402,7 @@ def missing_telemetry(state, *, service_archetype: str, observed=None) -> dict:
     declared = list(sa.get("required_telemetry", []))
 
     per_archetype = {}
-    for pack in sa["packs"]:
+    for pack in oc.packs_for(policy, service_archetype, platform):
         for aid in policy["packs"][pack]["archetypes"]:
             arch = policy["archetypes"].get(aid)
             if not arch:
@@ -448,7 +453,7 @@ def preview_onboarding(state, service: dict) -> dict:
                                          compliance_scope=service.get("compliance_scope"))
         band = res["alert_band"]
         joined = []
-        for pack in sa["packs"]:
+        for pack in oc.packs_for(policy, sa_id, service.get("platform")):
             for aid in policy["packs"][pack]["archetypes"]:
                 arch = policy["archetypes"].get(aid)
                 if not arch:
@@ -479,7 +484,8 @@ def preview_onboarding(state, service: dict) -> dict:
         "service": name, "valid": not errors, "errors": errors,
         "tier": tier, "service_archetype": sa_id, "domain": sa["domain"],
         "team": service.get("team"),
-        "packs": sa["packs"],
+        "platform": service.get("platform"),
+        "packs": oc.packs_for(policy, sa_id, service.get("platform")),
         "per_environment": per_env,
         "distinct_archetypes_joined": len(joins),
         "slo": slo,

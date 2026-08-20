@@ -359,3 +359,43 @@ def test_the_module_and_the_resolver_read_the_same_policy_file():
              "main.tf").read_text()
     assert "policy/entity_kinds.yaml" in stack
     assert "modules/catalog_entity" in stack
+
+
+# --- packs are selected by platform, not bundled ------------------------------
+#
+# The datastore archetype used to list sqlserver-core, cosmos-core AND
+# snowflake-core unconditionally. Every datastore therefore claimed all three
+# technologies at once: orders-sql (Azure SQL) carried Snowflake and Cosmos DB
+# runbook links in the catalog, and the coverage report measured it against
+# Cosmos archetypes it will never emit.
+
+def test_a_datastore_gets_only_its_own_technology_packs():
+    packs = oc.packs_for(POLICY, "datastore", "azure_sql")
+    assert "sqlserver-core" in packs
+    assert "cosmos-core" not in packs and "snowflake-core" not in packs
+    assert "datastore-core" in packs, "the engine-agnostic pack applies to every datastore"
+
+
+def test_a_datastore_with_no_platform_gets_the_engine_agnostic_pack_only():
+    """Not a default engine, and not the union of every engine. "We have not
+    recorded what this runs on" must stay visible in the coverage numbers."""
+    assert oc.packs_for(POLICY, "datastore", None) == ["datastore-core"]
+    assert oc.packs_for(POLICY, "datastore", "some-engine-we-do-not-model") == ["datastore-core"]
+
+
+def test_each_technology_selects_a_different_archetype_set():
+    sets = {p: set(oc.archetypes_for(POLICY, "datastore", p))
+            for p in ("azure_sql", "cosmosdb", "snowflake")}
+    for a, b in ((("azure_sql", "cosmosdb")), ("azure_sql", "snowflake"),
+                 ("cosmosdb", "snowflake")):
+        assert sets[a] != sets[b], f"{a} and {b} resolve the same archetypes"
+
+
+def test_the_registered_azure_sql_entity_is_not_measured_against_snowflake():
+    """End to end over the real registry, through the real projection."""
+    import coverage_report as cr
+    svc = oc.entity_as_service(oc.load_entities()["orders-sql"])
+    assert svc["platform"] == "azure_sql", "the projection must carry platform"
+    expected = cr._covering_archetypes(POLICY, svc["service_archetype"], svc["platform"])
+    assert expected, "an Azure SQL datastore must have mandatory archetypes"
+    assert not [a for a in expected if "snowflake" in a or "cosmos" in a]

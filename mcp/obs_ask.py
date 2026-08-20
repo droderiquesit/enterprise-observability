@@ -903,7 +903,7 @@ def q_why_monitor(state, p):
 
     sa_id = svc["service_archetype"]
     sa = state.policy["service_archetypes"][sa_id]
-    packs = sa["packs"]
+    packs = oc.packs_for(state.policy, sa_id, svc.get("platform"))
     via_packs = [pk for pk in packs if aid in state.policy["packs"][pk]["archetypes"]]
     tier = svc["tier"]
     profile = state.policy["tiers"][tier]["monitoring_profile"]

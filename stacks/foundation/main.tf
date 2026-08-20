@@ -417,7 +417,17 @@ locals {
   service_archetypes_doc = yamldecode(file("${local.policy_dir}/policy/service_archetypes.yaml"))
   runbook_registry       = yamldecode(file("${local.policy_dir}/policy/runbooks.yaml"))
 
-  # service_archetype → the runbook ids reachable through its packs.
+  # (service_archetype, platform) → the runbook ids reachable through its packs.
+  #
+  # Keyed on BOTH because `packs` is only half of what an entity gets: the
+  # datastore archetype selects its technology pack from the entity's
+  # `platform`. Keying on the archetype alone gave every datastore the union —
+  # so an Azure SQL database carried Snowflake and Cosmos DB runbook links in
+  # the catalog, and the on-call engineer opening it found three runbooks for
+  # engines the database is not.
+  #
+  # "" is the no-platform key: the unconditional packs alone, which is what an
+  # entity that has not recorded its technology honestly gets.
   runbooks_for_archetype = {
     for sa, v in local.service_archetypes_doc.service_archetypes : sa => distinct(flatten([
       for pack in v.packs : [
@@ -426,10 +436,22 @@ locals {
     ]))
   }
 
+  runbooks_for_archetype_platform = merge([
+    for sa, v in local.service_archetypes_doc.service_archetypes : {
+      for plat, packs in try(v.packs_by_platform, {}) :
+      "${sa}/${plat}" => distinct(concat(
+        local.runbooks_for_archetype[sa],
+        flatten([for pack in packs :
+        [for arch in try(local.service_archetypes_doc.packs[pack].archetypes, []) : arch]]),
+      ))
+    }
+  ]...)
+
   # Keyed by ARCHETYPE rather than by service name, because both registries
   # (platform/services/ and platform/entities/) need the same lookup and the
   # entity registry contains kinds — a queue, a system — that have no archetype
-  # at all.
+  # at all. This map is the no-platform one: it is what the legacy service
+  # registry uses, since a v2.2 registration cannot express a platform.
   archetype_runbook_links = {
     for sa, rids in local.runbooks_for_archetype : sa => [
       for rid in rids : {
@@ -439,6 +461,17 @@ locals {
       }
       # Only published runbooks: an entry without an id has no notebook to
       # point at, and a catalog link to nothing is worse than no link.
+      if try(local.runbook_registry.runbooks[rid].id, null) != null
+    ]
+  }
+
+  archetype_platform_runbook_links = {
+    for key, rids in local.runbooks_for_archetype_platform : key => [
+      for rid in rids : {
+        name = "Runbook: ${local.runbook_registry.runbooks[rid].title}"
+        type = "runbook"
+        url  = "${local.runbook_registry.notebook_base_url}/${local.runbook_registry.runbooks[rid].id}"
+      }
       if try(local.runbook_registry.runbooks[rid].id, null) != null
     ]
   }
@@ -596,9 +629,18 @@ module "catalog_entity" {
       # Declared links plus the runbooks its packs can actually fire. A kind
       # with no archetype (a queue, a system) gets its declared links only —
       # there are no packs to derive from.
+      #
+      # The platform-specific map first, falling back to the archetype-only one
+      # when the entity declares no platform or its archetype has no
+      # technology packs. The fallback is the engine-agnostic set, never the
+      # union of every technology.
       links = concat(
         try(e.links, []),
-        try(local.archetype_runbook_links[e.service_archetype], []),
+        try(
+          local.archetype_platform_runbook_links["${e.service_archetype}/${e.platform}"],
+          local.archetype_runbook_links[e.service_archetype],
+          [],
+        ),
       )
     }
   }

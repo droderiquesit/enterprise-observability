@@ -113,8 +113,12 @@ def entity_as_service(entity: dict) -> dict:
     Kept so that every existing consumer — the profile engine, the self-service
     monitor validator, the scorecard, both Terraform stacks — reads exactly
     what it read before the entity model landed. The projection is lossy on
-    purpose: it drops the fields the old shape has no slot for (kind, platform,
-    region, oncall) rather than inventing keys nobody reads.
+    purpose: it drops the fields the old shape has no slot for (kind, region,
+    oncall) rather than inventing keys nobody reads.
+
+    `platform` is carried for the same reason `slo` is: packs_for() selects the
+    technology-specific monitor packs from it, so dropping it silently reduced
+    every datastore to the engine-agnostic pack.
 
     `slo` IS carried, and the reason is worth stating because it was dropped
     once and the loss was silent. tools/slo_resolver.py reads it twice: as the
@@ -127,7 +131,7 @@ def entity_as_service(entity: dict) -> dict:
     svc = {_ENTITY_TO_SERVICE_KEY.get(k, k): v for k, v in entity.items()
            if k in ("name", "team", "criticality", "service_archetype", "description",
                     "envs", "dependencies", "links", "compliance_scope", "idempotent",
-                    "slo")}
+                    "slo", "platform")}
     return svc
 
 
@@ -152,6 +156,41 @@ def load_services() -> dict:
         if "service_archetype" not in ent:
             continue
         out.setdefault(name, entity_as_service(ent))
+    return out
+
+
+def packs_for(policy: dict, service_archetype: str, platform: str | None = None) -> list[str]:
+    """The packs an entity actually gets: the archetype's base packs, plus the
+    ones its `platform` selects.
+
+    Implemented ONCE, here, because five callers ask this question — the
+    coverage report, applicability, the MCP's onboarding preview and telemetry
+    check, and Terraform's catalog links — and a caller that reads `packs`
+    directly silently gets the platform-independent subset. An unknown or
+    absent platform contributes nothing: a datastore whose technology we have
+    not recorded is measured against the engine-agnostic pack only, which is
+    the honest answer, not a default engine.
+    """
+    sa = policy["service_archetypes"].get(service_archetype)
+    if not sa:
+        return []
+    out = list(sa.get("packs") or [])
+    for pack in (sa.get("packs_by_platform") or {}).get(platform, []) if platform else []:
+        if pack not in out:
+            out.append(pack)
+    return out
+
+
+def archetypes_for(policy: dict, service_archetype: str, platform: str | None = None,
+                   mandatory_only: bool = False) -> list[str]:
+    """The monitor archetypes reachable through packs_for(), in pack order."""
+    out: list[str] = []
+    for pack in packs_for(policy, service_archetype, platform):
+        for aid in policy["packs"].get(pack, {}).get("archetypes", []):
+            if aid in policy["archetypes"] and aid not in out:
+                if mandatory_only and not policy["archetypes"][aid].get("mandatory"):
+                    continue
+                out.append(aid)
     return out
 
 
