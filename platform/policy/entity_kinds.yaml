@@ -188,12 +188,21 @@ kind_by_service_archetype:
   infrastructure_resource: null
 
 # -----------------------------------------------------------------------------
-# SLO profile — the `slo.profile` key on an entity.
+# SLO scope — the `slo.scope` key on an entity. DOES this entity get its own
+# SLO, or is it covered by its domain's?
 #
 # The vocabulary is NOT invented here: it is the `slo.scope` already declared
 # per tier in platform/policy/tiers.yaml. An entity may only narrow or restate
-# its tier's scope; per-objective overrides are Phase 4 (§11, §12), so nothing
-# consumes more than the profile name yet — it is emitted as a catalog tag so
-# that the SLO/catalog association check (§13) has something to join on.
+# its tier's scope.
+#
+# THIS IS NOT `slo.profile`. The two keys were briefly the same key, and the
+# collision was silent in the worst way: an entity saying `domain` — meaning
+# "I am covered by the database domain SLO, do not build me one" — was read by
+# the resolver as "this entity declared an slo: block, therefore it opted IN to
+# a per-service SLO", which is the exact opposite. Terraform materialized four
+# such SLOs while the coverage report counted one, and neither side was wrong
+# about its own half. `scope` answers WHETHER; `profile` (below, vocabulary in
+# slo_profiles.yaml) answers WHICH OBJECTIVES, and only when scope is
+# per_service.
 # -----------------------------------------------------------------------------
-slo_profiles: [per_service, domain, none]
+slo_scopes: [per_service, domain, none]

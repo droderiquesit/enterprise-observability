@@ -336,7 +336,7 @@ def test_derived_values_agree_with_the_tier_policy():
     for name, ent in ENTITIES.items():
         tier = POLICY["tiers"][ent["criticality"]]
         assert er.resolve_monitoring_profile(ent, POLICY) == tier["monitoring_profile"]
-        assert er.resolve_slo_profile(ent, POLICY) in POLICY["entity_kinds_doc"]["slo_profiles"]
+        assert er.resolve_slo_scope(ent, POLICY) in POLICY["entity_kinds_doc"]["slo_scopes"]
 
 
 # --- the gate ----------------------------------------------------------------

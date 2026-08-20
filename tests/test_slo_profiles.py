@@ -204,9 +204,12 @@ def test_a_tier2_service_carries_no_objectives_of_its_own():
 
 
 def test_a_lower_tier_service_can_opt_in_by_declaring_one():
-    """tier1's scope is `domain`, so settlement-batch would have none. The
-    `slo:` block is the opt-in — a service with one contractual output should
-    not have to be relabelled tier0 to make a promise."""
+    """tier1's scope is `domain`, so settlement-batch would have none.
+    `slo.scope: per_service` is the opt-in — a service with one contractual
+    output should not have to be relabelled tier0 to make a promise.
+
+    The opt-in is that VALUE. Testing for the mere presence of an `slo:` block
+    opted IN every service that declared `scope: domain` to decline one."""
     assert SERVICES["settlement-batch"]["tier"] == "tier1"
     assert POLICY["tiers"]["tier1"]["slo"]["scope"] == "domain"
     assert sr.materializes_per_service_slos(POLICY, SERVICES["settlement-batch"])
@@ -513,3 +516,60 @@ def test_every_domain_slo_still_joins_to_the_estate(slo_id):
     each exist in Datadog and belong to a real platform service."""
     tagged = [s for s in SLOS if f"slo_id:{slo_id}" in s["tags"]]
     assert len(tagged) == 1, slo_id
+
+
+# --- scope vs profile: two keys, two questions -------------------------------
+#
+# These guard a defect that was live in the repository: `slo.profile` meant
+# "which objective bundle" to the SLO resolver and "does this get its own SLO"
+# to the entity resolver. Every registered entity used the second vocabulary,
+# so the profile layer was unreachable — and because the resolver treated the
+# mere PRESENCE of an `slo:` block as an opt-in, the four entities saying
+# `domain` ("the domain SLO covers me") were each given the per-service SLO
+# they were declining. Terraform built four; the coverage report counted one.
+
+def test_declining_an_slo_does_not_materialize_one():
+    """`scope: domain` is a service saying no. It must be read as no."""
+    declining = {"name": "orders-sql", "team": "data-engineering", "tier": "tier1",
+                 "service_archetype": "datastore", "slo": {"scope": "domain"}}
+    assert not sr.materializes_per_service_slos(POLICY, declining)
+    assert sr.resolved_slos(POLICY, {"orders-sql": declining}) == {}
+
+
+def test_the_opt_in_is_the_scope_value_not_the_presence_of_a_block():
+    base = {"name": "probe", "team": "sre", "tier": "tier1",
+            "service_archetype": "api"}
+    assert not sr.materializes_per_service_slos(POLICY, base)
+    assert not sr.materializes_per_service_slos(POLICY, {**base, "slo": {"scope": "none"}})
+    assert sr.materializes_per_service_slos(POLICY, {**base, "slo": {"scope": "per_service"}})
+
+
+def test_a_tier0_entity_can_narrow_its_scope():
+    """Narrowing has to work in both directions, or the catalog tag and the
+    SLO that gets built disagree: the entity is tagged domain-scoped while a
+    per-service SLO exists for it."""
+    narrowed = {"name": "probe", "team": "sre", "tier": "tier0",
+                "service_archetype": "api", "slo": {"scope": "domain"}}
+    assert POLICY["tiers"]["tier0"]["slo"]["scope"] == "per_service"
+    assert not sr.materializes_per_service_slos(POLICY, narrowed)
+
+
+def test_the_entity_projection_carries_slo_through():
+    """entity_as_service() feeds the SLO resolver. Dropping `slo` there did not
+    fall back to a default — it made the opt-in and the profile layer dead."""
+    ent = {"kind": "service", "name": "probe", "team": "sre", "criticality": "tier1",
+           "service_archetype": "api", "slo": {"scope": "per_service",
+                                               "profile": "api-standard"}}
+    assert oc.entity_as_service(ent)["slo"] == ent["slo"]
+
+
+def test_registered_entities_resolve_the_same_slos_the_coverage_report_counts():
+    """End to end over the REAL registry, not a fixture: exactly the entities
+    whose effective scope is per_service get an SLO, and no others."""
+    import entity_resolver as er
+    entities = oc.load_entities()
+    services = oc.load_services()
+    expected = {n for n, e in entities.items()
+                if e.get("service_archetype") and er.resolve_slo_scope(e, POLICY) == "per_service"}
+    got = {s["service"] for s in sr.resolved_slos(POLICY, services).values()}
+    assert got == expected

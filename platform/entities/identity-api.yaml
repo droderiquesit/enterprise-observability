@@ -16,7 +16,7 @@ entity:
   envs: [dev, qa, stage, prod]
   env: prod
   slo:
-    profile: per_service       # tier0 default (tiers.yaml slo.scope), restated
+    scope: per_service       # tier0 default (tiers.yaml slo.scope), restated
   dependencies: [entra-id, sessions-redis]
   links:
     - { name: Repository, type: repo, url: https://github.com/acme/identity-api }

@@ -242,7 +242,7 @@ def _pr_body(files: dict[str, str], rationale: str, principal_id: str,
         "",
         "- Act mode cannot write to Datadog. This pull request is the only exit path.",
         "- The file set was checked against the Act-mode write fence "
-        "(`mcp/obs_act.py`): `platform/services/`, `platform/monitors/`, "
+        "(`mcp/obs_act.py`): `platform/entities/`, `platform/monitors/`, "
         "`platform/runbooks/` and an anchored insert into `platform/policy/slos.yaml`.",
         "- A plan was run before this was proposed; `obs.propose_change` refuses a "
         "change set whose content hash does not match a plan from this session.",

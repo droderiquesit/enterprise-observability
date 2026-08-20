@@ -15,7 +15,7 @@ entity:
   envs: [dev, qa, stage, prod]
   env: prod
   slo:
-    profile: domain            # tier1 default (tiers.yaml slo.scope)
+    scope: domain            # tier1 default (tiers.yaml slo.scope)
   dependencies: [orders-topic, orders-sql]
   links:
     - { name: Repository, type: repo, url: https://github.com/acme/order-events-consumer }

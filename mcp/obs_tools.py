@@ -458,16 +458,17 @@ def t_plan(ctx, args):
 
 
 @tool("obs.generate_yaml", "operations", "generate",
-      "Generate a service registration, self-service monitor manifest, or SLO catalog entry "
-      "from an intent. Returns the file path and content; writes nothing.",
-      _obj({"kind": {**STR, "enum": ["service", "monitor", "slo"]},
+      "Generate an entity registration, self-service monitor manifest, or SLO catalog entry "
+      "from an intent. Returns the file path and content; writes nothing. `service` is kept "
+      "as an alias of `entity` for callers written against the superseded registry.",
+      _obj({"kind": {**STR, "enum": ["entity", "service", "monitor", "slo"]},
             "spec": {"type": "object", "additionalProperties": True}},
            required=["kind", "spec"]))
 def t_generate(ctx, args):
     out = obs_act.generate(ctx.state, args["kind"], args["spec"])
     # Generation is not validation. Run the real validator over what was just
     # produced so a caller never proposes a generated file that CI will reject.
-    if out["kind"] in ("service", "monitor"):
+    if out["kind"] in ("entity", "service", "monitor"):
         out["validation"] = obs_act.validate_manifest(ctx.state, out["content"], out["kind"])
         out["validation"].pop("doc", None)
     return out

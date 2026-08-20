@@ -71,16 +71,22 @@ locals {
   # block a datastore from the correctly-shaped objective it can now have.
   # --- per-service SLOs: the resolved objectives (§11, §12, §14) ------------
   # WHICH services get their own objectives (§14 — not every entity needs one).
-  # Either the tier asks for per-service scope (today tier0, which is what keeps
-  # the object count bounded by mission-critical services rather than by estate
-  # size), or the service opted in by declaring an `slo:` block — the escape
-  # hatch for a tier1 service with one contractual endpoint, which should not
-  # have to be relabelled tier0 to make a promise.
+  # EFFECTIVE SCOPE — the entity's declared `slo.scope`, else its tier's —
+  # compared once against the scope that materializes. This is a transcription
+  # of tools/slo_resolver.py's materializes_per_service_slos(); the two must
+  # agree, because one decides what Terraform creates and the other decides
+  # what the coverage report says exists.
+  #
+  # They did not agree. This condition used to read `tier is per_service OR the
+  # service declares any slo: block`, and every entity declares one — including
+  # the four that say `scope: domain`, meaning "the domain SLO covers me". So
+  # Terraform built four per-service SLOs while the coverage report counted one,
+  # and the extra three were objectives nobody had promised.
   svc_slo_services = {
     for name, s in local.service_docs : name => s
     if contains(s.envs, "prod") && (
-      local.tiers[s.tier].slo.scope == local.slo_profiles.criticality.materialize_when_scope
-      || try(s.slo, null) != null
+      try(s.slo.scope, local.tiers[s.tier].slo.scope)
+      == local.slo_profiles.criticality.materialize_when_scope
     )
   }
 

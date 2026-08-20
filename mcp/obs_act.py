@@ -50,7 +50,7 @@ import obs_governance as gov                # noqa: E402
 # first so a new ALLOW pattern can never silently widen the fence.
 # ---------------------------------------------------------------------------
 ALLOWED_WRITE_PATTERNS = (
-    "platform/services/*.yaml",             # one file onboards a service
+    "platform/entities/*.yaml",             # one file onboards an entity
     "platform/monitors/*.yaml",             # one file adds a self-service monitor
     "platform/runbooks/*.md",               # the human sections of a runbook
 )
@@ -107,11 +107,44 @@ def assert_writable(rel_path: str) -> None:
 # validation
 # ---------------------------------------------------------------------------
 def _infer_kind(doc: dict) -> str:
+    if isinstance(doc, dict) and "entity" in doc:
+        return "entity"
     if isinstance(doc, dict) and "service" in doc:
         return "service"
     if isinstance(doc, dict) and "monitor" in doc:
         return "monitor"
     return "unknown"
+
+
+def _validate_entity(state, ent: dict) -> list[str]:
+    """Schema + cross-reference checks for an entity registration.
+
+    Both halves are the REAL ones CI runs — platform/schemas/entity.schema.json
+    and tools/entity_resolver.validate() — so an entity the MCP accepts is an
+    entity the pull-request gate accepts. Re-implementing either here would
+    make the MCP a second opinion about what is valid, and the whole point of
+    Act mode is that it proposes changes the gate will agree with.
+    """
+    import entity_resolver
+
+    errors: list[str] = []
+    schema = json.loads((REPO_ROOT / "platform" / "schemas" / "entity.schema.json").read_text())
+    try:
+        import jsonschema
+        for e in sorted(jsonschema.Draft202012Validator(schema).iter_errors({"entity": ent}),
+                        key=lambda e: list(e.path)):
+            errors.append(f"schema: {'/'.join(str(x) for x in e.path)}: {e.message}")
+    except ImportError:                     # pragma: no cover — jsonschema is a hard dep
+        errors.append("jsonschema is not installed; schema validation was skipped")
+
+    entities = oc.load_entities()
+    if not errors:
+        errors += entity_resolver.validate(ent, state.policy, entities)
+
+    if ent.get("name") and ent["name"] in entities:
+        errors.append(f"entity {ent['name']!r} is already registered — this would be an "
+                      "edit, not an onboarding; confirm that is intended")
+    return errors
 
 
 def _validate_service(state, svc: dict) -> list[str]:
@@ -178,7 +211,11 @@ def validate_manifest(state, text: str, kind: str | None = None) -> dict:
                 "errors": ["the manifest must be a YAML mapping"], "doc": None}
 
     kind = kind or _infer_kind(doc)
-    if kind == "service":
+    if kind == "entity":
+        ent = doc.get("entity") or {}
+        errors = _validate_entity(state, ent)
+        subject = ent.get("name")
+    elif kind == "service":
         svc = doc.get("service") or {}
         errors = _validate_service(state, svc)
         subject = svc.get("name")
@@ -187,7 +224,8 @@ def validate_manifest(state, text: str, kind: str | None = None) -> dict:
         subject = (doc.get("monitor") or {}).get("name")
     else:
         return {"kind": "unknown", "subject": None, "valid": False,
-                "errors": ["manifest must have a top-level `service:` or `monitor:` key"],
+                "errors": ["manifest must have a top-level `entity:`, `service:` "
+                           "or `monitor:` key"],
                 "doc": doc}
     return {"kind": kind, "subject": subject, "valid": not errors,
             "errors": errors, "doc": doc}
@@ -256,29 +294,91 @@ def profile_probe(state, resource: dict) -> dict:
 
 def resolve_slo_profile(state, *, service: str | None = None, tier: str,
                         service_archetype: str) -> dict:
-    """Which objective(s) this entity gets, and from where."""
+    """Which objective(s) this entity gets, from which layer, and why.
+
+    DELEGATES to tools/slo_resolver.py rather than reimplementing the rules.
+    This function used to answer from `slos.yaml -> tier0_slo_template`: one
+    availability objective, one target, applied to every tier0 service. That
+    template no longer exists — it was replaced by the §12 layered chain — and
+    the `.get()` reading it had been returning None for a while without
+    anything failing, so the MCP was quietly answering "no template" instead of
+    "here are your two objectives".
+    """
+    import slo_resolver
+
     policy = state.policy
     sa = policy["service_archetypes"][service_archetype]
     domain = sa["domain"]
     tier_slo = policy["tiers"][tier]["slo"]
     domain_slos = sorted(sid for sid, s in policy["slos"].items()
                          if s.get("scope") == "domain" and s.get("domain") == domain)
-    per_service = tier_slo["scope"] == "per_service"
+
+    # The registered entity if there is one, so a declared scope/profile/override
+    # is honoured; otherwise the minimum record the resolver needs, which is what
+    # makes this answerable for a service that does not exist yet.
+    registered = state.services.get(service) if service else None
+    svc = dict(registered) if registered else {
+        "name": service or "<unregistered>", "tier": tier,
+        "service_archetype": service_archetype, "team": "<unknown>",
+    }
+    svc.setdefault("tier", tier)
+
+    per_service = slo_resolver.materializes_per_service_slos(policy, svc)
+    objectives = slo_resolver.resolve_objectives(policy, svc, "prod") if per_service else {}
+    declared = (svc.get("slo") or {})
+
+    resolved = {
+        name: {
+            "enabled": o.get("enabled", False),
+            "type": o.get("type"),
+            "target": o.get("target"),
+            "timeframe": o.get("timeframe"),
+            "threshold": o.get("threshold"),
+            "burn_alerts": o.get("burn_alerts", []),
+            "slo_id": slo_resolver.slo_id_for(service, name) if service else None,
+            # Which of the eight layers set each field. This is the answer to
+            # "why does my service have this target", and it is computed, not
+            # narrated.
+            "provenance": o.get("provenance", {}),
+            "telemetry_dependency": o.get("telemetry_dependency"),
+            "warnings": o.get("warnings", []),
+        }
+        for name, o in objectives.items()
+    }
+
     return {
         "service": service, "tier": tier, "domain": domain,
-        "scope": tier_slo["scope"], "required": tier_slo["required"],
-        "objectives": tier_slo["objectives"],
+        "scope": declared.get("scope") or tier_slo["scope"],
+        "scope_declared_by": "entity" if declared.get("scope") else "tier",
+        "required": tier_slo["required"],
         "burn_windows": tier_slo["burn_windows"],
         "error_budget_policy": (tier_slo.get("error_budget_policy") or "").strip(),
         "domain_slos": domain_slos,
-        "per_service_slo_id": f"slo-{service}-availability" if (per_service and service) else None,
-        "per_service_template": policy["slos_doc"].get("tier0_slo_template") if per_service else None,
-        "cited_rules": [f"tiers.{tier}.slo", "slos.tier0_slo_template" if per_service
-                        else f"slos[scope=domain,domain={domain}]"],
-        # §11/§12 of the traceability audit: there is no slo_profile layer and no
-        # per-service objective override. Say so rather than implying a knob exists.
-        "limits": ["a service cannot declare multiple named objectives (§11)",
-                   "a service cannot override the domain target (§12)"],
+        "per_service": per_service,
+        "per_service_slo_id": (slo_resolver.slo_id_for(service, "availability")
+                               if per_service and service else None),
+        "slo_profile": declared.get("profile"),
+        "objectives": resolved,
+        "enabled_objectives": sorted(n for n, o in resolved.items() if o["enabled"]),
+        "cited_rules": [f"tiers.{tier}.slo"] + (
+            ["slo_profiles.by_entity_type." + service_archetype,
+             "slo_profiles.by_platform." + domain, "slo_profiles.criticality"]
+            + ([f"slo_profiles.profiles.{declared['profile']}"] if declared.get("profile") else [])
+            if per_service else [f"slos[scope=domain,domain={domain}]"]),
+        "registered": registered is not None,
+        # The limits that REMAIN. The earlier pair — "cannot declare multiple
+        # objectives (§11)" and "cannot override the domain target (§12)" — were
+        # true of the tier0 template and are not true of the layered chain; the
+        # first is now false outright, and repeating it would understate what
+        # the platform can do.
+        "limits": ([] if registered else
+                   [f"{service!r} is not registered, so any declared slo.scope, "
+                    f"slo.profile or per-objective override is not reflected here"])
+                  + ([] if per_service else
+                     [f"a domain-scoped entity shares its domain's targets (§12); to "
+                      f"promise its own, it must declare slo.scope: per_service"])
+                  + ["only the entity type can INTRODUCE an objective — a profile or "
+                     "per-service override may retune one, never add one"],
     }
 
 
@@ -399,8 +499,14 @@ def preview_manifest(state, text: str, kind: str | None = None) -> dict:
     v = validate_manifest(state, text, kind)
     result = {"kind": v["kind"], "subject": v["subject"], "valid": v["valid"],
               "errors": v["errors"], "resolution": {}, "delta": {}}
-    if v["kind"] == "service" and v["doc"]:
-        svc = v["doc"]["service"]
+    if v["kind"] in ("entity", "service") and v["doc"]:
+        # preview_onboarding() speaks the service shape, so an entity is
+        # projected onto it by the SAME projection every other consumer uses
+        # rather than by a second one written here.
+        if v["kind"] == "entity":
+            svc = oc.entity_as_service(v["doc"]["entity"])
+        else:
+            svc = v["doc"]["service"]
         if not any(e.startswith("schema:") for e in v["errors"]):
             preview = preview_onboarding(state, svc)
             result["resolution"] = preview
@@ -445,27 +551,41 @@ def preview_manifest(state, text: str, kind: str | None = None) -> dict:
 # ---------------------------------------------------------------------------
 # generation
 # ---------------------------------------------------------------------------
-def generate_service_yaml(state, spec: dict) -> dict:
+def generate_entity_yaml(state, spec: dict) -> dict:
+    """One registration file, in the ENTITY shape (platform/entities/).
+
+    `kind` is written explicitly rather than defaulted to `service`, because
+    defaulting it is the §5 defect this registry exists to fix: a datastore
+    registered as a service produces wrong ownership, a wrong dependency map
+    and a wrong scorecard, and nothing fails to say so. When the caller does
+    not supply one, it is DERIVED from the service archetype through the same
+    table the resolver uses — never guessed from the name.
+    """
     name = spec["name"]
-    doc = {"service": {
+    sa = spec["service_archetype"]
+    kind = spec.get("kind") or oc.entity_kind_of_service_archetype(state.policy, sa)
+    entity = {
+        "kind": kind,
         "name": name,
         "team": spec["team"],
-        "tier": spec["tier"],
-        "service_archetype": spec["service_archetype"],
+        # §10: the entity model's name for `tier`.
+        "criticality": spec.get("criticality") or spec["tier"],
+        "service_archetype": sa,
         "description": spec["description"],
         "envs": spec.get("envs") or ["prod"],
-    }}
-    for opt in ("dependencies", "compliance_scope", "idempotent", "links"):
+    }
+    for opt in ("platform", "domain", "region", "env", "dependencies",
+                "compliance_scope", "idempotent", "links", "oncall", "slo"):
         if spec.get(opt):
-            doc["service"][opt] = spec[opt]
+            entity[opt] = spec[opt]
     header = (
         "# Registered through the MCP server (Act mode). Reviewed as a pull request\n"
-        "# like every other change: the five fields below are the ENTIRE developer\n"
+        "# like every other change: the fields below are the ENTIRE developer\n"
         "# interface — profile, alert band, monitors, routing, runbooks and SLO are\n"
         "# all derived from them by platform/policy/.\n")
-    return {"path": f"platform/services/{name}.yaml",
-            "content": header + yaml.safe_dump(doc, sort_keys=False, width=100),
-            "kind": "service"}
+    return {"path": f"platform/entities/{name}.yaml",
+            "content": header + yaml.safe_dump({"entity": entity}, sort_keys=False, width=100),
+            "kind": "entity"}
 
 
 def generate_monitor_yaml(state, spec: dict) -> dict:
@@ -531,7 +651,7 @@ def generate_runbook(state, archetype: str) -> dict:
                      "regeneration.")}
 
 
-GENERATORS = {"service": generate_service_yaml, "monitor": generate_monitor_yaml,
+GENERATORS = {"entity": generate_entity_yaml, "service": generate_entity_yaml, "monitor": generate_monitor_yaml,
               "slo": generate_slo_yaml}
 
 
@@ -608,7 +728,14 @@ def target_environments(files: dict[str, str]) -> set[str]:
             continue
         if not isinstance(doc, dict):
             continue
-        if "service" in doc:
+        # `entity` FIRST, and never omitted: an unrecognized registration shape
+        # yields an empty env set, and an empty env set means both the
+        # environment authorization and the production second-approver gate see
+        # nothing to gate. A registration format the fence lets through but this
+        # function does not parse is an open prod gate, not a missing feature.
+        if "entity" in doc:
+            envs.update(doc["entity"].get("envs") or [])
+        elif "service" in doc:
             envs.update(doc["service"].get("envs") or [])
         elif "monitor" in doc:
             envs.update(doc["monitor"].get("env") or [])

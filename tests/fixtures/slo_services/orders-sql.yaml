@@ -16,4 +16,5 @@ service:
   description: Primary order-of-record database for the ordering platform.
   envs: [dev, qa, stage, prod]
   slo:
+    scope: per_service
     profile: datastore-critical

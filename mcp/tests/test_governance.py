@@ -16,10 +16,11 @@ from conftest import TOKENS
 from obs_tools import TOOLS
 
 SERVICE_YAML = (
-    "service:\n"
+    "entity:\n"
+    "  kind: service\n"
     "  name: probe-api\n"
     "  team: sre\n"
-    "  tier: tier2\n"
+    "  criticality: tier2\n"
     "  service_archetype: api\n"
     "  description: A probe service used by the governance tests.\n"
     "  envs: [qa]\n"
@@ -71,7 +72,7 @@ def test_an_unauthorized_write_is_refused(auditor):
         ("obs.preview_onboarding", {"service": {
             "name": "x", "team": "sre", "tier": "tier2", "service_archetype": "api",
             "description": "a description", "envs": ["qa"]}}),
-        ("obs.propose_change", {"files": {"platform/services/x.yaml": SERVICE_YAML},
+        ("obs.propose_change", {"files": {"platform/entities/x.yaml": SERVICE_YAML},
                                 "plan_token": "plan-whatever", "subject": "a subject",
                                 "rationale": "a rationale long enough to pass the schema"}),
     ]:
@@ -86,7 +87,7 @@ def test_an_incident_responder_can_plan_but_never_propose(make_ctx):
     assert obs_router.dispatch(ctx, "obs.resolve_profile", {
         "service_archetype": "api", "tier": "tier0", "env": "prod"})["ok"] is True
     out = obs_router.dispatch(ctx, "obs.propose_change", {
-        "files": {"platform/services/x.yaml": SERVICE_YAML},
+        "files": {"platform/entities/x.yaml": SERVICE_YAML},
         "plan_token": "plan-x", "subject": "a subject",
         "rationale": "long enough rationale for the schema"})
     assert out["ok"] is False and out["error"]["code"] == "forbidden"
@@ -102,16 +103,16 @@ def _plan(ctx, files):
 
 def test_propose_without_a_plan_is_refused(engineer):
     out = obs_router.dispatch(engineer, "obs.propose_change", {
-        "files": {"platform/services/probe-api.yaml": SERVICE_YAML},
+        "files": {"platform/entities/probe-api.yaml": SERVICE_YAML},
         "plan_token": "plan-never-issued", "subject": "Onboard probe-api",
         "rationale": "a rationale that is comfortably long enough"})
     assert out["ok"] is False and out["error"]["code"] == "plan_required"
 
 
 def test_a_plan_token_does_not_transfer_to_different_content(engineer):
-    files = {"platform/services/probe-api.yaml": SERVICE_YAML}
+    files = {"platform/entities/probe-api.yaml": SERVICE_YAML}
     token = _plan(engineer, files)
-    tampered = {"platform/services/probe-api.yaml": SERVICE_YAML + "# one extra byte\n"}
+    tampered = {"platform/entities/probe-api.yaml": SERVICE_YAML + "# one extra byte\n"}
     out = obs_router.dispatch(engineer, "obs.propose_change", {
         "files": tampered, "plan_token": token, "subject": "Onboard probe-api",
         "rationale": "a rationale that is comfortably long enough"})
@@ -121,7 +122,7 @@ def test_a_plan_token_does_not_transfer_to_different_content(engineer):
 
 def test_an_expired_plan_token_is_refused(make_ctx):
     ctx = make_ctx("engineer", plan_ttl_seconds=0)
-    files = {"platform/services/probe-api.yaml": SERVICE_YAML}
+    files = {"platform/entities/probe-api.yaml": SERVICE_YAML}
     token = _plan(ctx, files)
     time.sleep(0.01)
     out = obs_router.dispatch(ctx, "obs.propose_change", {
@@ -136,7 +137,7 @@ PROD_YAML = SERVICE_YAML.replace("envs: [qa]", "envs: [prod]")
 
 
 def test_an_environment_the_principal_does_not_hold_is_refused(engineer):
-    files = {"platform/services/probe-api.yaml": PROD_YAML}
+    files = {"platform/entities/probe-api.yaml": PROD_YAML}
     token = _plan(engineer, files)
     out = obs_router.dispatch(engineer, "obs.propose_change", {
         "files": files, "plan_token": token, "subject": "Onboard probe-api to prod",
@@ -145,7 +146,7 @@ def test_an_environment_the_principal_does_not_hold_is_refused(engineer):
 
 
 def test_production_needs_a_named_second_approver(lead):
-    files = {"platform/services/probe-api.yaml": PROD_YAML}
+    files = {"platform/entities/probe-api.yaml": PROD_YAML}
     token = _plan(lead, files)
     base = {"files": files, "plan_token": token, "subject": "Onboard probe-api to prod",
             "rationale": "a rationale that is comfortably long enough"}
@@ -171,7 +172,7 @@ def test_production_needs_a_named_second_approver(lead):
 
 
 def test_a_qa_change_needs_no_approver(engineer):
-    files = {"platform/services/probe-api.yaml": SERVICE_YAML}
+    files = {"platform/entities/probe-api.yaml": SERVICE_YAML}
     token = _plan(engineer, files)
     out = obs_router.dispatch(engineer, "obs.propose_change", {
         "files": files, "plan_token": token, "subject": "Onboard probe-api",
@@ -192,7 +193,7 @@ def test_a_qa_change_needs_no_approver(engineer):
     "README.md",
     "mcp/obs_governance.py",
     "../../etc/passwd",
-    "platform/services/../../secrets.yaml",
+    "platform/entities/../../secrets.yaml",
 ])
 def test_the_write_fence_refuses_everything_outside_team_owned_yaml(path):
     with pytest.raises(obs_act.WriteFenceError):
@@ -200,7 +201,7 @@ def test_the_write_fence_refuses_everything_outside_team_owned_yaml(path):
 
 
 @pytest.mark.parametrize("path", [
-    "platform/services/orders-api.yaml",
+    "platform/entities/orders-api.yaml",
     "platform/monitors/orders-latency.yaml",
     "platform/runbooks/api-availability.md",
     "platform/policy/slos.yaml",

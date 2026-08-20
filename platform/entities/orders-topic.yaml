@@ -26,4 +26,4 @@ entity:
   env: prod
   lifecycle: production
   slo:
-    profile: domain
+    scope: domain

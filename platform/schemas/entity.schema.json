@@ -96,12 +96,21 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "profile": {
-              "description": "Which SLO regime applies. Vocabulary is tiers.yaml's `slo.scope`; defaults to the tier's own scope. Per-objective overrides are Phase 4.",
+            "scope": {
+              "description": "WHETHER this entity gets its own SLO. Vocabulary is tiers.yaml's `slo.scope`; defaults to the tier's own scope, and an entity may only narrow or restate it. `domain` and `none` mean no per-service SLO is built.",
               "enum": ["per_service", "domain", "none"]
+            },
+            "profile": {
+              "description": "WHICH OBJECTIVES, when scope is per_service: a named bundle from platform/policy/slo_profiles.yaml -> profiles (api-critical, api-standard, datastore-critical, ...). Omit to resolve from the entity type, platform and criticality layers alone. Meaningless — and rejected — when scope is not per_service.",
+              "type": "string"
+            },
+            "objectives": {
+              "description": "Per-objective override, the last layer of the §12 resolution chain. Keys must be objectives the entity type already declares; a layer below the entity type cannot INTRODUCE an objective, because the entity type is what owns the SLI.",
+              "type": "object",
+              "additionalProperties": { "type": "object" }
             }
           },
-          "required": ["profile"]
+          "required": ["scope"]
         },
 
         "dependencies": {

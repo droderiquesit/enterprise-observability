@@ -655,48 +655,92 @@ def q_why_slo(state, p):
     svc = _service_record(state, svc_name) if svc_name else None
     if not svc:
         return a.unanswerable(
-            f"service {svc_name!r} is not registered in platform/services/ "
+            f"service {svc_name!r} is not registered in platform/entities/ "
             f"(registered: {', '.join(sorted(state.services)) or 'none'})")
+
+    import obs_act
 
     tier = svc["tier"]
     tier_policy = state.policy["tiers"][tier]
     sa = state.policy["service_archetypes"][svc["service_archetype"]]
     domain = sa["domain"]
-    scope = tier_policy["slo"]["scope"]
 
+    # The whole answer comes from the resolver Terraform uses, so "why" cannot
+    # drift from "what was built". The four-step narration that used to live
+    # here ended at a `tier0_slo_template` that no longer exists.
+    r = obs_act.resolve_slo_profile(state, service=svc_name, tier=tier,
+                                    service_archetype=svc["service_archetype"])
+    scope = r["scope"]
     domain_slos = {sid: s for sid, s in state.policy["slos"].items()
                    if s.get("scope") == "domain" and s.get("domain") == domain}
+
     chain = [
-        {"step": 1, "layer": "service registration",
-         "source": f"platform/services/{svc_name}.yaml",
-         "fact": f"tier={tier}, service_archetype={svc['service_archetype']}"},
-        {"step": 2, "layer": "service archetype → domain",
+        {"step": 1, "layer": "entity registration",
+         "source": f"platform/entities/{svc_name}.yaml",
+         "fact": (f"criticality={tier}, service_archetype={svc['service_archetype']}, "
+                  f"slo.scope={scope} (declared by {r['scope_declared_by']})")},
+        {"step": 2, "layer": "service archetype -> domain",
          "source": f"{POLICY}/service_archetypes.yaml",
-         "fact": f"{svc['service_archetype']} → domain={domain}"},
+         "fact": f"{svc['service_archetype']} -> domain={domain}"},
         {"step": 3, "layer": "tier SLO policy", "source": f"{POLICY}/tiers.yaml",
-         "fact": (f"tiers.{tier}.slo.scope={scope}, required="
-                  f"{tier_policy['slo']['required']}, objectives="
-                  f"{tier_policy['slo']['objectives']}")},
-        {"step": 4, "layer": "SLO catalog", "source": f"{POLICY}/slos.yaml",
-         "fact": (f"scope=per_service → a per-service SLO is generated for {svc_name} "
-                  f"from the tier0 template"
-                  if scope == "per_service" else
-                  f"scope=domain → covered by the {domain} domain SLOs: "
-                  f"{', '.join(sorted(domain_slos)) or '(none)'}")},
+         "fact": (f"tiers.{tier}.slo.scope={tier_policy['slo']['scope']}, required="
+                  f"{tier_policy['slo']['required']}")},
     ]
+    if r["per_service"]:
+        # One step per LAYER THAT ACTUALLY SET SOMETHING, read off the resolver's
+        # provenance rather than assumed — a layer that changed nothing for this
+        # service does not get to appear in its explanation.
+        layers_used = []
+        for obj in r["objectives"].values():
+            for _field, layer in (obj.get("provenance") or {}).items():
+                if layer not in layers_used:
+                    layers_used.append(layer)
+        chain.append(
+            {"step": 4, "layer": "SLO resolution chain (12)",
+             "source": f"{POLICY}/slo_profiles.yaml",
+             "fact": (f"scope=per_service -> objectives "
+                      f"{', '.join(sorted(r['objectives'])) or '(none)'} resolved through "
+                      f"layers: {', '.join(layers_used) or '(defaults only)'}"
+                      + (f"; profile={r['slo_profile']}" if r["slo_profile"] else
+                         "; no slo.profile declared, so the entity type, platform and "
+                         "criticality layers decide alone"))})
+        for name, obj in sorted(r["objectives"].items()):
+            fact = (f"enabled, target={obj['target']} "
+                    f"(from {obj['provenance'].get('target')}), "
+                    f"timeframe={obj['timeframe']}, burn_alerts={obj['burn_alerts']} "
+                    f"-> {obj['slo_id']}") if obj["enabled"] else (
+                    f"available but NOT enabled -- target would be {obj['target']} "
+                    f"(from {obj['provenance'].get('target')})")
+            chain.append({"step": 5, "layer": f"objective: {name}",
+                          "source": f"{POLICY}/slo_profiles.yaml", "fact": fact})
+    else:
+        chain.append(
+            {"step": 4, "layer": "SLO catalog", "source": f"{POLICY}/slos.yaml",
+             "fact": (f"scope={scope} -> no per-service SLO is built; covered by the "
+                      f"{domain} domain SLOs: {', '.join(sorted(domain_slos)) or '(none)'}")})
+
     a.data = {"service": svc_name, "tier": tier, "domain": domain,
-              "slo_scope": scope, "resolution_chain": chain,
+              "slo_scope": scope, "scope_declared_by": r["scope_declared_by"],
+              "per_service": r["per_service"], "slo_profile": r["slo_profile"],
+              "objectives": r["objectives"],
+              "enabled_objectives": r["enabled_objectives"],
+              "resolution_chain": chain,
               "domain_slos": sorted(domain_slos),
-              "objectives": tier_policy["slo"]["objectives"],
               "burn_windows": tier_policy["slo"]["burn_windows"],
               "error_budget_policy": (tier_policy["slo"].get("error_budget_policy") or "").strip()}
-    a.summary = (f"{svc_name} is {tier}; tiers.yaml gives {tier} slo.scope={scope}, so it "
-                 + ("gets its own SLO generated from the tier0 template."
-                    if scope == "per_service" else
-                    f"is covered by the {domain} domain SLO(s): "
-                    f"{', '.join(sorted(domain_slos)) or 'none'}."))
-    a.cite(f"platform/services/{svc_name}.yaml", "service_registration", [svc_name])
+    if r["per_service"]:
+        a.summary = (f"{svc_name} is {tier} with slo.scope={scope} (declared by "
+                     f"{r['scope_declared_by']}), so it gets its own SLO(s): "
+                     f"{', '.join(r['enabled_objectives']) or 'none enabled'}. Targets "
+                     f"resolve through the layered chain, not a single template.")
+    else:
+        a.summary = (f"{svc_name} is {tier} with slo.scope={scope}, so it builds no "
+                     f"per-service SLO and is covered by the {domain} domain SLO(s): "
+                     f"{', '.join(sorted(domain_slos)) or 'none'}.")
+    a.cite(f"platform/entities/{svc_name}.yaml", "service_registration", [svc_name])
     a.cite(f"{POLICY}/tiers.yaml", "policy_rule", [f"tiers.{tier}.slo"])
+    if r["per_service"]:
+        a.cite(f"{POLICY}/slo_profiles.yaml", "policy_rule", r["cited_rules"])
     a.cite(f"{POLICY}/slos.yaml", "slo_definition", sorted(domain_slos))
     a.caveat(f"{TRACEABILITY} §11/§12: a service cannot yet declare MULTIPLE named "
              "objectives or override the domain target — there is no slo_profile layer.")
@@ -852,7 +896,7 @@ def q_why_monitor(state, p):
         return a.unanswerable("pass both service and archetype")
     svc = _service_record(state, svc_name)
     if not svc:
-        return a.unanswerable(f"service {svc_name!r} is not registered in platform/services/")
+        return a.unanswerable(f"service {svc_name!r} is not registered in platform/entities/")
     arch = state.policy["archetypes"].get(aid)
     if not arch:
         return a.unanswerable(f"archetype {aid!r} does not exist in {POLICY}/archetypes/")
@@ -897,7 +941,7 @@ def q_why_monitor(state, p):
     inherited = bool(via_packs) and any(e["instantiated"] for e in per_env)
     chain = [
         {"step": 1, "layer": "service registration",
-         "source": f"platform/services/{svc_name}.yaml",
+         "source": f"platform/entities/{svc_name}.yaml",
          "fact": f"service_archetype={sa_id}, tier={tier}, envs={svc['envs']}"},
         {"step": 2, "layer": "service archetype → packs",
          "source": f"{POLICY}/service_archetypes.yaml",
@@ -928,7 +972,7 @@ def q_why_monitor(state, p):
         f"service_archetype={sa_id} → packs {packs} "
         f"{'→ ' + str(via_packs) if via_packs else '(archetype in none of them)'}; "
         f"tier {tier} → band {band}.")
-    a.cite(f"platform/services/{svc_name}.yaml", "service_registration", [svc_name])
+    a.cite(f"platform/entities/{svc_name}.yaml", "service_registration", [svc_name])
     a.cite(f"{POLICY}/service_archetypes.yaml", "policy_rule", [sa_id] + packs)
     a.cite(f"{POLICY}/archetypes/{arch['domain']}.yaml", "archetype", [aid])
     a.cite(f"{POLICY}/tiers.yaml", "policy_rule", [tier])
@@ -1276,7 +1320,7 @@ def q_owner(state, p):
                   "servicenow_assignment_group": team.get("servicenow_assignment_group"),
                   "source": "registry", "tier": svc["tier"]}
         a.summary = f"{ent} is owned by {svc['team']} ({team.get('name')}) by registration."
-        a.cite(f"platform/services/{ent}.yaml", "service_registration", [ent])
+        a.cite(f"platform/entities/{ent}.yaml", "service_registration", [ent])
         a.cite(f"{POLICY}/teams.yaml", "team", [svc["team"]])
         return a
 

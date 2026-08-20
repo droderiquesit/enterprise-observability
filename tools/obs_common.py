@@ -114,11 +114,20 @@ def entity_as_service(entity: dict) -> dict:
     monitor validator, the scorecard, both Terraform stacks — reads exactly
     what it read before the entity model landed. The projection is lossy on
     purpose: it drops the fields the old shape has no slot for (kind, platform,
-    region, oncall, slo) rather than inventing keys nobody reads.
+    region, oncall) rather than inventing keys nobody reads.
+
+    `slo` IS carried, and the reason is worth stating because it was dropped
+    once and the loss was silent. tools/slo_resolver.py reads it twice: as the
+    `slo_profile`/`service_override` layers of the §12 resolution chain, and as
+    the tier1 OPT-IN in materializes_per_service_slos(). Dropping it here did
+    not make a tier1 entity's `slo:` block resolve to a default — it made the
+    entity materialize no SLO at all, and made two of the eight layers
+    structurally unreachable, with nothing failing to say so.
     """
     svc = {_ENTITY_TO_SERVICE_KEY.get(k, k): v for k, v in entity.items()
            if k in ("name", "team", "criticality", "service_archetype", "description",
-                    "envs", "dependencies", "links", "compliance_scope", "idempotent")}
+                    "envs", "dependencies", "links", "compliance_scope", "idempotent",
+                    "slo")}
     return svc
 
 

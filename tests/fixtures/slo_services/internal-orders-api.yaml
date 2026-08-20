@@ -13,4 +13,5 @@ service:
   envs: [dev, qa, stage, prod]
   dependencies: [orders-sql, identity-api]
   slo:
+    scope: per_service
     profile: api-standard

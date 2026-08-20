@@ -108,7 +108,7 @@ def test_inheritance_explanation_matches_the_expansion_terraform_performs(state)
                for i in state.instances)
     # ...and the chain names the file that decided each step.
     steps = {s["step"]: s["source"] for s in a["data"]["resolution_chain"]}
-    assert steps[1] == "platform/services/identity-api.yaml"
+    assert steps[1] == "platform/entities/identity-api.yaml"
     assert steps[4] == "platform/policy/tiers.yaml"
 
 

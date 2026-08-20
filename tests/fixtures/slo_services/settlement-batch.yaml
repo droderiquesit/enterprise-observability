@@ -1,9 +1,12 @@
 # Two things this fixture proves that the API pair cannot.
 #
 #   1. OPT-IN. It is tier1, whose SLO scope is `domain` — so it would carry no
-#      objectives of its own. Declaring an `slo:` block is what materializes
-#      them, which is how a service with one contractual output gets a promise
-#      without being relabelled tier0 to obtain one.
+#      objectives of its own. Declaring `slo.scope: per_service` is what
+#      materializes them, which is how a service with one contractual output
+#      gets a promise without being relabelled tier0 to obtain one. The opt-in
+#      is that VALUE, not the mere presence of an `slo:` block — a block saying
+#      `scope: domain` is a service DECLINING its own SLO, and reading it as an
+#      opt-in built objectives nobody had promised.
 #   2. A DIFFERENT ENTITY TYPE resolves a different objective SET. A batch job
 #      has no request ratio and no latency percentile; what it owes is a
 #      completed run and a fresh output, and the entity-type layer is what
@@ -17,4 +20,5 @@ service:
   envs: [qa, stage, prod]
   dependencies: [orders-sql, partner-sftp]
   slo:
+    scope: per_service
     profile: batch-standard

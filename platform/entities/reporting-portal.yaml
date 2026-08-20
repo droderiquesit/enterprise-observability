@@ -17,7 +17,7 @@ entity:
   envs: [dev, qa, stage, prod]
   env: prod
   slo:
-    profile: domain            # tier2 default (tiers.yaml slo.scope)
+    scope: domain            # tier2 default (tiers.yaml slo.scope)
   dependencies: [warehouse, identity-api]
   links:
     - { name: Repository, type: repo, url: https://github.com/acme/reporting-portal }

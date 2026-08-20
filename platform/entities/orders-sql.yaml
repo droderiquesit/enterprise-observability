@@ -29,7 +29,7 @@ entity:
   env: prod
   lifecycle: production
   slo:
-    profile: domain            # covered by the database domain SLO, not its own
+    scope: domain            # covered by the database domain SLO, not its own
   # Carried by the DBA rotation inside data-engineering rather than by the
   # team's general rota — exactly the ownership split a single `team:` field
   # on a service registration could not express.

@@ -22,6 +22,16 @@ SERVICE_SPEC = {
     "envs": ["qa", "stage"],
 }
 
+# The same registration in the ENTITY shape the registry actually stores:
+# `kind` explicit, `tier` under its §10 name. Built from SERVICE_SPEC so the
+# two cannot drift apart.
+ENTITY_SPEC = {k: v for k, v in SERVICE_SPEC.items() if k != "tier"}
+ENTITY_SPEC.update(kind="service", criticality=SERVICE_SPEC["tier"])
+
+
+def entity_doc(**over):
+    return yaml.safe_dump({"entity": {**ENTITY_SPEC, **over}})
+
 
 def _git(repo: Path, *args) -> str:
     return subprocess.run(["git", *args], cwd=str(repo), capture_output=True,
@@ -36,12 +46,40 @@ def _plan(ctx, files):
 
 # --- inspect / validate -----------------------------------------------------
 
-def test_validate_accepts_the_repositorys_own_service_registration(state):
-    text = (Path(obs_act.REPO_ROOT) / "platform" / "services" / "identity-api.yaml").read_text()
+def test_validate_accepts_the_repositorys_own_entity_registration(state):
+    """The MCP must accept the registry's OWN files.
+
+    Reading a real committed entity rather than a fixture is the point: it is
+    what catches the MCP validating against a shape the repository stopped
+    using. It did exactly that once — the registry moved to platform/entities/
+    and this read a path that no longer existed.
+    """
+    text = (Path(obs_act.REPO_ROOT) / "platform" / "entities" / "identity-api.yaml").read_text()
     v = obs_act.validate_manifest(state, text)
-    assert v["kind"] == "service" and v["subject"] == "identity-api"
+    assert v["kind"] == "entity" and v["subject"] == "identity-api"
     # It is already registered, so the ONLY complaint should be exactly that.
     assert all("already registered" in e for e in v["errors"]), v["errors"]
+
+
+def test_generated_entity_yaml_is_accepted_by_the_validator(state):
+    """Act mode must not be able to propose a file its own gate rejects."""
+    spec = {"name": "billing-api", "team": "sre", "tier": "tier1",
+            "service_archetype": "api", "envs": ["prod"],
+            "description": "Invoice issuance and payment status lookup."}
+    out = obs_act.generate_entity_yaml(state, spec)
+    assert out["path"] == "platform/entities/billing-api.yaml"
+    v = obs_act.validate_manifest(state, out["content"])
+    assert v["valid"], v["errors"]
+    # `kind` is written explicitly, never left to a downstream default.
+    assert yaml.safe_load(out["content"])["entity"]["kind"] == "service"
+
+
+def test_generated_entity_is_written_inside_the_write_fence(state):
+    out = obs_act.generate_entity_yaml(
+        state, {"name": "billing-api", "team": "sre", "tier": "tier1",
+                "service_archetype": "api", "envs": ["prod"],
+                "description": "Invoice issuance and payment status lookup."})
+    obs_act.assert_writable(out["path"])      # raises if the fence refuses it
 
 
 def test_validate_accepts_the_reference_self_service_manifest(state):
@@ -104,8 +142,12 @@ def test_slo_resolution_distinguishes_per_service_from_domain(state):
                                      service_archetype="api")
     assert t2["scope"] == "domain" and t2["domain_slos"]
     assert t2["per_service_slo_id"] is None
-    # The known limits are stated, not implied.
-    assert any("§11" in x for x in t2["limits"])
+    # The known limits are stated, not implied. A domain-scoped entity shares
+    # its domain's targets — that is the limit that still applies. (The former
+    # "cannot declare multiple objectives" limit is gone: the layered chain
+    # resolves several, as the tier0 assertion below shows.)
+    assert any("domain-scoped" in x for x in t2["limits"])
+    assert len(t0["objectives"]) > 1
 
 
 def test_missing_telemetry_lists_the_metrics_and_labels_the_derivation(state):
@@ -137,7 +179,7 @@ def test_preview_onboarding_for_tier0_reports_the_slo_it_creates(state):
 
 
 def test_what_if_merged_is_the_same_computation(state):
-    text = yaml.safe_dump({"service": {**SERVICE_SPEC, "name": "orders-api-2"}})
+    text = entity_doc(name="orders-api-2")
     import obs_ask
     a = obs_ask.answer(state, "what_if_merged", {"yaml": text})
     assert a["data"]["valid"]
@@ -147,13 +189,26 @@ def test_what_if_merged_is_the_same_computation(state):
 
 # --- generation -------------------------------------------------------------
 
-def test_generated_service_yaml_validates(state, engineer):
+def test_generated_entity_yaml_validates(state, engineer):
     out = obs_router.dispatch(engineer, "obs.generate_yaml",
-                              {"kind": "service", "spec": SERVICE_SPEC})["result"]
-    assert out["path"] == "platform/services/orders-api.yaml"
+                              {"kind": "entity", "spec": ENTITY_SPEC})["result"]
+    assert out["path"] == "platform/entities/orders-api.yaml"
     assert out["validation"]["valid"], out["validation"]["errors"]
     doc = yaml.safe_load(out["content"])
-    assert doc["service"]["name"] == "orders-api"
+    assert doc["entity"]["name"] == "orders-api"
+
+
+def test_generate_yaml_still_accepts_the_legacy_service_kind(state, engineer):
+    """`kind: service` is the name callers already use; it must keep working.
+
+    It now produces an ENTITY file — same registration, correct shape — rather
+    than silently writing the superseded format to a directory nothing reads.
+    """
+    out = obs_router.dispatch(engineer, "obs.generate_yaml",
+                              {"kind": "service", "spec": SERVICE_SPEC})["result"]
+    assert out["path"] == "platform/entities/orders-api.yaml"
+    assert out["validation"]["valid"], out["validation"]["errors"]
+    assert yaml.safe_load(out["content"])["entity"]["criticality"] == "tier2"
 
 
 def test_generated_monitor_yaml_validates(state, engineer):
@@ -194,8 +249,8 @@ def test_generated_runbook_is_byte_identical_to_the_platform_generator(state, en
 # --- planning ---------------------------------------------------------------
 
 def test_plan_reports_the_delta_the_budget_and_a_token(state, engineer):
-    files = {"platform/services/orders-api.yaml":
-             yaml.safe_dump({"service": SERVICE_SPEC})}
+    files = {"platform/entities/orders-api.yaml":
+             entity_doc()}
     plan = _plan(engineer, files)
     assert plan["errors"] == []
     assert plan["policy_lint_errors"] == [], "the repository's own lint must be clean"
@@ -206,7 +261,7 @@ def test_plan_reports_the_delta_the_budget_and_a_token(state, engineer):
 
 
 def test_plan_surfaces_a_manifest_that_ci_would_reject(state, engineer):
-    files = {"platform/services/broken.yaml": yaml.safe_dump({"service": {"name": "x"}})}
+    files = {"platform/entities/broken.yaml": yaml.safe_dump({"entity": {"name": "x"}})}
     plan = _plan(engineer, files)
     assert plan["errors"], "an incomplete registration must not plan clean"
 
@@ -237,8 +292,8 @@ def test_terraform_planning_is_opt_in_and_never_reaches_datadog(state, monkeypat
 # --- the dry run ------------------------------------------------------------
 
 def test_a_dry_run_makes_no_changes(state, engineer, scratch_repo):
-    files = {"platform/services/orders-api.yaml":
-             yaml.safe_dump({"service": SERVICE_SPEC})}
+    files = {"platform/entities/orders-api.yaml":
+             entity_doc()}
     token = _plan(engineer, files)["plan_token"]
     engineer.config["repo_root"] = scratch_repo
 
@@ -271,8 +326,8 @@ def test_a_dry_run_makes_no_changes(state, engineer, scratch_repo):
 
 
 def test_dry_run_is_the_default_when_the_flag_is_absent(state, engineer, scratch_repo):
-    files = {"platform/services/orders-api.yaml":
-             yaml.safe_dump({"service": SERVICE_SPEC})}
+    files = {"platform/entities/orders-api.yaml":
+             entity_doc()}
     token = _plan(engineer, files)["plan_token"]
     engineer.config["repo_root"] = scratch_repo
     out = obs_router.dispatch(engineer, "obs.propose_change", {
@@ -285,8 +340,8 @@ def test_dry_run_is_the_default_when_the_flag_is_absent(state, engineer, scratch
 
 def test_propose_commits_to_a_branch_and_leaves_the_base_untouched(
         state, engineer, scratch_repo, tmp_path):
-    files = {"platform/services/orders-api.yaml":
-             yaml.safe_dump({"service": SERVICE_SPEC})}
+    files = {"platform/entities/orders-api.yaml":
+             entity_doc()}
     token = _plan(engineer, files)["plan_token"]
     engineer.config["repo_root"] = scratch_repo
     base_head = _git(scratch_repo, "rev-parse", "main").strip()
@@ -304,9 +359,9 @@ def test_propose_commits_to_a_branch_and_leaves_the_base_untouched(
     assert _git(scratch_repo, "rev-parse", "main").strip() == base_head
     assert r["branch"] in _git(scratch_repo, "branch", "--list")
     shown = _git(scratch_repo, "show", "--stat", r["branch"])
-    assert "platform/services/orders-api.yaml" in shown
+    assert "platform/entities/orders-api.yaml" in shown
     assert "orders-api" in _git(scratch_repo, "show",
-                                f"{r['branch']}:platform/services/orders-api.yaml")
+                                f"{r['branch']}:platform/entities/orders-api.yaml")
     # The worktree is scratch space and must not survive the call.
     assert not any((obs_gitops.DEFAULT_WORKTREE_ROOT / r["branch"].replace("/", "__")
                     ).glob("*")) if obs_gitops.DEFAULT_WORKTREE_ROOT.exists() else True
@@ -345,18 +400,23 @@ def test_insert_yaml_block_is_anchored_to_the_named_section():
     merged = obs_gitops.insert_yaml_block(original, "slos", block)
     doc = yaml.safe_load(merged)
     assert "slo-orders-availability" in doc["slos"]
-    # Nothing else moved, and the section that follows is still a sibling.
-    assert set(doc) == set(yaml.safe_load(original)) | set()
-    assert "tier0_slo_template" in doc
-    assert merged.index("slo-orders-availability") < merged.index("tier0_slo_template")
+    # Nothing else moved: no key gained, no key lost.
+    assert set(doc) == set(yaml.safe_load(original))
+    # The insert lands INSIDE `slos:` and does not drift past the end of the
+    # section. slos.yaml carries no sibling key after `slos:` to anchor on, so
+    # the anchor is the trailing comment block that documents why per-service
+    # SLOs are NOT defined in this file — text that must stay below the insert.
+    tail = "# PER-SERVICE SLOs — NOT DEFINED HERE"
+    assert tail in merged
+    assert merged.index("slo-orders-availability") < merged.index(tail)
     # Every comment in the original survives — the file's comments ARE the
     # design rationale, which is why the insert is textual and not a re-dump.
     assert merged.count("# ") >= original.count("# ")
 
 
 def test_the_pull_request_body_states_the_change_path(state, engineer, scratch_repo):
-    files = {"platform/services/orders-api.yaml":
-             yaml.safe_dump({"service": SERVICE_SPEC})}
+    files = {"platform/entities/orders-api.yaml":
+             entity_doc()}
     token = _plan(engineer, files)["plan_token"]
     engineer.config["repo_root"] = scratch_repo
     body = obs_router.dispatch(engineer, "obs.propose_change", {
@@ -366,7 +426,7 @@ def test_the_pull_request_body_states_the_change_path(state, engineer, scratch_r
     assert "cannot write to Datadog" in body
     assert "ci.yml" in body
     assert "datadog-production" in body
-    assert "platform/services/orders-api.yaml" in body
+    assert "platform/entities/orders-api.yaml" in body
 
 
 def test_a_generated_branch_name_is_never_the_base_or_a_protected_branch(
@@ -379,7 +439,7 @@ def test_a_generated_branch_name_is_never_the_base_or_a_protected_branch(
     for collision in ("main", "tfstate"):
         monkeypatch.setattr(obs_gitops, "branch_name", lambda *a, **k: collision)
         with pytest.raises(obs_gitops.GitOpsError, match="protected branch"):
-            obs_gitops.propose(files={"platform/services/x.yaml": "service: {}\n"},
+            obs_gitops.propose(files={"platform/entities/x.yaml": "service: {}\n"},
                                subject="a subject", body="body", principal_id="p",
                                repo_root=scratch_repo, base="main", apply=True)
 

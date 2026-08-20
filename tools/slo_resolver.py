@@ -267,15 +267,31 @@ def materializes_per_service_slos(policy: dict, service: dict) -> bool:
 
     Either the tier asks for per-service scope (today: tier0 only, which is what
     keeps the object count bounded by mission-critical services rather than by
-    estate size), or the service opted in by declaring an `slo:` block — the
-    escape hatch for a tier1 service with one contractual endpoint, which should
-    not have to be relabelled tier0 to make a promise.
+    estate size), or the service opted in by declaring `slo.scope: per_service`
+    — the escape hatch for a tier1 service with one contractual endpoint, which
+    should not have to be relabelled tier0 to make a promise.
+
+    The opt-in tests the VALUE of `slo.scope`, not the presence of an `slo:`
+    block. Testing for presence made `scope: domain` — an entity saying "the
+    domain SLO already covers me" — opt that entity IN to the per-service SLO
+    it was declining, and the declining entities are the majority.
+
+    Resolution is EFFECTIVE SCOPE — the entity's declared `slo.scope`, else its
+    tier's — compared once against the scope that materializes. Deciding it in
+    one place is what keeps this function and entity_resolver.resolve_slo_scope()
+    from disagreeing: the catalog tag and the SLO that gets built are now two
+    reads of the same answer. It also makes narrowing work, which the earlier
+    `tier == per_service OR has-an-slo-block` form could not express — a tier0
+    entity declaring `scope: domain` was tagged domain-scoped and given a
+    per-service SLO anyway.
     """
     tier_slo = policy["tiers"][service["tier"]]["slo"]
     criticality = policy["slo_profiles_doc"].get("criticality") or {}
     wanted = criticality.get("materialize_when_scope", "per_service")
-    opt_in = bool(criticality.get("opt_in_via_service_yaml", True)) and bool(service.get("slo"))
-    return tier_slo.get("scope") == wanted or opt_in
+    declared_scope = (service.get("slo") or {}).get("scope")
+    if declared_scope and not criticality.get("opt_in_via_service_yaml", True):
+        declared_scope = None
+    return (declared_scope or tier_slo.get("scope")) == wanted
 
 
 def resolved_slos(policy: dict, services: dict, env: str = "prod") -> dict:

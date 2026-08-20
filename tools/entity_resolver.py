@@ -205,9 +205,14 @@ def resolve_alert_band(entity: dict, policy: dict) -> str:
     return policy["tiers_doc"]["profile_to_band"][resolve_monitoring_profile(entity, policy)]
 
 
-def resolve_slo_profile(entity: dict, policy: dict) -> str:
-    """Declared `slo.profile`, else the tier's `slo.scope`."""
-    declared = (entity.get("slo") or {}).get("profile")
+def resolve_slo_scope(entity: dict, policy: dict) -> str:
+    """Declared `slo.scope`, else the tier's `slo.scope`.
+
+    WHETHER the entity gets its own SLO — not which objectives it carries.
+    That is `slo.profile`, resolved by tools/slo_resolver.py against
+    slo_profiles.yaml, and only consulted when this returns `per_service`.
+    """
+    declared = (entity.get("slo") or {}).get("scope")
     return declared or policy["tiers"][entity["criticality"]]["slo"]["scope"]
 
 
@@ -233,7 +238,7 @@ def resolve_tags(entity: dict, policy: dict) -> list[str]:
         "domain": resolve_domain(entity, policy),
         "monitoring_profile": resolve_monitoring_profile(entity, policy),
         "alert_band": resolve_alert_band(entity, policy),
-        "slo_profile": resolve_slo_profile(entity, policy),
+        "slo_scope": resolve_slo_scope(entity, policy),
         "managed_by": "terraform",
     }
     if kind_policy(kind, policy).get("performance_data"):
@@ -276,7 +281,7 @@ def resolve(entity: dict, policy: dict, entities: dict | None = None) -> dict:
         "domain": resolve_domain(entity, policy),
         "monitoring_profile": resolve_monitoring_profile(entity, policy),
         "alert_band": resolve_alert_band(entity, policy),
-        "slo_profile": resolve_slo_profile(entity, policy),
+        "slo_scope": resolve_slo_scope(entity, policy),
         "tags": resolve_tags(entity, policy),
         "depends_on": resolve_dependencies(entity, entities, policy),
         "components": resolve_components(entity, entities, policy),
@@ -399,9 +404,26 @@ def validate(entity: dict, policy: dict, entities: dict) -> list[str]:
     if domain and domain not in policy["domains"]:
         errs.append(f"domain {domain!r} is not in domains.yaml")
 
-    slo_profile = (entity.get("slo") or {}).get("profile")
-    if slo_profile and slo_profile not in doc["slo_profiles"]:
-        errs.append(f"slo.profile {slo_profile!r} is not one of {doc['slo_profiles']}")
+    slo = entity.get("slo") or {}
+    slo_scope = slo.get("scope")
+    if slo_scope and slo_scope not in doc["slo_scopes"]:
+        errs.append(f"slo.scope {slo_scope!r} is not one of {doc['slo_scopes']}")
+
+    # `profile` selects an objective bundle for an entity that HAS its own SLO.
+    # On a domain- or none-scoped entity it is not a harmless extra key: it
+    # reads as a per-service promise that nothing will ever materialize, which
+    # is the same class of silent-green defect as an SLI that matches no series.
+    slo_profile = slo.get("profile")
+    if slo_profile is not None:
+        known = sorted((policy["slo_profiles_doc"].get("profiles") or {}))
+        if slo_profile not in known:
+            errs.append(f"slo.profile {slo_profile!r} is not a profile in "
+                        f"slo_profiles.yaml (have: {', '.join(known)})")
+        effective = resolve_slo_scope(entity, policy)
+        if effective != "per_service":
+            errs.append(f"slo.profile {slo_profile!r} is set but slo.scope resolves "
+                        f"to {effective!r}, so no per-service SLO is built and the "
+                        f"profile would never be read")
 
     if entity.get("dependencies") and not kind_policy(kind, policy).get("spec_depends_on"):
         errs.append(f"kind {kind!r} has no `dependsOn` in its v3 spec, so these "
