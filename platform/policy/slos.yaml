@@ -312,16 +312,17 @@ slos:
     burn_alerts: [fast, slow]
 
 # -----------------------------------------------------------------------------
-# TIER0 PER-SERVICE SLOs
-# Generated from platform/services/*.yaml where tier == tier0. This is the ONLY
-# place per-service objects are created, and it is bounded by the number of
-# mission-critical services (tens), not by the size of the estate.
+# PER-SERVICE SLOs — NOT DEFINED HERE
+#
+# They live in platform/policy/slo_profiles.yaml, which resolves a service's
+# objectives through the §12 chain (enterprise → entity type → platform →
+# criticality → environment → profile → the service's own override).
+#
+# This file previously carried a `tier0_slo_template`: one HTTP-trace SLI
+# applied to every tier0 service, at one target, with one objective. It could
+# not express a second objective, and it measured a tier0 datastore with
+# `trace.http.request.*` — a query that returns nothing, and therefore an SLO
+# that is permanently, silently green. The profile model replaced it; a tier0
+# service that names no profile still resolves exactly the objective the
+# template produced, which is what made the change safe to apply.
 # -----------------------------------------------------------------------------
-tier0_slo_template:
-  type: metric
-  timeframe: 30d
-  target_from_tier: true          # tiers.yaml → tier0.slo.objectives.availability
-  burn_alerts: [fast, medium, slow]
-  query:
-    numerator: "sum:trace.http.request.hits{env:prod,service:__SERVICE__}.as_count() - sum:trace.http.request.errors{env:prod,service:__SERVICE__,http.status_class:5xx}.as_count()"
-    denominator: "sum:trace.http.request.hits{env:prod,service:__SERVICE__}.as_count()"

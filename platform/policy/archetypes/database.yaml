@@ -34,6 +34,7 @@ archetypes:
     envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-database-availability
+    slo_relation: sli_producing
     runbook: db-availability
     workflow: diag-database
     failure_domain: databases
@@ -55,6 +56,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-database-availability
+    slo_relation: compliance
     runbook: db-backup-age
     workflow: auto-compliance-ticket
     failure_domain: database-capacity
@@ -77,6 +79,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-database-availability
+    slo_relation: slo_supporting
     runbook: azuresql-dtu-saturation
     workflow: remediate-scale-workload
     failure_domain: database-capacity
@@ -98,6 +101,7 @@ archetypes:
     envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-database-availability
+    slo_relation: slo_supporting
     runbook: db-telemetry-loss
     workflow: diag-database
     failure_domain: databases

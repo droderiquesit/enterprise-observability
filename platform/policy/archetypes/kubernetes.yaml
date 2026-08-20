@@ -25,6 +25,7 @@ archetypes:
     envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-k8s-workload-availability
+    slo_relation: sli_producing
     runbook: k8s-deployment-unavailable
     workflow: diag-k8s-workload
     failure_domain: kubernetes-workloads
@@ -49,6 +50,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-k8s-workload-availability
+    slo_relation: slo_supporting
     runbook: k8s-deployment-degraded-redundancy
     workflow: diag-k8s-workload
     failure_domain: kubernetes-workloads
@@ -73,6 +75,7 @@ archetypes:
     envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-k8s-workload-availability
+    slo_relation: sli_producing
     runbook: k8s-pod-crashloop
     workflow: diag-k8s-workload
     failure_domain: kubernetes-workloads
@@ -97,6 +100,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-k8s-workload-availability
+    slo_relation: slo_impacting
     runbook: k8s-restart-anomaly
     workflow: diag-k8s-workload
     failure_domain: kubernetes-workloads
@@ -118,6 +122,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-k8s-workload-availability
+    slo_relation: slo_supporting
     runbook: k8s-oomkill
     workflow: diag-k8s-workload
     failure_domain: kubernetes-workloads
@@ -141,6 +146,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-k8s-workload-availability
+    slo_relation: slo_supporting
     runbook: k8s-memory-saturation-forecast
     workflow: remediate-scale-workload
     failure_domain: kubernetes-workloads
@@ -162,6 +168,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-k8s-workload-availability
+    slo_relation: slo_supporting
     runbook: k8s-cpu-throttling
     workflow: remediate-scale-workload
     failure_domain: kubernetes-workloads
@@ -183,6 +190,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-k8s-workload-availability
+    slo_relation: slo_impacting
     runbook: k8s-pods-pending
     workflow: diag-k8s-workload
     failure_domain: kubernetes-nodes
@@ -207,6 +215,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-k8s-workload-availability
+    slo_relation: sli_producing
     runbook: k8s-node-not-ready
     workflow: diag-k8s-workload
     failure_domain: kubernetes-nodes
@@ -229,6 +238,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-k8s-workload-availability
+    slo_relation: slo_supporting
     runbook: k8s-node-pressure
     workflow: diag-k8s-workload
     failure_domain: kubernetes-nodes
@@ -251,6 +261,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-k8s-workload-availability
+    slo_relation: slo_supporting
     runbook: k8s-cluster-capacity-forecast
     workflow: auto-capacity-ticket
     failure_domain: kubernetes-nodes
@@ -271,6 +282,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-k8s-workload-availability
+    slo_relation: slo_supporting
     runbook: k8s-hpa-at-max
     workflow: auto-capacity-ticket
     failure_domain: kubernetes-workloads
@@ -295,6 +307,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-k8s-workload-availability
+    slo_relation: slo_supporting
     runbook: k8s-pvc-capacity-forecast
     workflow: auto-capacity-ticket
     failure_domain: kubernetes-workloads
@@ -316,6 +329,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-k8s-workload-availability
+    slo_relation: slo_supporting
     runbook: k8s-cronjob-failure
     workflow: remediate-rerun-job
     failure_domain: kubernetes-workloads
@@ -338,6 +352,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-k8s-workload-availability
+    slo_relation: slo_impacting
     runbook: k8s-control-plane-latency
     workflow: diag-k8s-workload
     failure_domain: kubernetes-control-plane
@@ -358,6 +373,7 @@ archetypes:
     envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-k8s-workload-availability
+    slo_relation: slo_supporting
     runbook: k8s-telemetry-loss
     workflow: diag-k8s-workload
     failure_domain: kubernetes-control-plane

@@ -28,6 +28,7 @@ archetypes:
     envs: [dev, prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-cloud-platform-availability
+    slo_relation: sli_producing
     runbook: azure-appservice-unavailable
     workflow: diag-azure-resource
     failure_domain: azure-paas
@@ -50,6 +51,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_impacting
     runbook: azure-appservice-http5xx-anomaly
     workflow: remediate-recycle-app-pool
     failure_domain: azure-paas
@@ -71,6 +73,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_supporting
     runbook: azure-appservice-plan-saturation
     workflow: remediate-scale-workload
     failure_domain: azure-paas
@@ -92,6 +95,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_impacting
     runbook: azure-function-failure-anomaly
     workflow: diag-azure-resource
     failure_domain: azure-paas
@@ -114,6 +118,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_impacting
     runbook: azure-function-execution-stalled
     workflow: diag-azure-resource
     failure_domain: azure-paas
@@ -137,6 +142,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_impacting
     runbook: azure-storage-availability
     workflow: diag-azure-resource
     failure_domain: azure-paas
@@ -160,6 +166,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_supporting
     runbook: azure-storage-throttling
     workflow: diag-azure-resource
     failure_domain: azure-paas
@@ -181,6 +188,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-cloud-platform-availability
+    slo_relation: sli_producing
     runbook: azure-loadbalancer-probe-failure
     workflow: diag-azure-resource
     failure_domain: azure-landing-zone
@@ -204,6 +212,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-cloud-platform-availability
+    slo_relation: sli_producing
     runbook: azure-appgateway-backend-unhealthy
     workflow: diag-azure-resource
     failure_domain: azure-landing-zone
@@ -226,6 +235,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_impacting
     runbook: azure-appgateway-5xx-anomaly
     workflow: diag-azure-resource
     failure_domain: azure-landing-zone
@@ -247,6 +257,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: sli_producing
     runbook: azure-keyvault-availability
     workflow: diag-azure-resource
     failure_domain: azure-paas
@@ -271,6 +282,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_supporting
     runbook: azure-keyvault-throttling
     workflow: diag-azure-resource
     failure_domain: azure-paas
@@ -293,6 +305,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_impacting
     runbook: azure-vm-unavailable
     workflow: diag-azure-resource
     failure_domain: azure-landing-zone
@@ -316,6 +329,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_supporting
     runbook: azure-quota-exhaustion-forecast
     workflow: auto-capacity-ticket
     failure_domain: cloud-quota
@@ -341,6 +355,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: dependency
     runbook: azure-service-health-event
     workflow: auto-enrich-change
     failure_domain: azure-landing-zone
@@ -364,6 +379,7 @@ archetypes:
     envs: [prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-platform-services
+    slo_relation: slo_supporting
     runbook: azure-integration-telemetry-gap
     workflow: diag-azure-resource
     failure_domain: azure-landing-zone
@@ -393,6 +409,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-platform-services
+    slo_relation: informational
     runbook: azure-cost-anomaly
     workflow: auto-finops-review
     failure_domain: cloud-finops

@@ -34,6 +34,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_supporting
     runbook: redis-server-load-saturation
     workflow: diag-azure-resource
     failure_domain: caching
@@ -58,6 +59,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_supporting
     runbook: redis-cpu-saturation-forecast
     workflow: auto-capacity-ticket
     failure_domain: caching
@@ -78,6 +80,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_supporting
     runbook: redis-memory-pressure-forecast
     workflow: auto-capacity-ticket
     failure_domain: caching
@@ -102,6 +105,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_supporting
     runbook: redis-eviction-anomaly
     workflow: diag-azure-resource
     failure_domain: caching
@@ -126,6 +130,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_supporting
     runbook: redis-cache-hit-ratio-degradation
     workflow: diag-azure-resource
     failure_domain: caching
@@ -150,6 +155,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_supporting
     runbook: redis-connection-saturation-forecast
     workflow: auto-capacity-ticket
     failure_domain: caching
@@ -174,6 +180,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_impacting
     runbook: redis-latency-anomaly
     workflow: diag-azure-resource
     failure_domain: caching
@@ -194,6 +201,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_impacting
     runbook: redis-error-anomaly
     workflow: diag-azure-resource
     failure_domain: caching
@@ -217,6 +225,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_supporting
     runbook: redis-geo-replication-unhealthy
     workflow: diag-azure-resource
     failure_domain: caching
@@ -242,6 +251,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_impacting
     runbook: acr-pull-failure-anomaly
     workflow: diag-azure-resource
     failure_domain: registry
@@ -267,6 +277,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: diagnostic
     runbook: acr-push-failure-anomaly
     workflow: diag-azure-resource
     failure_domain: registry
@@ -291,6 +302,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-cloud-platform-availability
+    slo_relation: slo_supporting
     runbook: acr-storage-growth-forecast
     workflow: auto-capacity-ticket
     failure_domain: registry

@@ -43,6 +43,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: sli_producing
     runbook: sqlserver-instance-unreachable
     workflow: diag-database
     failure_domain: databases
@@ -67,6 +68,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-database-latency
+    slo_relation: slo_supporting
     runbook: sqlserver-blocking-sessions
     workflow: diag-database
     failure_domain: databases
@@ -90,6 +92,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-database-latency
+    slo_relation: slo_impacting
     runbook: sqlserver-lock-wait-degradation
     workflow: diag-database
     failure_domain: databases
@@ -109,6 +112,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-database-latency
+    slo_relation: slo_impacting
     runbook: sqlserver-deadlock-anomaly
     workflow: diag-database
     failure_domain: databases
@@ -133,6 +137,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-database-latency
+    slo_relation: slo_impacting
     runbook: sqlserver-long-running-transaction
     workflow: diag-database
     failure_domain: databases
@@ -157,6 +162,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-database-latency
+    slo_relation: slo_supporting
     runbook: sqlserver-memory-pressure
     workflow: diag-database
     failure_domain: databases
@@ -181,6 +187,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: slo_supporting
     runbook: sqlserver-tempdb-space-exhaustion
     workflow: auto-capacity-ticket
     failure_domain: databases
@@ -204,6 +211,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: slo_supporting
     runbook: sqlserver-tempdb-version-store-growth
     workflow: diag-database
     failure_domain: databases
@@ -228,6 +236,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-database-latency
+    slo_relation: slo_impacting
     runbook: sqlserver-log-flush-wait-degradation
     workflow: diag-database
     failure_domain: databases
@@ -250,6 +259,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: slo_supporting
     runbook: sqlserver-data-file-growth-forecast
     workflow: auto-capacity-ticket
     failure_domain: databases
@@ -269,6 +279,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: slo_supporting
     runbook: sqlserver-connection-saturation
     workflow: auto-capacity-ticket
     failure_domain: databases
@@ -294,6 +305,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: slo_impacting
     runbook: sqlserver-ag-no-primary
     workflow: diag-database
     failure_domain: databases
@@ -316,6 +328,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: sli_producing
     runbook: sqlserver-ag-sync-unhealthy
     workflow: diag-database
     failure_domain: databases
@@ -339,6 +352,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: slo_supporting
     runbook: sqlserver-replica-not-synchronized
     workflow: diag-database
     failure_domain: databases
@@ -362,6 +376,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: slo_supporting
     runbook: sqlserver-replica-lag
     workflow: diag-database
     failure_domain: databases
@@ -387,6 +402,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: sli_producing
     runbook: azuresql-unavailable
     workflow: diag-database
     failure_domain: databases
@@ -411,6 +427,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-database-latency
+    slo_relation: slo_supporting
     runbook: azuresql-cpu-pressure
     workflow: diag-database
     failure_domain: databases
@@ -431,6 +448,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-database-latency
+    slo_relation: slo_supporting
     runbook: azuresql-log-write-saturation
     workflow: diag-database
     failure_domain: databases
@@ -455,6 +473,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: slo_supporting
     runbook: azuresql-session-saturation
     workflow: auto-capacity-ticket
     failure_domain: databases
@@ -475,6 +494,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: slo_impacting
     runbook: azuresql-connection-failures
     workflow: diag-database
     failure_domain: databases
@@ -495,6 +515,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: security
     runbook: azuresql-firewall-blocked-connections
     workflow: diag-database
     failure_domain: databases
@@ -519,6 +540,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: slo_supporting
     runbook: azuresql-storage-exhaustion-forecast
     workflow: auto-capacity-ticket
     failure_domain: databases
@@ -539,6 +561,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: slo_supporting
     runbook: azuresql-tempdb-log-saturation
     workflow: diag-database
     failure_domain: databases
@@ -563,6 +586,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-database-latency
+    slo_relation: slo_impacting
     runbook: azuresql-deadlock-anomaly
     workflow: diag-database
     failure_domain: databases
@@ -596,6 +620,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-infra-backup-success
+    slo_relation: compliance
     runbook: sqlserver-restore-verification-stale
     workflow: auto-compliance-ticket
     failure_domain: databases
@@ -620,6 +645,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-infra-backup-success
+    slo_relation: compliance
     runbook: sqlserver-restore-verification-failed
     workflow: auto-compliance-ticket
     failure_domain: databases

@@ -1,0 +1,518 @@
+# =============================================================================
+# SLO PROFILES — NAMED OBJECTIVE SETS AND THE RESOLUTION CHAIN (§11–§13)
+#
+# THE PROBLEM THIS FILE SOLVES
+# Two services can be technically identical — same runtime, same archetype,
+# same monitors, same dashboards — and still owe their users completely
+# different promises. A partner-facing ordering API and an internal one are the
+# same service to the platform; only one of them has a contractual 99.99%.
+# Before this file the platform could not express that: a tier0 service got
+# exactly ONE auto-generated availability SLO at the tier target, and there was
+# no way to say "availability AND latency AND freshness", or "these two, but at
+# different targets".
+#
+# An SLO profile is a NAMED SET OF OBJECTIVES. A service picks one by name, and
+# may override individual fields of it. Everything else — the SLI query, the
+# burn windows, the timeframe — is inherited, so the service YAML stays a
+# statement of intent rather than a copy of the platform's plumbing.
+#
+# THE RESOLUTION CHAIN  (later layers win, field by field)
+#
+#   1. enterprise defaults   `defaults` below — the floor every objective starts from
+#   2. entity type           `by_entity_type` — WHICH objectives an entity can have
+#                            at all, and the SLI that measures them
+#   3. platform              `by_platform` — domain-wide adjustments (a database
+#                            objective is not measured like an API objective)
+#   4. criticality           tiers.yaml → tiers.<tier>.slo — the TARGETS and burn
+#                            windows the business attached to the tier
+#   5. environment           environments.yaml → slo_impact — non-production never
+#                            materializes an objective
+#   6. slo_profile           `profiles` below — the named set the service chose
+#   7. service override      the service's own `slo.objectives.<name>` — WINS
+#
+# Every layer contributes the same shaped object, so resolution is a left-to-right
+# field-wise merge. `tools/slo_resolver.py` implements it for the tooling and
+# `stacks/coverage/slos.tf` implements it for the apply; both read THIS file.
+# Neither reads the other — same rule as everywhere else in the platform.
+#
+# WHY `enabled` EXISTS
+# The entity-type layer declares every objective an entity type COULD carry,
+# including the SLI that would measure it. Declaring is not the same as owning:
+# an SLO nobody promised is an alert nobody asked for. So an objective is only
+# created when some layer switches `enabled: true` — which the entity type does
+# for the one objective that is non-negotiable (availability), and a profile or
+# a service does for the rest. A tier0 service that names no profile therefore
+# gets exactly what it got before this file existed, which is what makes this
+# change safe to merge.
+# =============================================================================
+version: 2
+
+# -----------------------------------------------------------------------------
+# VOCABULARY
+# -----------------------------------------------------------------------------
+# The three objective names the enterprise defines. They are deliberately the
+# same three keys tiers.yaml carries under `slo.objectives`, because that file
+# is the criticality layer: an objective name it does not know is an objective
+# with no business target, and the chain would fall through to whatever number
+# a profile happened to write, with nothing reviewing it.
+objective_names: [availability, latency, freshness]
+
+# --- §15 MONITOR-TO-SLO GOVERNANCE -------------------------------------------
+# Every archetype declares `slo_relation`. `slo_id` says WHICH objective a
+# monitor relates to; this says HOW it relates, which is the difference between
+# "this monitor measures the promise" and "this monitor explains why the promise
+# broke". Without it, a catalog of 260 monitors all pointing at 22 SLOs looks
+# like 260 SLI producers, and nobody can tell which alerts actually move an
+# error budget.
+slo_relations:
+  sli_producing:
+    display: SLI-producing
+    description: >
+      The monitor IS the SLI. It is a member of a monitor-based SLO, so its
+      alerting state directly consumes that objective's error budget.
+    governance: >
+      Must appear in the `member_archetypes` of the SLO it names, and must
+      itself be a metric monitor if that SLO carries burn alerts.
+  slo_supporting:
+    display: SLO-supporting
+    description: >
+      Measures a precondition of the objective — saturation, capacity,
+      redundancy, dependency health inside the service. It does not consume
+      budget, but its breach reliably precedes one, which is why it is worth
+      alerting on before customers notice.
+  slo_impacting:
+    display: SLO-impacting
+    description: >
+      Detects a symptom that consumes the budget of a metric-based SLO the
+      platform computes elsewhere (a 5xx spike against an availability SLI).
+      The monitor is not a member of the SLO; it is the human-readable version
+      of the same failure.
+  dependency:
+    display: Dependency
+    description: >
+      Watches something a service depends on but does not own — a SaaS
+      provider, a network path, a shared platform. Budget is consumed through
+      the dependent service, so this classification exists to stop a dependency
+      alert being counted as the service's own reliability.
+  diagnostic:
+    display: Diagnostic
+    description: >
+      Explains an incident, never declares one. Exists so responders can answer
+      "why" quickly; must never be the reason a page fires.
+  informational:
+    display: Informational
+    description: >
+      Records a fact — a deployment, a configuration change, a cost movement.
+      No objective, no budget, no page.
+  security:
+    display: Security
+    description: >
+      A security detection. Its urgency comes from the security operating model,
+      not from an error budget; an SLO must never be used to justify tolerating
+      it.
+  compliance:
+    display: Compliance
+    description: >
+      Evidence for an auditable control. The control's own schedule decides what
+      is acceptable, not an error budget.
+
+# -----------------------------------------------------------------------------
+# LAYER 1 — ENTERPRISE DEFAULTS
+# The floor. Anything not stated by any later layer lands here.
+# -----------------------------------------------------------------------------
+defaults:
+  enabled: false          # see "WHY `enabled` EXISTS" above
+  type: metric            # metric | monitor
+  timeframe: 30d          # 7d | 30d | 90d — Datadog's supported SLO timeframes
+  target: 99.0            # last resort; the criticality layer normally sets it
+  burn_alerts: [slow]     # the quietest useful burn alert; tiers widen it
+  warning: null           # modules/slo derives the warning from the target
+
+# -----------------------------------------------------------------------------
+# LAYER 2 — ENTITY TYPE
+# WHICH objectives an entity type can carry, and the SLI that measures each.
+#
+# This is the layer that fixes a real defect in the old tier0 template: it
+# applied an HTTP trace SLI to EVERY tier0 service, so a tier0 datastore would
+# have been measured with `trace.http.request.*` — a query that returns nothing,
+# and therefore an SLO that is permanently, silently green.
+#
+# PLACEHOLDERS, substituted at resolution time:
+#   __SERVICE__          the registered service name
+#   __ENV__              the environment the SLO is materialized for (prod)
+#   __LATENCY_BUCKET__   the tag value derived from the objective's threshold
+#                        (`under_300ms`) — see the threshold note below.
+#
+# THRESHOLD, AND WHY IT IS CARRIED AS A TAG
+# A Datadog metric SLI is a ratio of two counts, so "requests faster than 300ms"
+# has to already exist as a count — the SLI cannot compute a percentile and
+# compare it. The boundary therefore has to be attached to the telemetry as a
+# tag, and `threshold` is the contract for what that tag means. Two services
+# with different latency promises emit different bucket tags; the profile states
+# which one this objective reads. (The domain SLOs in slos.yaml use the coarse
+# `latency_bucket:fast` form of the same mechanism.)
+# -----------------------------------------------------------------------------
+by_entity_type:
+
+  api:
+    objectives:
+      availability:
+        enabled: true                # an API that is not up has no other qualities
+        type: metric
+        threshold: { statistic: http_status_class, operator: excludes, value: "5xx" }
+        sli:
+          numerator: "sum:trace.http.request.hits{env:__ENV__,service:__SERVICE__}.as_count() - sum:trace.http.request.errors{env:__ENV__,service:__SERVICE__,http.status_class:5xx}.as_count()"
+          denominator: "sum:trace.http.request.hits{env:__ENV__,service:__SERVICE__}.as_count()"
+      latency:
+        type: metric
+        threshold: { statistic: p99_duration, operator: "<", value: 500, unit: ms }
+        sli:
+          numerator: "sum:trace.http.request.hits{env:__ENV__,service:__SERVICE__,latency_bucket:__LATENCY_BUCKET__}.as_count()"
+          denominator: "sum:trace.http.request.hits{env:__ENV__,service:__SERVICE__}.as_count()"
+
+  web:
+    objectives:
+      availability:
+        enabled: true
+        type: metric
+        threshold: { statistic: http_status_class, operator: excludes, value: "5xx" }
+        sli:
+          numerator: "sum:trace.http.request.hits{env:__ENV__,service:__SERVICE__}.as_count() - sum:trace.http.request.errors{env:__ENV__,service:__SERVICE__,http.status_class:5xx}.as_count()"
+          denominator: "sum:trace.http.request.hits{env:__ENV__,service:__SERVICE__}.as_count()"
+      latency:
+        type: metric
+        # A page-load promise, not a server-time promise: the number a user can
+        # feel is the one worth an error budget.
+        threshold: { statistic: p75_page_load, operator: "<", value: 2500, unit: ms }
+        sli:
+          numerator: "sum:rum.view.count{env:__ENV__,service:__SERVICE__,latency_bucket:__LATENCY_BUCKET__}.as_count()"
+          denominator: "sum:rum.view.count{env:__ENV__,service:__SERVICE__}.as_count()"
+
+  worker:
+    objectives:
+      availability:
+        enabled: true
+        type: metric
+        threshold: { statistic: span_error, operator: excludes, value: "error" }
+        sli:
+          numerator: "sum:trace.span.hits{env:__ENV__,service:__SERVICE__}.as_count() - sum:trace.span.errors{env:__ENV__,service:__SERVICE__}.as_count()"
+          denominator: "sum:trace.span.hits{env:__ENV__,service:__SERVICE__}.as_count()"
+      latency:
+        type: metric
+        threshold: { statistic: p95_processing_time, operator: "<", value: 5000, unit: ms }
+        sli:
+          numerator: "sum:trace.span.hits{env:__ENV__,service:__SERVICE__,latency_bucket:__LATENCY_BUCKET__}.as_count()"
+          denominator: "sum:trace.span.hits{env:__ENV__,service:__SERVICE__}.as_count()"
+
+  event_consumer:
+    objectives:
+      availability:
+        enabled: true
+        type: metric
+        threshold: { statistic: span_error, operator: excludes, value: "error" }
+        sli:
+          numerator: "sum:trace.span.hits{env:__ENV__,service:__SERVICE__}.as_count() - sum:trace.span.errors{env:__ENV__,service:__SERVICE__}.as_count()"
+          denominator: "sum:trace.span.hits{env:__ENV__,service:__SERVICE__}.as_count()"
+      freshness:
+        # For a consumer, freshness IS lag: how far behind the stream it is.
+        type: metric
+        threshold: { statistic: consumer_lag, operator: "<", value: 5, unit: minutes }
+        telemetry_dependency: >
+          acme.consumer.lag_checks — the consumer emits one check per evaluation
+          interval, tagged `within_target:true|false` against the threshold on
+          this objective. See docs/telemetry-gaps.md before enabling it.
+        sli:
+          numerator: "sum:acme.consumer.lag_checks{env:__ENV__,service:__SERVICE__,within_target:true}.as_count()"
+          denominator: "sum:acme.consumer.lag_checks{env:__ENV__,service:__SERVICE__}.as_count()"
+
+  batch_job:
+    objectives:
+      availability:
+        # For a batch job "available" means "the run completed successfully".
+        enabled: true
+        type: metric
+        threshold: { statistic: run_outcome, operator: equals, value: "success" }
+        telemetry_dependency: >
+          acme.batch.runs — emitted by the scheduler wrapper at the end of every
+          run. See docs/telemetry-gaps.md.
+        sli:
+          numerator: "sum:acme.batch.runs{env:__ENV__,service:__SERVICE__,status:success}.as_count()"
+          denominator: "sum:acme.batch.runs{env:__ENV__,service:__SERVICE__}.as_count()"
+      freshness:
+        type: metric
+        threshold: { statistic: output_age, operator: "<", value: 60, unit: minutes }
+        telemetry_dependency: >
+          acme.batch.output_checks — the freshness prober compares output
+          timestamp to the threshold on this objective. See
+          docs/telemetry-gaps.md.
+        sli:
+          numerator: "sum:acme.batch.output_checks{env:__ENV__,service:__SERVICE__,within_target:true}.as_count()"
+          denominator: "sum:acme.batch.output_checks{env:__ENV__,service:__SERVICE__}.as_count()"
+
+  scheduled_job:
+    objectives:
+      availability:
+        enabled: true
+        type: metric
+        threshold: { statistic: run_outcome, operator: equals, value: "success" }
+        telemetry_dependency: >
+          acme.batch.runs — emitted by the scheduler wrapper. See
+          docs/telemetry-gaps.md.
+        sli:
+          numerator: "sum:acme.batch.runs{env:__ENV__,service:__SERVICE__,status:success}.as_count()"
+          denominator: "sum:acme.batch.runs{env:__ENV__,service:__SERVICE__}.as_count()"
+      freshness:
+        # For a cron the freshness question is "when did it last succeed?", not
+        # "how old is the output?" — a job that has not run at all produces no
+        # output to be stale, which is the failure mode that hides longest.
+        type: metric
+        threshold: { statistic: last_success_age, operator: "<", value: 90, unit: minutes }
+        telemetry_dependency: >
+          acme.batch.schedule_checks — the schedule prober compares time since
+          last success to the threshold on this objective. See
+          docs/telemetry-gaps.md.
+        sli:
+          numerator: "sum:acme.batch.schedule_checks{env:__ENV__,service:__SERVICE__,within_target:true}.as_count()"
+          denominator: "sum:acme.batch.schedule_checks{env:__ENV__,service:__SERVICE__}.as_count()"
+
+  datastore:
+    objectives:
+      availability:
+        enabled: true
+        # The one entity type whose availability is honestly a MONITOR-based
+        # objective: a datastore's "up" is a service check, not a request ratio.
+        type: monitor
+        threshold: { statistic: service_check, operator: equals, value: "OK" }
+        member_archetypes: [db-availability]
+        # Datadog rejects burn_rate() on a monitor SLO with a non-metric member
+        # ("Alerting on monitor based SLOs currently supports metric monitors" —
+        # found by live plan validation). db-availability is a service check, so
+        # this objective tracks its budget and pages through the member itself.
+        burn_alerts: []
+      latency:
+        type: metric
+        threshold: { statistic: p95_query_time, operator: "<", value: 100, unit: ms }
+        sli:
+          numerator: "sum:trace.sql.query.hits{env:__ENV__,service:__SERVICE__,latency_bucket:__LATENCY_BUCKET__}.as_count()"
+          denominator: "sum:trace.sql.query.hits{env:__ENV__,service:__SERVICE__}.as_count()"
+
+  integration_flow:
+    objectives:
+      availability:
+        enabled: true
+        type: metric
+        threshold: { statistic: span_error, operator: excludes, value: "error" }
+        sli:
+          numerator: "sum:trace.span.hits{env:__ENV__,service:__SERVICE__}.as_count() - sum:trace.span.errors{env:__ENV__,service:__SERVICE__}.as_count()"
+          denominator: "sum:trace.span.hits{env:__ENV__,service:__SERVICE__}.as_count()"
+      freshness:
+        type: metric
+        threshold: { statistic: delivery_age, operator: "<", value: 30, unit: minutes }
+        telemetry_dependency: >
+          acme.integration.deliveries — emitted per delivery by the integration
+          runtime. See docs/telemetry-gaps.md.
+        sli:
+          numerator: "sum:acme.integration.deliveries{env:__ENV__,service:__SERVICE__,within_target:true}.as_count()"
+          denominator: "sum:acme.integration.deliveries{env:__ENV__,service:__SERVICE__}.as_count()"
+
+  platform_service:
+    objectives:
+      availability:
+        enabled: true
+        type: metric
+        threshold: { statistic: span_error, operator: excludes, value: "error" }
+        sli:
+          numerator: "sum:trace.span.hits{env:__ENV__,service:__SERVICE__}.as_count() - sum:trace.span.errors{env:__ENV__,service:__SERVICE__}.as_count()"
+          denominator: "sum:trace.span.hits{env:__ENV__,service:__SERVICE__}.as_count()"
+      latency:
+        type: metric
+        threshold: { statistic: p99_duration, operator: "<", value: 1000, unit: ms }
+        sli:
+          numerator: "sum:trace.span.hits{env:__ENV__,service:__SERVICE__,latency_bucket:__LATENCY_BUCKET__}.as_count()"
+          denominator: "sum:trace.span.hits{env:__ENV__,service:__SERVICE__}.as_count()"
+
+  # §14 — not every entity needs an SLO, and these three cannot honestly carry
+  # one: nobody here can move the number. They are covered by the domain SLOs
+  # (`slo-external-dependency`, `slo-network-availability`,
+  # `slo-infra-compute-availability`), so the failure is still measured — just
+  # not as a promise this organization is making.
+  saas_dependency: { objectives: {} }
+  external_endpoint: { objectives: {} }
+  infrastructure_resource: { objectives: {} }
+
+# -----------------------------------------------------------------------------
+# LAYER 3 — PLATFORM
+# Domain-wide adjustments that hold for every entity on that platform,
+# regardless of tier or profile. Keyed by the domain the service archetype maps
+# to (platform/policy/service_archetypes.yaml → domain).
+# -----------------------------------------------------------------------------
+#
+# NOTE ON WHAT DOES *NOT* BELONG HERE: `target` and `burn_alerts`. The
+# criticality layer sits AFTER this one and would overwrite both, so a
+# platform-wide target is a value that silently never applies. Technical
+# constraints that a tier must not be able to override are not layers at all —
+# they are invariants applied after the whole chain (see `tools/slo_resolver.py`
+# → `_apply_invariants`, which is where "a monitor SLO with a service-check
+# member cannot carry burn alerts" is enforced).
+by_platform:
+
+  api:
+    objectives:
+      availability:
+        # Health and readiness probes are requests too, and there are far more
+        # of them than there are customer requests. Left in the denominator
+        # they hold the SLI up while every real call fails — an API can look
+        # 99.99% available while being entirely broken. Excluded platform-wide
+        # rather than per profile, because no API team should have to remember.
+        sli:
+          numerator: "sum:trace.http.request.hits{env:__ENV__,service:__SERVICE__,!http.route:/health,!http.route:/ready}.as_count() - sum:trace.http.request.errors{env:__ENV__,service:__SERVICE__,http.status_class:5xx,!http.route:/health,!http.route:/ready}.as_count()"
+          denominator: "sum:trace.http.request.hits{env:__ENV__,service:__SERVICE__,!http.route:/health,!http.route:/ready}.as_count()"
+
+  database:
+    objectives:
+      latency:
+        # 75ms p95 is the standard the database platform team engineers to and
+        # publishes; a service that has promised tighter says so in its profile.
+        threshold: { statistic: p95_query_time, operator: "<", value: 75, unit: ms }
+
+  integration:
+    objectives:
+      freshness:
+        # Batch and integration outputs are consumed by people on a working
+        # rhythm, and are repaired the same way. A 7d window matches how the
+        # owning team actually reviews freshness; a 30d window hides a bad week
+        # inside a good month.
+        timeframe: 7d
+
+# -----------------------------------------------------------------------------
+# LAYER 4 — CRITICALITY
+# Deliberately NOT restated here. The targets and burn windows a tier implies
+# are a business decision that already lives in tiers.yaml, and copying them
+# would create a second place to change them (and a first place to forget).
+# -----------------------------------------------------------------------------
+criticality:
+  targets_from: "platform/policy/tiers.yaml → tiers.<tier>.slo.objectives"
+  burn_alerts_from: "platform/policy/tiers.yaml → tiers.<tier>.slo.burn_windows"
+  # A per-service SLO is materialized only when the tier asks for one
+  # (`slo.scope: per_service`, today tier0) — or when the service opts in by
+  # declaring its own `slo:` block, which is how a tier1 service with one
+  # contractual endpoint gets an objective without being relabelled tier0.
+  materialize_when_scope: per_service
+  opt_in_via_service_yaml: true
+
+# -----------------------------------------------------------------------------
+# LAYER 5 — ENVIRONMENT
+# An error budget is a promise to customers, and customers only exist in
+# production. environments.yaml already states this as `slo_impact`; this layer
+# enforces it rather than restating it, so an objective can never be created in
+# an environment whose own policy says its failures do not count.
+# -----------------------------------------------------------------------------
+by_environment:
+  materialize_when_slo_impact: true
+  overrides:
+    # prod is the one environment that materializes objectives, and it changes
+    # nothing about them — the layer exists so the chain is complete, and so a
+    # future per-environment adjustment has a home that is not a service YAML.
+    prod: {}
+
+# -----------------------------------------------------------------------------
+# LAYER 6 — NAMED PROFILES
+#
+# A profile is the unit a service owner actually chooses. `entity_types` is the
+# guard rail: a profile can only be applied to entities it can actually measure,
+# so `batch-standard` on an API is a validation failure rather than an SLO with
+# an SLI that never reports.
+# -----------------------------------------------------------------------------
+profiles:
+
+  api-critical:
+    display: Critical API
+    description: >
+      A customer- or partner-facing API under a contractual availability
+      commitment. Both availability and latency carry budgets, and availability
+      burns are alerted on all three windows because a fast burn here is an
+      incident before it is a trend.
+    entity_types: [api]
+    objectives:
+      availability:
+        enabled: true
+        target: 99.95
+        burn_alerts: [fast, medium, slow]
+      latency:
+        enabled: true
+        target: 99.5
+        threshold: { statistic: p99_duration, operator: "<", value: 300, unit: ms }
+        burn_alerts: [fast, slow]
+
+  api-standard:
+    display: Standard API
+    description: >
+      A production API with real users and no contractual commitment. One
+      availability budget, a looser latency promise, and no medium-window
+      paging — a bad ten minutes here is not worth waking someone.
+    entity_types: [api, web]
+    objectives:
+      availability:
+        enabled: true
+        target: 99.9
+        burn_alerts: [fast, slow]
+      latency:
+        enabled: true
+        target: 99.0
+        threshold: { statistic: p99_duration, operator: "<", value: 800, unit: ms }
+        burn_alerts: [slow]
+
+  datastore-critical:
+    display: Critical datastore
+    description: >
+      A datastore whose loss stops a tier0 service. Availability is measured
+      from the service check (see the datastore entity type for why it carries
+      no burn alerts); query latency carries its own budget, because a datastore
+      that is up but slow fails its callers just as completely.
+    entity_types: [datastore]
+    objectives:
+      availability:
+        enabled: true
+        target: 99.95
+      latency:
+        enabled: true
+        target: 99.0
+        threshold: { statistic: p95_query_time, operator: "<", value: 50, unit: ms }
+        burn_alerts: [slow]
+
+  batch-standard:
+    display: Standard batch
+    description: >
+      A scheduled or batch workload judged on outcome and timeliness, not on
+      instantaneous availability. Slow burn only: a batch budget is consumed a
+      run at a time, so a short window measures nothing.
+    entity_types: [batch_job, scheduled_job]
+    objectives:
+      availability:
+        enabled: true
+        target: 99.0
+        burn_alerts: [slow]
+      freshness:
+        enabled: true
+        target: 99.0
+        threshold: { statistic: output_age, operator: "<", value: 120, unit: minutes }
+        burn_alerts: [slow]
+
+  stream-critical:
+    display: Critical stream consumer
+    description: >
+      A consumer where being behind IS the failure. Availability covers
+      processing errors; freshness covers lag, which is the signal a downstream
+      team actually feels. Consumers only: a background worker has no stream to
+      be behind, and its entity type declares no lag SLI to measure.
+    entity_types: [event_consumer]
+    objectives:
+      availability:
+        enabled: true
+        target: 99.9
+        burn_alerts: [fast, slow]
+      freshness:
+        enabled: true
+        target: 99.5
+        threshold: { statistic: consumer_lag, operator: "<", value: 2, unit: minutes }
+        burn_alerts: [slow]

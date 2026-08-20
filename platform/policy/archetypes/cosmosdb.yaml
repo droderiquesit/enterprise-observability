@@ -31,6 +31,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: sli_producing
     runbook: cosmos-service-availability
     workflow: diag-database
     failure_domain: databases
@@ -55,6 +56,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: slo_supporting
     runbook: cosmos-ru-throttling
     workflow: diag-database
     failure_domain: databases
@@ -79,6 +81,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: slo_supporting
     runbook: cosmos-normalized-ru-saturation
     workflow: diag-database
     failure_domain: databases
@@ -104,6 +107,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-database-latency
+    slo_relation: slo_impacting
     runbook: cosmos-server-side-latency-anomaly
     workflow: diag-database
     failure_domain: databases
@@ -128,6 +132,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: slo_supporting
     runbook: cosmos-replication-latency
     workflow: diag-database
     failure_domain: databases
@@ -152,6 +157,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: slo_impacting
     runbook: cosmos-region-failover
     workflow: diag-database
     failure_domain: databases
@@ -177,6 +183,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: slo_impacting
     runbook: cosmos-regional-availability-loss
     workflow: diag-database
     failure_domain: databases
@@ -202,6 +209,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: slo_supporting
     runbook: cosmos-storage-growth-forecast
     workflow: auto-capacity-ticket
     failure_domain: databases
@@ -226,6 +234,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-database-availability
+    slo_relation: diagnostic
     runbook: cosmos-metadata-request-anomaly
     workflow: diag-database
     failure_domain: databases

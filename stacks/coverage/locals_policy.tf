@@ -21,8 +21,11 @@ locals {
   prio        = yamldecode(file("${local.policy_dir}/policy/priorities.yaml"))
   slo_doc     = yamldecode(file("${local.policy_dir}/policy/slos.yaml"))
   slo_catalog = local.slo_doc.slos
-  exceptions  = yamldecode(file("${local.policy_dir}/policy/exceptions.yaml")).exceptions
-  runbooks    = yamldecode(file("${local.policy_dir}/policy/runbooks.yaml"))
+  # The per-service objective model and the layers it resolves through (§12).
+  # Read here, resolved in slos.tf.
+  slo_profiles = yamldecode(file("${local.policy_dir}/policy/slo_profiles.yaml"))
+  exceptions   = yamldecode(file("${local.policy_dir}/policy/exceptions.yaml")).exceptions
+  runbooks     = yamldecode(file("${local.policy_dir}/policy/runbooks.yaml"))
 
   # ---------------------------------------------------------------------------
   # NATIVE RUNBOOK ATTACHMENT LOOKUP

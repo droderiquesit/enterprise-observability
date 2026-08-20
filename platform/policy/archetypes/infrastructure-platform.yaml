@@ -40,6 +40,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-infra-compute-availability
+    slo_relation: slo_supporting
     runbook: host-swap-pressure
     workflow: diag-host
     failure_domain: compute
@@ -65,6 +66,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-infra-compute-availability
+    slo_relation: slo_supporting
     runbook: host-swap-exhaustion-forecast
     workflow: auto-capacity-ticket
     failure_domain: compute
@@ -97,6 +99,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-infra-compute-availability
+    slo_relation: slo_supporting
     runbook: hardware-component-fault
     workflow: auto-capacity-ticket
     failure_domain: compute
@@ -121,6 +124,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-infra-compute-availability
+    slo_relation: slo_supporting
     runbook: hardware-thermal-trend
     workflow: auto-capacity-ticket
     failure_domain: compute
@@ -153,6 +157,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-security-telemetry
+    slo_relation: compliance
     runbook: os-critical-patch-missing
     workflow: auto-compliance-ticket
     failure_domain: compute
@@ -178,6 +183,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-security-telemetry
+    slo_relation: compliance
     runbook: os-patch-age-excessive
     workflow: auto-compliance-ticket
     failure_domain: compute
@@ -203,6 +209,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-security-telemetry
+    slo_relation: compliance
     runbook: os-end-of-life
     workflow: auto-compliance-ticket
     failure_domain: compute
@@ -229,6 +236,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-platform-services
+    slo_relation: informational
     runbook: agent-version-drift
     workflow: auto-drift-ticket
     failure_domain: observability

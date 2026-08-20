@@ -300,3 +300,52 @@ Both monitor modules refuse to **plan** a monitor whose window falls outside the
 policy range, and coverage check C17 grades the deployed estate the same way, so
 the guarantee cannot be lost either by a Terraform change or by an out-of-band
 edit in the UI.
+
+
+## ADR-019 — A service states its intent; the platform resolves its SLOs
+
+Objectives used to be assigned, not resolved. A tier0 service received exactly
+one auto-generated availability SLO at the tier target, measured by one HTTP
+trace template applied to every tier0 service regardless of what it was. That
+model could not express two things the business routinely asks for: a service
+that owes *several* promises (availability **and** latency **and** freshness),
+and two technically identical services that owe *different* numbers — a
+partner-facing API on a contractual 99.99% and its internal twin on 99.9%,
+running the same code, on the same archetype, behind the same monitors.
+
+Targets could not simply be moved into the service YAML either. A number written
+per service is a number nobody reviews: the tier, the entity type and the
+platform each have a legitimate say, and the service should only have to state
+what is *different* about its promise.
+
+So objectives resolve through a chain, later layers winning field by field:
+
+    enterprise defaults → entity type → platform → criticality (tier) →
+    environment → slo_profile → service override
+
+Each layer owns what it is competent to decide. The **entity type** owns the SLI,
+because only it knows that a datastore's availability is a service check and a
+batch job's is a completed run — the old template measured a datastore with
+`trace.http.request.*`, which returns nothing and produces an SLO that is
+permanently, silently green. The **tier** owns the targets and burn windows,
+because those are business statements and already live in `tiers.yaml`. A
+**profile** is the named set a service owner actually chooses, and the
+**service** gets the last word, with a written rationale, because nothing sits
+above it.
+
+Two rules keep the chain honest. An objective is created only when some layer
+switches `enabled: true`, so declaring an SLI is not the same as promising one —
+which is what makes a service that names no profile resolve exactly what it
+resolved before profiles existed. And technical constraints are *invariants*
+applied after the chain, not layers inside it: Datadog rejects `burn_rate()` on a
+monitor SLO with a non-metric member, so a tier asking for three burn windows on
+a service-check-backed objective gets none, regardless of what the tier says.
+
+The chain is implemented twice — `tools/slo_resolver.py` for the tooling and
+`stacks/coverage/slos.tf` for the apply — both reading
+`platform/policy/slo_profiles.yaml`, neither reading the other, as everywhere
+else in this repository. Coverage check C18 then grades the result against the
+live estate: every objective must belong to a real catalog entity, be owned by a
+registered team, be production-scoped, and be measurable — the last of which
+catches the failure this whole area exists to prevent, an objective that looks
+healthy only because no data is arriving.

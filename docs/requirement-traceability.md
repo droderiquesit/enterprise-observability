@@ -26,10 +26,10 @@ row was confirmed by a repository-wide search that returned zero matches.
 
 | Status | Sections |
 |---|---|
-| OK | 21 |
-| IMPROVE | 9 |
-| PARTIAL | 12 |
-| MISSING | 15 |
+| OK | 25 |
+| IMPROVE | 8 |
+| PARTIAL | 10 |
+| MISSING | 14 |
 | OBSOLETE | 1 (resolved) |
 | N/A | 2 |
 
@@ -89,11 +89,11 @@ presentation, survey — and on **fleet/agent operations** and **Control-M**.
 
 | § | Requirement | Status | Where | Gap → Remediation | Validation |
 |---|---|---|---|---|---|
-| 11 | Service may have 0, 1 or many SLOs | **PARTIAL** | `platform/policy/slos.yaml` (22 SLOs) | Domain SLOs plus one auto tier0 per-service SLO. A service cannot declare *multiple* named objectives | schema + resolver test |
-| 12 | SLO resolution chain ending in service override | **PARTIAL** | `stacks/coverage/slos.tf` | Resolves enterprise → domain → tier0 template. No `slo_profile` layer, no per-service objective override | two-services-same-profile-different-target test (§59) |
-| 13 | SLO/catalog association actually works | **IMPROVE** | `modules/slo` | SLOs carry `service:` and `slo_id` tags; association to the catalog entity is not asserted anywhere | add C-check joining SLO tags to catalog entities |
-| 14 | Not every entity needs an SLO | **OK** | tier0-only per-service SLOs; infrastructure has none | — | `slos.tf` tier0 filter |
-| 15 | Monitor-to-SLO governance classification | **MISSING** | — | Monitors carry `slo_id` but no `slo_relation` (SLI-producing / supporting / impacting / diagnostic / informational) | archetype schema field + lint rule |
+| 11 | Service may have 0, 1 or many SLOs | **OK** | `platform/policy/slo_profiles.yaml`, `platform/schemas/service.schema.json` | A service declares `slo: {profile, objectives}` and resolves availability / latency / freshness independently; the entity type owns the SLI for each | `test_slo_profiles.py` |
+| 12 | SLO resolution chain ending in service override | **OK** | `platform/policy/slo_profiles.yaml`, `tools/slo_resolver.py`, `stacks/coverage/slos.tf` | Full chain: enterprise → entity type → platform → criticality → environment → slo_profile → service override, with provenance per field | `test_each_layer_is_overridden_by_the_next`, §59 proof below |
+| 13 | SLO/catalog association actually works | **OK** | coverage check **C18** (`tools/coverage_report.py`) | Joins both directions: every declared objective exists, is owned, is prod-scoped and measurable; every live SLO maps to a catalog entity — no orphans, no duplicates, nothing green only because data is absent | seeded-defect tests in `test_slo_profiles.py` |
+| 14 | Not every entity needs an SLO | **OK** | tier scope `per_service` + opt-in `slo:` block; `saas_dependency` / `external_endpoint` / `infrastructure_resource` declare none | — | `test_a_tier2_service_carries_no_objectives_of_its_own` |
+| 15 | Monitor-to-SLO governance classification | **OK** | `slo_relation` on all 264 archetypes; vocabulary in `slo_profiles.yaml` | SLI-producing / supporting / impacting / dependency / diagnostic / informational / security / compliance. `sli_producing` is checked against real monitor-SLO membership, both directions | `validate_policy.py` [SLO_PROFILE], `test_slo_profiles.py` |
 
 ---
 
@@ -210,7 +210,7 @@ This prompt reinstates it; the reinstatement is treated as authoritative.
 | § | Requirement | Status | Gap |
 |---|---|---|---|
 | 58 | 56 named deliverables | **PARTIAL** | 27 complete, 14 partial, 15 not started |
-| 59 | Automation proofs (Azure SQL, VMware, Cosmos, Snowflake, Control-M, app service, custom SLO, queue, new monitor, MCP, portal) | **PARTIAL** | Monitor-inheritance and SLO proofs exist as tests; entity-kind, Control-M, MCP and portal proofs cannot exist until those are built |
+| 59 | Automation proofs (Azure SQL, VMware, Cosmos, Snowflake, Control-M, app service, custom SLO, queue, new monitor, MCP, portal) | **PARTIAL** | Monitor-inheritance and SLO proofs exist as tests, including two technically identical services resolving different objectives (`test_two_identical_services_receive_their_own_correct_slos`); entity-kind, Control-M, MCP and portal proofs cannot exist until those are built |
 | 60 | Final acceptance criteria | **PARTIAL** | 38 of 62 criteria met today |
 
 ---
@@ -225,7 +225,7 @@ shippable and leaves the platform working.
 | **1** | Entity model: `kind:` in the schema, entity resolver, System/Datastore/Queue/API kinds, catalog reconciliation | §5, §6, §7, §10, §41, §59 |
 | **2** | Telemetry requirements on every archetype + applicability engine | §16, §38, §39 |
 | **3** | Fleet management + agent profiles + deployment metadata (`DD_VERSION`) | §8, §36, §37, §39 |
-| **4** | SLO profiles and per-service objective overrides | §11, §12, §13, §15 |
+| **4** ✅ | SLO profiles and per-service objective overrides | §11, §12, §13, §15 |
 | **5** | Control-M in-flight monitoring | §24, §26 |
 | **6** | Reports catalog + dashboard consolidation + survey + scorecards | §33, §34, §35, §41 |
 | **7** | MCP server: Ask, then Act, then governance | §42–§46 |

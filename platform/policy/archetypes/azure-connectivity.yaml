@@ -37,6 +37,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_impacting
     runbook: expressroute-bgp-down
     workflow: diag-network
     failure_domain: connectivity
@@ -62,6 +63,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_impacting
     runbook: expressroute-arp-degraded
     workflow: diag-network
     failure_domain: connectivity
@@ -85,6 +87,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_supporting
     runbook: expressroute-bandwidth-saturation
     workflow: auto-capacity-ticket
     failure_domain: connectivity
@@ -108,6 +111,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_impacting
     runbook: expressroute-qos-drops
     workflow: diag-network
     failure_domain: connectivity
@@ -133,6 +137,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_impacting
     runbook: vpn-bgp-peer-down
     workflow: diag-network
     failure_domain: connectivity
@@ -157,6 +162,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_impacting
     runbook: vpn-tunnel-packet-drops
     workflow: diag-network
     failure_domain: connectivity
@@ -177,6 +183,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: diagnostic
     runbook: vpn-tunnel-bandwidth-anomaly
     workflow: diag-network
     failure_domain: connectivity
@@ -201,6 +208,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_impacting
     runbook: firewall-unhealthy
     workflow: diag-network
     failure_domain: connectivity
@@ -225,6 +233,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_supporting
     runbook: firewall-snat-exhaustion
     workflow: auto-capacity-ticket
     failure_domain: connectivity
@@ -249,6 +258,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_supporting
     runbook: firewall-throughput-saturation
     workflow: auto-capacity-ticket
     failure_domain: connectivity
@@ -272,6 +282,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_supporting
     runbook: firewall-denied-traffic-anomaly
     workflow: diag-network
     failure_domain: connectivity
@@ -300,6 +311,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_supporting
     runbook: nsg-denied-flow-anomaly
     workflow: diag-network
     failure_domain: connectivity
@@ -320,6 +332,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_impacting
     runbook: private-endpoint-traffic-loss
     workflow: diag-network
     failure_domain: connectivity
@@ -345,6 +358,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_impacting
     runbook: private-dns-query-anomaly
     workflow: diag-network
     failure_domain: connectivity
@@ -368,6 +382,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-network-availability
+    slo_relation: slo_supporting
     runbook: private-dns-recordset-capacity
     workflow: auto-capacity-ticket
     failure_domain: connectivity

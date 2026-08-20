@@ -27,6 +27,7 @@ archetypes:
     envs: [prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-external-dependency
+    slo_relation: sli_producing
     runbook: synthetic-endpoint-down
     workflow: diag-external-endpoint
     failure_domain: external-endpoint
@@ -51,6 +52,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-external-dependency
+    slo_relation: dependency
     runbook: synthetic-latency-degradation
     workflow: diag-external-endpoint
     failure_domain: external-endpoint
@@ -71,6 +73,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-external-dependency
+    slo_relation: compliance
     runbook: synthetic-certificate-expiry
     workflow: auto-cert-renewal-ticket
     failure_domain: external-endpoint
@@ -93,6 +96,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-external-dependency
+    slo_relation: sli_producing
     runbook: saas-availability
     workflow: diag-external-endpoint
     failure_domain: saas-dependency
@@ -114,6 +118,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-external-dependency
+    slo_relation: dependency
     runbook: saas-latency-degradation
     workflow: diag-dependency
     failure_domain: saas-dependency
@@ -138,6 +143,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-external-dependency
+    slo_relation: dependency
     runbook: saas-error-anomaly
     workflow: diag-dependency
     failure_domain: saas-dependency
@@ -158,6 +164,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-external-dependency
+    slo_relation: dependency
     runbook: saas-quota-forecast
     workflow: auto-capacity-ticket
     failure_domain: saas-dependency

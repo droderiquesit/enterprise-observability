@@ -23,6 +23,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_supporting
     runbook: consumer-lag-forecast
     workflow: remediate-scale-workload
     failure_domain: messaging-platform
@@ -48,6 +49,7 @@ archetypes:
     envs: [prod, stage, qa]
     bands: [critical, standard, baseline]
     slo_id: slo-messaging-delivery
+    slo_relation: sli_producing
     runbook: consumer-absent
     workflow: diag-messaging
     failure_domain: messaging-platform
@@ -72,6 +74,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_supporting
     runbook: consumer-dlq-growth
     workflow: remediate-clear-dlq
     failure_domain: messaging-platform
@@ -96,6 +99,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_impacting
     runbook: consumer-retry-storm
     workflow: diag-messaging
     failure_domain: messaging-platform
@@ -117,6 +121,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_supporting
     runbook: queue-depth-anomaly
     workflow: diag-messaging
     failure_domain: messaging-platform
@@ -139,6 +144,7 @@ archetypes:
     envs: [prod, stage]
     bands: [critical, standard]
     slo_id: slo-messaging-delivery
+    slo_relation: sli_producing
     runbook: messaging-publish-failure
     workflow: diag-messaging
     failure_domain: messaging-platform
@@ -160,6 +166,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_impacting
     runbook: messaging-client-disconnect
     workflow: diag-messaging
     failure_domain: messaging-platform
@@ -180,6 +187,7 @@ archetypes:
     envs: [prod]
     bands: [critical, standard]
     slo_id: slo-messaging-delivery
+    slo_relation: sli_producing
     runbook: broker-namespace-throttling
     workflow: remediate-scale-workload
     failure_domain: messaging-platform
@@ -202,6 +210,7 @@ archetypes:
     envs: [prod]
     bands: [critical]
     slo_id: slo-messaging-delivery
+    slo_relation: slo_supporting
     runbook: stream-partition-skew
     workflow: diag-messaging
     failure_domain: event-streaming

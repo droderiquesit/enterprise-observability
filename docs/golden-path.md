@@ -11,7 +11,7 @@ Register it (one small YAML) platform/services/<service>.yaml
       ↓
 ─────────────────────────────────────────────────────────────
 Baseline monitors            automatic   (packs for your archetype)
-SLO                          automatic   (domain SLO, or your own if tier0)
+SLO                          automatic   (domain SLO, or your own objectives if tier0)
 Burn-rate paging             automatic
 Alert routing                automatic   (team tag → your channel + rotation)
 Environment behaviour        automatic   (dev silent, qa baseline, stage/prod full)
@@ -27,6 +27,14 @@ Dashboard visibility         automatic   (domain board + Datadog-native views)
 **No monitor configuration is required.** If your telemetry carries the five
 tags, the monitors that cover you already exist — you join them as a group.
 
+**No SLO configuration is required either.** Your tier and your entity type
+already resolve an objective and the SLI that measures it. Add an `slo:` block
+only when you owe MORE than availability, or when your promise differs from
+other services that look exactly like yours — see
+[platform/services/README.md](../platform/services/README.md) for the
+resolution chain, and `python tools/slo_resolver.py --service <name>` to see
+what you resolve to and which layer decided each field.
+
 ### What registration adds over just tagging
 
 Discovery covers everything; registration adds *intent*.
@@ -37,6 +45,8 @@ Discovery covers everything; registration adds *intent*.
 | Ownership in Datadog's catalog | inferred | declared |
 | Tier | inferred from environment | **your business decision** |
 | Per-service SLO (tier0) | — | ✓ |
+| Named objectives (availability / latency / freshness) | — | ✓ via `slo: {profile}` |
+| A target that differs from your tier's | — | ✓ via `slo.objectives` + a rationale |
 | Appears in coverage as *owned* | ✗ (violation) | ✓ |
 
 ---
