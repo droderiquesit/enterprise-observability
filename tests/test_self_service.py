@@ -14,10 +14,13 @@ import validate_monitors as vm
 
 POLICY = oc.load_policy()
 SERVICES = oc.load_services()
-GOOD = oc.PLATFORM_DIR / "monitors" / "checkout-payment-latency.yaml"
+# The reference manifest is a FIXTURE, not a deployed file: platform/monitors/
+# is applied, so an example living there would be an artificial monitor in
+# production. See platform/monitors/README.md.
+GOOD = Path(__file__).parent / "fixtures" / "self_service_example.yaml"
 
 
-def _mutate(tmp_path: Path, name: str = "checkout-payment-latency", **overrides) -> Path:
+def _mutate(tmp_path: Path, name: str = "self-service-example", **overrides) -> Path:
     doc = yaml.safe_load(GOOD.read_text())
     m = doc["monitor"]
     for k, v in overrides.items():
@@ -130,7 +133,7 @@ def test_auto_threshold_without_a_catalog_source_is_rejected(tmp_path):
 def test_name_must_match_the_filename(tmp_path):
     doc = yaml.safe_load(GOOD.read_text())
     doc["monitor"]["name"] = "some-other-name"
-    p = tmp_path / "checkout-payment-latency.yaml"
+    p = tmp_path / "self-service-example.yaml"
     p.write_text(yaml.safe_dump(doc))
     assert any("must match the filename" in e for e in vm.validate(p, POLICY, SERVICES))
 

@@ -93,7 +93,7 @@ monitoring machinery a service receives.
 
 | | **Tier 0 — Mission Critical** | **Tier 1 — Business Critical** | **Tier 2 — Standard Production** | **Tier 3 — Dev / Non-Critical** |
 |---|---|---|---|---|
-| Examples | auth, payments, checkout, API gateway, core network | order processing, customer portal, settlement | internal tools, reporting, back-office batch | sandboxes, experiments, decommissioning |
+| Examples | auth, order capture, API gateway, core network | order processing, customer portal, settlement | internal tools, reporting, back-office batch | sandboxes, experiments, decommissioning |
 | Monitoring profile | `critical` | `critical` | `standard` | `observe_only` |
 | **Alert band** | `critical` | `critical` | `standard` | `none` |
 | **SLO scope** | **per service** | domain SLO | domain SLO | none |

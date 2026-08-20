@@ -22,7 +22,7 @@ service_archetypes:
     required_telemetry: [apm_traces, http_metrics]
     default_slis: [availability, latency, error_rate]
     group_by: [service]
-    example: payments-api, identity-api, partner-gateway
+    example: identity-api, orders-api, partner-gateway
 
   web:
     display: Web / Frontend

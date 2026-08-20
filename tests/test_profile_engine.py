@@ -43,7 +43,7 @@ def test_correctly_tagged_service_needs_no_further_action():
 
 
 def test_tier0_lands_on_the_critical_band():
-    a = _assign([_res(tags={"env": "prod", "team": "payments", "tier": "tier0",
+    a = _assign([_res(tags={"env": "prod", "team": "application-development", "tier": "tier0",
                             "service_archetype": "api"})])["assignments"][0]
     assert a["monitoring_profile"] == "critical"
     assert a["alert_band"] == "critical"
@@ -84,12 +84,12 @@ def test_security_resources_are_regulated():
 
 def test_registration_outranks_a_tag():
     """A reviewed business decision beats whatever the deployment stamped."""
-    r = _res(service="checkout-api",
+    r = _res(service="identity-api",
              tags={"env": "prod", "team": "sre", "tier": "tier3",
                    "service_archetype": "api"})
     a = _assign([r])["assignments"][0]
-    assert a["tier"] == "tier0"          # from platform/services/checkout-api.yaml
-    assert a["team"] == "payments"
+    assert a["tier"] == "tier0"          # from platform/services/identity-api.yaml
+    assert a["team"] == "security"
     assert a["registered"] is True
 
 

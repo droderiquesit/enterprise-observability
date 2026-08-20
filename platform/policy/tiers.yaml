@@ -15,7 +15,7 @@ tiers:
     display: Tier 0 — Mission Critical
     description: >
       Revenue-generating, customer-facing, or foundational shared platform.
-      An outage is a company event. Examples: authentication, payments,
+      An outage is a company event. Examples: authentication, order capture,
       trading, checkout, the API gateway, the identity platform, core network.
     monitoring_profile: critical
     alert_band: critical

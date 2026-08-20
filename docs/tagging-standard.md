@@ -133,7 +133,7 @@ monitor, enforced at plan time — a monitor that violates it cannot be created.
 tags:
   - env:prod
   - service:orders-sql
-  - team:payments
+  - team:security
   - tier:tier0
   - service_archetype:datastore
   - alert_band:critical
@@ -147,11 +147,11 @@ Azure Policy so nothing new is created untagged):
 ```
 env = prod
 service = checkout-api
-team = payments
+team = security
 tier = tier0
 service_archetype = api
 alert_band = critical
-cost_center = cc-payments
+cost_center = cc-identity
 ```
 
 Azure Policy with a `modify` effect is the only mechanism that keeps this true
@@ -165,7 +165,7 @@ metadata:
     tags.datadoghq.com/env: prod
     tags.datadoghq.com/service: checkout-api
     tags.datadoghq.com/version: "2026.08.19"
-    team: payments
+    team: security
     tier: tier0
     service_archetype: api
     alert_band: critical
@@ -183,7 +183,7 @@ DD_SERVICE=checkout-api
 DD_VERSION=2026.08.19          # required for deployment correlation
 DD_GIT_COMMIT_SHA=<sha>
 DD_GIT_REPOSITORY_URL=<url>
-DD_TAGS="team:payments,tier:tier0,service_archetype:api,alert_band:critical"
+DD_TAGS="team:security,tier:tier0,service_archetype:api,alert_band:critical"
 ```
 
 `DD_VERSION`, `DD_GIT_COMMIT_SHA` and `DD_GIT_REPOSITORY_URL` are what make
@@ -198,7 +198,7 @@ and — at tier0 — an SLO with burn-rate alerting:
 ```yaml
 service:
   name: checkout-api
-  team: payments
+  team: security
   tier: tier0
   service_archetype: api
   envs: [dev, qa, stage, prod]
